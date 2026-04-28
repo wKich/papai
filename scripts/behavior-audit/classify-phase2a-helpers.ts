@@ -15,13 +15,23 @@ export function buildBehaviorId(testKey: string): string {
 
 export function buildPrompt(testKey: string, behavior: ExtractedBehaviorRecord): string {
   const testFile = testKey.split('::')[0] ?? ''
-  return [
-    `Test key: ${testKey}`,
-    `Domain: ${getDomain(testFile)}`,
-    `Behavior: ${behavior.behavior}`,
-    `Context: ${behavior.context}`,
-    `Keywords: ${behavior.keywords.join(', ')}`,
-  ].join('\n')
+  const hasUnsupportedContext = behavior.trustFlags.includes('unsupported-context-claim')
+  const hasGuessedImplementation = behavior.trustFlags.includes('guessed-implementation-path')
+  const contextLine = hasUnsupportedContext
+    ? 'Context: (omitted — unsupported claim)'
+    : behavior.confidence.context === 'low'
+      ? 'Context: (low confidence — treat as approximate)'
+      : `Context: ${behavior.context}`
+  const trustNote = hasGuessedImplementation ? '\nNote: implementation path was guessed, not verified' : ''
+  return (
+    [
+      `Test key: ${testKey}`,
+      `Domain: ${getDomain(testFile)}`,
+      `Behavior: ${behavior.behavior}`,
+      contextLine,
+      `Keywords: ${behavior.keywords.join(', ')}`,
+    ].join('\n') + trustNote
+  )
 }
 
 function getBehaviorIdForManifestEntry(manifestEntry: IncrementalManifest['tests'][string], testKey: string): string {

@@ -4,7 +4,7 @@ import { consolidatedArtifactPathForFeatureKey } from './artifact-paths.js'
 import type { ClassifiedBehavior } from './classified-store.js'
 import { readClassifiedFile } from './classified-store.js'
 import { PROJECT_ROOT } from './config.js'
-import type { ConsolidateBehaviorInput } from './consolidate-agent.js'
+import type { ConsolidateBehaviorInput, ConsolidationResult } from './consolidate-agent.js'
 import type { ExtractedBehaviorRecord } from './extracted-store.js'
 import { readExtractedFile } from './extracted-store.js'
 import type { ConsolidatedManifest, IncrementalManifest, ManifestTestEntry } from './incremental.js'
@@ -21,6 +21,11 @@ interface JoinedBehaviorInput extends ConsolidateBehaviorInput {
 }
 
 export type ConsolidateWithRetry = typeof import('./consolidate-agent.js').consolidateWithRetry
+
+type ConsolidationItem = {
+  readonly id: string
+  readonly item: ConsolidationResult['consolidations'][number]
+}
 
 export const getManifestFeatureKey = (entry: ManifestTestEntry): string | null => entry.featureKey ?? null
 
@@ -89,6 +94,8 @@ async function loadJoinedInput(input: {
     behavior: extractedRecord.behavior,
     context: extractedRecord.context,
     keywords: extractedRecord.keywords,
+    confidence: extractedRecord.confidence,
+    trustFlags: extractedRecord.trustFlags,
   }
 }
 
@@ -117,7 +124,7 @@ const buildConsolidatedDomain = (inputs: readonly ConsolidateBehaviorInput[]): s
 }
 
 export function toConsolidations(
-  result: NonNullable<Awaited<ReturnType<ConsolidateWithRetry>>>,
+  result: readonly ConsolidationItem[],
   inputs: readonly ConsolidateBehaviorInput[],
 ): readonly ConsolidatedBehavior[] {
   const domain = buildConsolidatedDomain(inputs)

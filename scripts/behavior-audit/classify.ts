@@ -13,7 +13,8 @@ import {
   toClassifiedBehavior,
   type SelectedBehaviorEntry,
 } from './classify-phase2a-helpers.js'
-import { MAX_RETRIES, formatElapsedMs } from './config.js'
+import { reportClassificationResult, type ClassificationResultForReporting } from './classify-reporting.js'
+import { MAX_RETRIES } from './config.js'
 import { readExtractedFile } from './extracted-store.js'
 import type { IncrementalManifest } from './incremental.js'
 import { saveManifest } from './incremental.js'
@@ -21,24 +22,17 @@ import {
   type AgentUsage,
   type PhaseStats,
   createPhaseStats,
-  formatPerItemSuffix,
   formatPhaseSummary,
   recordItemDone,
   recordItemFailed,
   recordItemSkipped,
 } from './phase-stats.js'
+import { saveProgress } from './progress-io.js'
+import type { BehaviorAuditProgressReporter } from './progress-reporter.js'
 import type { Progress } from './progress.js'
-import {
-  getFailedClassificationAttempts,
-  markClassificationDone,
-  saveProgress,
-  setClassificationFailedAttempts,
-} from './progress.js'
+import { getFailedClassificationAttempts, markClassificationDone, setClassificationFailedAttempts } from './progress.js'
 
-type ClassificationProcessResult =
-  | { readonly kind: 'reused'; readonly manifest: IncrementalManifest }
-  | { readonly kind: 'classified'; readonly manifest: IncrementalManifest }
-  | { readonly kind: 'failed'; readonly manifest: IncrementalManifest }
+type ClassificationProcessResult = { readonly manifest: IncrementalManifest } & ClassificationResultForReporting
 
 export interface Phase2aDeps {
   readonly classifyBehaviorWithRetry: typeof classifyBehaviorWithRetry
@@ -52,8 +46,8 @@ export interface Phase2aDeps {
   readonly setClassificationFailedAttempts: typeof setClassificationFailedAttempts
   readonly maxRetries: number
   readonly log: Pick<typeof console, 'log'>
-  readonly writeStdout: (text: string) => void
-  readonly stats?: PhaseStats
+  readonly reporter: BehaviorAuditProgressReporter | undefined
+  readonly stats: PhaseStats | undefined
 }
 
 function createDefaultPhase2aDeps(): Phase2aDeps {
@@ -69,9 +63,8 @@ function createDefaultPhase2aDeps(): Phase2aDeps {
     setClassificationFailedAttempts,
     maxRetries: MAX_RETRIES,
     log: console,
-    writeStdout: (text) => {
-      process.stdout.write(text)
-    },
+    reporter: undefined,
+    stats: undefined,
   }
 }
 
@@ -104,7 +97,12 @@ async function classifySelectedBehavior(
 }
 
 async function writeSingleClassification(classified: ClassifiedBehavior, deps: Phase2aDeps): Promise<void> {
-  const testFilePath = classified.testKey.split('::')[0] ?? ''
+  const splitTestKey = classified.testKey.split('::')
+  const firstPath = splitTestKey[0]
+  let testFilePath = ''
+  if (firstPath !== undefined) {
+    testFilePath = firstPath
+  }
   const existing = await deps.readClassifiedFile(testFilePath)
   let existingItems: readonly ClassifiedBehavior[] = []
   if (existing !== null) {
@@ -134,9 +132,14 @@ async function processSelectedClassification(input: {
   readonly manifest: IncrementalManifest
   readonly dirtyFeatureKeys: Set<string>
   readonly deps: Phase2aDeps
-}): Promise<ClassificationProcessResult & { readonly usage: AgentUsage | null }> {
+}): Promise<ClassificationProcessResult> {
   if (shouldReuseCompletedClassification(input.progress, input.manifest, input.entry)) {
-    addDirtyFeatureKey(input.dirtyFeatureKeys, input.manifest.tests[input.entry.testKey]?.featureKey ?? null)
+    const existingManifestEntry = input.manifest.tests[input.entry.testKey]
+    let featureKey: string | null = null
+    if (existingManifestEntry !== undefined && existingManifestEntry.featureKey !== undefined) {
+      featureKey = existingManifestEntry.featureKey
+    }
+    addDirtyFeatureKey(input.dirtyFeatureKeys, featureKey)
     return { kind: 'reused', manifest: input.manifest, usage: null }
   }
 
@@ -157,25 +160,44 @@ async function processSelectedClassification(input: {
   return { kind: 'classified', manifest: updatedManifest, usage: classifyResult.usage }
 }
 
-function logClassificationResult(
+function emitClassificationStart(
   deps: Phase2aDeps,
-  result: ClassificationProcessResult & { readonly usage: AgentUsage | null },
-  elapsedMs: number,
+  entry: SelectedBehaviorEntry,
+  displayIndex: number,
+  displayTotal: number,
 ): void {
-  switch (result.kind) {
-    case 'reused':
-      deps.log.log('(reused)')
-      break
-    case 'classified':
-      if (result.usage === null) {
-        deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✓`)
-      } else {
-        deps.log.log(formatPerItemSuffix(result.usage, elapsedMs))
-      }
-      break
-    case 'failed':
-      deps.log.log(`(${formatElapsedMs(elapsedMs)}) ✗`)
-      break
+  if (deps.reporter === undefined) {
+    return
+  }
+
+  deps.reporter.emit({
+    kind: 'item-start',
+    phase: 'phase2a',
+    itemId: entry.behavior.behaviorId,
+    context: entry.behavior.context,
+    title: entry.behavior.fullPath,
+    index: displayIndex,
+    total: displayTotal,
+  })
+}
+
+function recordClassificationStats(stats: PhaseStats | undefined, result: ClassificationProcessResult): void {
+  if (stats === undefined) {
+    return
+  }
+
+  if (result.kind === 'classified' && result.usage !== null) {
+    recordItemDone(stats, result.usage)
+    return
+  }
+
+  if (result.kind === 'failed') {
+    recordItemFailed(stats)
+    return
+  }
+
+  if (result.kind === 'reused') {
+    recordItemSkipped(stats)
   }
 }
 
@@ -188,7 +210,7 @@ async function processSelectedEntry(
   dirtyFeatureKeys: Set<string>,
   deps: Phase2aDeps,
 ): Promise<ClassificationProcessResult> {
-  deps.writeStdout(`  [${displayIndex}/${displayTotal}] "${entry.behavior.fullPath}" `)
+  emitClassificationStart(deps, entry, displayIndex, displayTotal)
   const startMs = performance.now()
   const result = await processSelectedClassification({
     progress,
@@ -198,16 +220,18 @@ async function processSelectedEntry(
     deps,
   })
   const elapsedMs = performance.now() - startMs
-  logClassificationResult(deps, result, elapsedMs)
-  if (deps.stats !== undefined) {
-    if (result.kind === 'classified' && result.usage !== null) {
-      recordItemDone(deps.stats, result.usage)
-    } else if (result.kind === 'failed') {
-      recordItemFailed(deps.stats, result.usage ?? undefined)
-    } else if (result.kind === 'reused') {
-      recordItemSkipped(deps.stats)
-    }
-  }
+  reportClassificationResult({
+    reporter: deps.reporter,
+    log: deps.log,
+    itemId: entry.behavior.behaviorId,
+    context: entry.behavior.context,
+    title: entry.behavior.fullPath,
+    displayIndex,
+    displayTotal,
+    result,
+    elapsedMs,
+  })
+  recordClassificationStats(deps.stats, result)
   return result
 }
 

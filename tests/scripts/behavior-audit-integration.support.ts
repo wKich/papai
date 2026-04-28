@@ -1,6 +1,6 @@
-import type * as ResetModule from '../../scripts/behavior-audit-reset.js'
 import type * as ClassifiedStoreModule from '../../scripts/behavior-audit/classified-store.js'
 import type * as ClassifyAgentModule from '../../scripts/behavior-audit/classify-agent.js'
+import type * as ConsolidateKeywordsModule from '../../scripts/behavior-audit/consolidate-keywords.js'
 import type * as ConsolidateModule from '../../scripts/behavior-audit/consolidate.js'
 import type * as EvaluateReportingModule from '../../scripts/behavior-audit/evaluate-reporting.js'
 import type * as EvaluateModule from '../../scripts/behavior-audit/evaluate.js'
@@ -11,6 +11,7 @@ import type * as KeywordVocabularyModule from '../../scripts/behavior-audit/keyw
 import type { Progress } from '../../scripts/behavior-audit/progress.js'
 import type * as ProgressModule from '../../scripts/behavior-audit/progress.js'
 import type * as ReportWriterModule from '../../scripts/behavior-audit/report-writer.js'
+import type * as ResetModule from '../../scripts/behavior-audit/reset.js'
 
 export type IncrementalModuleShape = typeof IncrementalModule
 export type ProgressModuleShape = typeof ProgressModule
@@ -19,6 +20,7 @@ export type ClassifyAgentModuleShape = typeof ClassifyAgentModule
 export type EvaluateModuleShape = typeof EvaluateModule
 export type EvaluateReportingModuleShape = typeof EvaluateReportingModule
 export type ConsolidateModuleShape = typeof ConsolidateModule
+export type ConsolidateKeywordsModuleShape = typeof ConsolidateKeywordsModule
 export type ClassifiedStoreModuleShape = typeof ClassifiedStoreModule
 export type KeywordVocabularyModuleShape = typeof KeywordVocabularyModule
 export type ReportWriterModuleShape = typeof ReportWriterModule
@@ -56,34 +58,6 @@ function isStringOrNull(value: unknown): value is string | null {
 
 function isStringArray(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((item): item is string => typeof item === 'string')
-}
-
-function isKeywordVocabularyEntry(value: unknown): value is {
-  readonly slug: string
-  readonly description: string
-  readonly createdAt: string
-  readonly updatedAt: string
-} {
-  return (
-    isObject(value) &&
-    'slug' in value &&
-    typeof value['slug'] === 'string' &&
-    'description' in value &&
-    typeof value['description'] === 'string' &&
-    'createdAt' in value &&
-    typeof value['createdAt'] === 'string' &&
-    'updatedAt' in value &&
-    typeof value['updatedAt'] === 'string'
-  )
-}
-
-export function isKeywordVocabulary(value: unknown): value is readonly {
-  readonly slug: string
-  readonly description: string
-  readonly createdAt: string
-  readonly updatedAt: string
-}[] {
-  return Array.isArray(value) && value.every((entry) => isKeywordVocabularyEntry(entry))
 }
 
 function isManifestTestEntry(value: unknown): value is ManifestTestEntry {
@@ -352,8 +326,20 @@ export function loadReportWriterModule(tag: string): Promise<ReportWriterModuleS
 
 export function loadResetModule(tag: string): Promise<ResetModuleShape> {
   return importWithGuard(
-    `../../scripts/behavior-audit-reset.js?test=${tag}`,
+    `../../scripts/behavior-audit/reset.js?test=${tag}`,
     isResetModule,
     'Unexpected reset module shape',
+  )
+}
+
+function isConsolidateKeywordsModule(value: unknown): value is ConsolidateKeywordsModuleShape {
+  return isObject(value) && hasFunctionProperty(value, 'runPhase1b')
+}
+
+export function loadConsolidateKeywordsModule(tag: string): Promise<ConsolidateKeywordsModuleShape> {
+  return importWithGuard(
+    `../../scripts/behavior-audit/consolidate-keywords.js?test=${tag}`,
+    isConsolidateKeywordsModule,
+    'Unexpected consolidate-keywords module shape',
   )
 }

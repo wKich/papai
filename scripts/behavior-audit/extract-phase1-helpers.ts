@@ -1,55 +1,18 @@
 import { extractedArtifactPathForTestFile } from './artifact-paths.js'
 import { getDomain } from './domain-map.js'
-import { buildResolverPrompt, buildVocabularySlugListText } from './extract-prompts.js'
+import type {
+  EvidenceRef,
+  ExtractionConfidence,
+  ExtractionProvenance,
+  ExtractionVerification,
+  KeywordEvidence,
+  TrustFlag,
+} from './extract-trust-types.js'
 import type { ExtractedBehaviorRecord } from './extracted-store.js'
 import { readExtractedFile, writeExtractedFile } from './extracted-store.js'
-import type { ResolverResult } from './keyword-resolver-agent.js'
-import {
-  loadKeywordVocabulary,
-  normalizeKeywordSlug,
-  normalizeKeywordVocabularyEntries,
-  saveKeywordVocabulary,
-  stampVocabularyEntry,
-} from './keyword-vocabulary.js'
-import type { AgentResult, AgentUsage } from './phase-stats.js'
-import { markFileDone, markTestFailed } from './progress.js'
+import { markFileDone } from './progress.js'
 import type { Progress } from './progress.js'
 import type { TestCase } from './test-parser.js'
-
-export interface ResolveKeywordsDeps {
-  readonly loadKeywordVocabulary: typeof loadKeywordVocabulary
-  readonly saveKeywordVocabulary: typeof saveKeywordVocabulary
-  readonly resolveKeywordsWithRetry: (prompt: string, attempt: number) => Promise<AgentResult<ResolverResult> | null>
-  readonly markTestFailed: typeof markTestFailed
-}
-
-export async function resolveKeywords(
-  candidateKeywords: readonly string[],
-  testKey: string,
-  progress: Progress,
-  deps: ResolveKeywordsDeps,
-): Promise<{ keywords: readonly string[]; usage: AgentUsage } | null> {
-  const existingVocabulary = (await deps.loadKeywordVocabulary()) ?? []
-  const vocabularyText = buildVocabularySlugListText(existingVocabulary)
-  const resolved = await deps.resolveKeywordsWithRetry(buildResolverPrompt(candidateKeywords, vocabularyText), 0)
-  if (resolved === null) {
-    deps.markTestFailed(progress, testKey, 'keyword resolution failed')
-    return null
-  }
-  const nextVocabulary = normalizeKeywordVocabularyEntries([
-    ...existingVocabulary,
-    ...resolved.result.appendedEntries.map((entry) => stampVocabularyEntry(entry)),
-  ])
-  await deps.saveKeywordVocabulary(nextVocabulary)
-  const normalizedKeywords = [
-    ...new Set(resolved.result.keywords.map((keyword) => normalizeKeywordSlug(keyword)).filter(Boolean)),
-  ]
-  if (normalizedKeywords.length === 0) {
-    deps.markTestFailed(progress, testKey, 'keyword resolution produced no valid canonical keywords')
-    return null
-  }
-  return { keywords: normalizedKeywords, usage: resolved.usage }
-}
 
 export function getSelectedTests(
   testFilePath: string,
@@ -122,7 +85,7 @@ export async function writeValidBehaviorsForFile(
   testFilePath: string,
   selectedTests: readonly TestCase[],
   results: readonly ({ readonly record: ExtractedBehaviorRecord } | null)[],
-): Promise<void> {
+): Promise<string | null> {
   const valid = collectValidBehaviors(results)
   const existing = (await readExtractedFile(testFilePath)) ?? []
   const selectedTestKeySet = getSelectedTestKeySet(testFilePath, selectedTests)
@@ -134,10 +97,10 @@ export async function writeValidBehaviorsForFile(
   ]
   if (merged.length === 0) {
     await deleteFileIfPresent(extractedArtifactPathForTestFile(testFilePath))
-    return
+    return null
   }
   await writeExtractedFile(testFilePath, merged)
-  console.log(`  → wrote ${valid.length} behaviors`)
+  return `wrote ${valid.length} behaviors`
 }
 
 export function reconcileSelectedTestsAfterPersist(
@@ -192,6 +155,13 @@ export function buildBehaviorRecord(
   extractedBehavior: string,
   extractedContext: string,
   keywords: readonly string[],
+  behaviorEvidence: readonly EvidenceRef[],
+  contextEvidence: readonly EvidenceRef[],
+  keywordEvidence: readonly KeywordEvidence[],
+  confidence: ExtractionConfidence,
+  trustFlags: readonly TrustFlag[],
+  provenance: ExtractionProvenance,
+  verification: ExtractionVerification,
 ): ExtractedBehaviorRecord {
   return {
     behaviorId: testKey,
@@ -204,5 +174,12 @@ export function buildBehaviorRecord(
     context: extractedContext,
     keywords,
     extractedAt: new Date().toISOString(),
+    behaviorEvidence,
+    contextEvidence,
+    keywordEvidence,
+    confidence,
+    trustFlags,
+    provenance,
+    verification,
   }
 }

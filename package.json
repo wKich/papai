@@ -1,6 +1,6 @@
 {
   "name": "papai",
-  "version": "5.1.3",
+  "version": "5.2.0",
   "private": true,
   "description": "papai — an intelligent Telegram bot for managing Kaneo tasks with LLM.",
   "workspaces": [
@@ -44,8 +44,11 @@
     "prepare": "[ -d .git ] && cp scripts/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true",
     "changelog:preview": "git-cliff --dry-run",
     "changelog:generate": "git-cliff -o CHANGELOG.md",
-    "audit:behavior": "bun scripts/behavior-audit.ts",
+    "audit:behavior": "bun scripts/behavior-audit/index.ts",
     "plan-adr-workflow": "bun scripts/plan-adr-workflow.ts",
+    "codeindex:index": "bun run codeindex/src/cli.ts index",
+    "codeindex:reindex": "bun run codeindex/src/cli.ts reindex",
+    "codeindex:stats": "bun run codeindex/src/cli.ts stats",
     "codeindex:test": "bun run --filter codeindex test",
     "codeindex:typecheck": "bun run --filter codeindex typecheck",
     "codeindex:lint": "bun run --filter codeindex lint",

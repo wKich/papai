@@ -1,16 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import type { ReviewLoopConfig } from '../../review-loop/src/config.js'
 import { createIssueLedger } from '../../review-loop/src/issue-ledger.js'
 import { runReviewLoop } from '../../review-loop/src/loop-controller.js'
 import { createRunState } from '../../review-loop/src/run-state.js'
+import { cleanupTempDirs, createReviewLoopConfigFixture, makeTempDir } from './test-helpers.js'
 
-const tempDirs: string[] = []
-
-const createSilentLog = (): { log: (message: string) => void; messages: string[] } => {
+function createSilentLog(): { log: (message: string) => void; messages: string[] } {
   const messages: string[] = []
   return {
     log: (message: string): void => {
@@ -20,44 +16,40 @@ const createSilentLog = (): { log: (message: string) => void; messages: string[]
   }
 }
 
-const makeTempDir = (): string => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'review-loop-controller-'))
-  tempDirs.push(dir)
-  return dir
+function reviewerThatFindsRaceCondition(): () => Promise<{
+  text: string
+  stopReason: string
+}> {
+  let reviewerPromptCount = 0
+  return () =>
+    Promise.resolve({
+      text: JSON.stringify({
+        round: (reviewerPromptCount += 1),
+        issues: [
+          {
+            title: 'Race condition in queue flush path',
+            severity: 'high',
+            summary: 'Two concurrent messages can bypass the intended lock.',
+            whyItMatters: 'This can produce stale assistant replies.',
+            evidence: 'src/message-queue/queue.ts lines 84-107',
+            file: 'src/message-queue/queue.ts',
+            lineStart: 84,
+            lineEnd: 107,
+            suggestedFix: 'Take the processing lock earlier.',
+            confidence: 0.92,
+          },
+        ],
+      }),
+      stopReason: 'end_turn',
+    })
 }
 
-afterEach(() => {
-  for (const dir of tempDirs.splice(0)) {
-    rmSync(dir, { recursive: true, force: true })
-  }
-})
+afterEach(cleanupTempDirs)
 
 describe('runReviewLoop', () => {
   test('runs until the reviewer reports no issues', async () => {
-    const repoRoot = makeTempDir()
-    const config: ReviewLoopConfig = {
-      repoRoot,
-      workDir: path.join(repoRoot, '.review-loop'),
-      maxRounds: 5,
-      maxNoProgressRounds: 2,
-      reviewer: {
-        command: '/usr/local/bin/claude-acp-adapter',
-        args: [],
-        env: {},
-        sessionConfig: {},
-        invocationPrefix: '/review-code',
-        requireInvocationPrefix: false,
-      },
-      fixer: {
-        command: 'opencode',
-        args: ['acp'],
-        env: {},
-        sessionConfig: {},
-        verifyInvocationPrefix: '/verify-issue',
-        fixInvocationPrefix: null,
-        requireVerifyInvocation: false,
-      },
-    }
+    const repoRoot = makeTempDir('review-loop-controller-')
+    const config = createReviewLoopConfigFixture(repoRoot)
 
     const planPath = path.join(repoRoot, 'plan.md')
     const runState = await createRunState(config, planPath)
@@ -127,12 +119,8 @@ describe('runReviewLoop', () => {
   })
 
   test('uses configured invocation prefixes for review, verify, fix, and rereview prompts', async () => {
-    const repoRoot = makeTempDir()
-    const config: ReviewLoopConfig = {
-      repoRoot,
-      workDir: path.join(repoRoot, '.review-loop'),
-      maxRounds: 5,
-      maxNoProgressRounds: 2,
+    const repoRoot = makeTempDir('review-loop-controller-')
+    const config = createReviewLoopConfigFixture(repoRoot, {
       reviewer: {
         command: '/usr/local/bin/claude-acp-adapter',
         args: [],
@@ -150,7 +138,7 @@ describe('runReviewLoop', () => {
         fixInvocationPrefix: '/fix-issue',
         requireVerifyInvocation: true,
       },
-    }
+    })
 
     const planPath = path.join(repoRoot, 'plan.md')
     const runState = await createRunState(config, planPath)
@@ -224,20 +212,9 @@ describe('runReviewLoop', () => {
   })
 
   test('stops with no_progress when a round produces no auto-fixable progress', async () => {
-    const repoRoot = makeTempDir()
-    const config: ReviewLoopConfig = {
-      repoRoot,
-      workDir: path.join(repoRoot, '.review-loop'),
-      maxRounds: 5,
+    const repoRoot = makeTempDir('review-loop-controller-')
+    const config = createReviewLoopConfigFixture(repoRoot, {
       maxNoProgressRounds: 1,
-      reviewer: {
-        command: '/usr/local/bin/claude-acp-adapter',
-        args: [],
-        env: {},
-        sessionConfig: {},
-        invocationPrefix: '/review-code',
-        requireInvocationPrefix: false,
-      },
       fixer: {
         command: 'opencode',
         args: ['acp'],
@@ -247,12 +224,11 @@ describe('runReviewLoop', () => {
         fixInvocationPrefix: '/fix-issue',
         requireVerifyInvocation: false,
       },
-    }
+    })
 
     const planPath = path.join(repoRoot, 'plan.md')
     const runState = await createRunState(config, planPath)
     const ledger = await createIssueLedger(runState.runDir)
-    let reviewerPromptCount = 0
 
     const result = await runReviewLoop({
       config,
@@ -260,29 +236,7 @@ describe('runReviewLoop', () => {
       ledger,
       reviewer: {
         availableCommands: ['review-code'],
-        promptText: () => {
-          reviewerPromptCount += 1
-          return Promise.resolve({
-            text: JSON.stringify({
-              round: reviewerPromptCount,
-              issues: [
-                {
-                  title: 'Race condition in queue flush path',
-                  severity: 'high',
-                  summary: 'Two concurrent messages can bypass the intended lock.',
-                  whyItMatters: 'This can produce stale assistant replies.',
-                  evidence: 'src/message-queue/queue.ts lines 84-107',
-                  file: 'src/message-queue/queue.ts',
-                  lineStart: 84,
-                  lineEnd: 107,
-                  suggestedFix: 'Take the processing lock earlier.',
-                  confidence: 0.92,
-                },
-              ],
-            }),
-            stopReason: 'end_turn',
-          })
-        },
+        promptText: reviewerThatFindsRaceCondition(),
       },
       fixer: {
         availableCommands: ['verify-issue', 'fix-issue'],
@@ -307,31 +261,8 @@ describe('runReviewLoop', () => {
   })
 
   test('does not re-verify issues already in a terminal status across rounds', async () => {
-    const repoRoot = makeTempDir()
-    const config: ReviewLoopConfig = {
-      repoRoot,
-      workDir: path.join(repoRoot, '.review-loop'),
-      maxRounds: 5,
-      // allow two no-progress rounds so we reach round 2
-      maxNoProgressRounds: 2,
-      reviewer: {
-        command: '/usr/local/bin/claude-acp-adapter',
-        args: [],
-        env: {},
-        sessionConfig: {},
-        invocationPrefix: '/review-code',
-        requireInvocationPrefix: false,
-      },
-      fixer: {
-        command: 'opencode',
-        args: ['acp'],
-        env: {},
-        sessionConfig: {},
-        verifyInvocationPrefix: '/verify-issue',
-        fixInvocationPrefix: null,
-        requireVerifyInvocation: false,
-      },
-    }
+    const repoRoot = makeTempDir('review-loop-controller-')
+    const config = createReviewLoopConfigFixture(repoRoot)
 
     const planPath = path.join(repoRoot, 'plan.md')
     const runState = await createRunState(config, planPath)
@@ -394,12 +325,8 @@ describe('runReviewLoop', () => {
   })
 
   test('plans before fixing when verifier sets needsPlanning to true', async () => {
-    const repoRoot = makeTempDir()
-    const config: ReviewLoopConfig = {
-      repoRoot,
-      workDir: path.join(repoRoot, '.review-loop'),
-      maxRounds: 5,
-      maxNoProgressRounds: 2,
+    const repoRoot = makeTempDir('review-loop-controller-')
+    const config = createReviewLoopConfigFixture(repoRoot, {
       reviewer: {
         command: 'opencode',
         args: ['acp'],
@@ -417,7 +344,7 @@ describe('runReviewLoop', () => {
         fixInvocationPrefix: null,
         requireVerifyInvocation: false,
       },
-    }
+    })
 
     const planPath = path.join(repoRoot, 'plan.md')
     const runState = await createRunState(config, planPath)
@@ -491,20 +418,9 @@ describe('runReviewLoop', () => {
   })
 
   test('stops with max_rounds when unresolved issues remain after the final round', async () => {
-    const repoRoot = makeTempDir()
-    const config: ReviewLoopConfig = {
-      repoRoot,
-      workDir: path.join(repoRoot, '.review-loop'),
+    const repoRoot = makeTempDir('review-loop-controller-')
+    const config = createReviewLoopConfigFixture(repoRoot, {
       maxRounds: 1,
-      maxNoProgressRounds: 2,
-      reviewer: {
-        command: '/usr/local/bin/claude-acp-adapter',
-        args: [],
-        env: {},
-        sessionConfig: {},
-        invocationPrefix: '/review-code',
-        requireInvocationPrefix: false,
-      },
       fixer: {
         command: 'opencode',
         args: ['acp'],
@@ -514,12 +430,11 @@ describe('runReviewLoop', () => {
         fixInvocationPrefix: '/fix-issue',
         requireVerifyInvocation: false,
       },
-    }
+    })
 
     const planPath = path.join(repoRoot, 'plan.md')
     const runState = await createRunState(config, planPath)
     const ledger = await createIssueLedger(runState.runDir)
-    let reviewerPromptCount = 0
 
     const result = await runReviewLoop({
       config,
@@ -527,29 +442,7 @@ describe('runReviewLoop', () => {
       ledger,
       reviewer: {
         availableCommands: ['review-code'],
-        promptText: () => {
-          reviewerPromptCount += 1
-          return Promise.resolve({
-            text: JSON.stringify({
-              round: reviewerPromptCount,
-              issues: [
-                {
-                  title: 'Race condition in queue flush path',
-                  severity: 'high',
-                  summary: 'Two concurrent messages can bypass the intended lock.',
-                  whyItMatters: 'This can produce stale assistant replies.',
-                  evidence: 'src/message-queue/queue.ts lines 84-107',
-                  file: 'src/message-queue/queue.ts',
-                  lineStart: 84,
-                  lineEnd: 107,
-                  suggestedFix: 'Take the processing lock earlier.',
-                  confidence: 0.92,
-                },
-              ],
-            }),
-            stopReason: 'end_turn',
-          })
-        },
+        promptText: reviewerThatFindsRaceCondition(),
       },
       fixer: {
         availableCommands: ['verify-issue', 'fix-issue'],

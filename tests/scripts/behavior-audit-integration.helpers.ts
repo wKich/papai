@@ -46,6 +46,12 @@ export interface BehaviorAuditTestConfig {
   readonly RETRY_BACKOFF_MS: readonly [number, number, number]
   readonly MAX_STEPS: number
   readonly EXCLUDED_PREFIXES: readonly string[]
+  readonly EMBEDDING_MODEL: string
+  readonly EMBEDDING_BASE_URL: string
+  readonly CONSOLIDATION_THRESHOLD: number
+  readonly CONSOLIDATION_MIN_CLUSTER_SIZE: number
+  readonly CONSOLIDATION_DRY_RUN: boolean
+  readonly CONSOLIDATION_EMBED_BATCH_SIZE: number
 }
 
 const DEFAULT_CONFIG = {
@@ -65,6 +71,12 @@ const DEFAULT_CONFIG = {
     'tests/review-loop/',
     'tests/types/',
   ] as const,
+  EMBEDDING_MODEL: '',
+  EMBEDDING_BASE_URL: 'http://localhost:1234/v1',
+  CONSOLIDATION_THRESHOLD: 0.92,
+  CONSOLIDATION_MIN_CLUSTER_SIZE: 2,
+  CONSOLIDATION_DRY_RUN: false,
+  CONSOLIDATION_EMBED_BATCH_SIZE: 100,
 } satisfies Omit<
   BehaviorAuditTestConfig,
   | 'PROJECT_ROOT'
@@ -163,7 +175,7 @@ export function mockAuditBehaviorConfig(root: string, overrides: Partial<Behavio
 
 export function createEmptyProgressFixture(filesTotal: number): Progress {
   return {
-    version: 4,
+    version: 5,
     startedAt: '2026-04-17T12:00:00.000Z',
     phase1: {
       status: 'not-started',
@@ -171,6 +183,12 @@ export function createEmptyProgressFixture(filesTotal: number): Progress {
       failedTests: {},
       completedFiles: [],
       stats: { filesTotal, filesDone: 0, testsExtracted: 0, testsFailed: 0 },
+    },
+    phase1b: {
+      status: 'not-started',
+      lastRunAt: null,
+      threshold: 0,
+      stats: { slugsBefore: 0, slugsAfter: 0, mergesApplied: 0, behaviorsUpdated: 0, keywordsRemapped: 0 },
     },
     phase2a: {
       status: 'not-started',
