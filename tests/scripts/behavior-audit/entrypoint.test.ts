@@ -1,24 +1,24 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test'
 import assert from 'node:assert'
 
-import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit-entrypoint.js'
-import { reloadBehaviorAuditConfig } from '../../scripts/behavior-audit/config.js'
+import { runBehaviorAudit, type BehaviorAuditDeps } from '../../../scripts/behavior-audit/index.js'
+import { reloadBehaviorAuditConfig } from '../../../scripts/behavior-audit/config.js'
 import type {
   ConsolidatedManifest,
   IncrementalManifest,
   IncrementalSelection,
-} from '../../scripts/behavior-audit/incremental.js'
+} from '../../../scripts/behavior-audit/incremental.js'
 import {
   resolveProgressRenderer,
   type BehaviorAuditProgressReporter,
-} from '../../scripts/behavior-audit/progress-reporter.js'
-import type { Progress } from '../../scripts/behavior-audit/progress.js'
-import { parseTestFile, type ParsedTestFile } from '../../scripts/behavior-audit/test-parser.js'
+} from '../../../scripts/behavior-audit/progress-reporter.js'
+import type { Progress } from '../../../scripts/behavior-audit/progress.js'
+import { parseTestFile, type ParsedTestFile } from '../../../scripts/behavior-audit/test-parser.js'
 import {
   createEmptyProgressFixture,
   createIncrementalManifestFixture,
   createManifestTestEntry,
-} from './behavior-audit-integration.helpers.js'
+} from '../behavior-audit-integration.helpers.js'
 
 type SelectWorkInput = Parameters<BehaviorAuditDeps['selectIncrementalRunWork']>[0]
 type RebuildReportsInput = Parameters<BehaviorAuditDeps['rebuildReportsFromStoredResults']>[0]
