@@ -63,6 +63,7 @@ export let PROGRESS_PATH = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'progress.json')
 export let INCREMENTAL_MANIFEST_PATH = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'incremental-manifest.json')
 export let CONSOLIDATED_MANIFEST_PATH = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'consolidated-manifest.json')
 export let KEYWORD_VOCABULARY_PATH = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'keyword-vocabulary.json')
+export let EMBEDDING_CACHE_PATH = resolve(DEFAULT_AUDIT_BEHAVIOR_DIR, 'embedding-cache.json')
 
 export let PHASE1_TIMEOUT_MS = 1_200_000
 export let PHASE2_TIMEOUT_MS = 300_000
@@ -75,17 +76,14 @@ export let PROGRESS_RENDERER = 'auto'
 
 export let EXCLUDED_PREFIXES: readonly string[] = DEFAULT_EXCLUDED_PREFIXES
 
-export let EMBEDDING_MODEL = ''
-export let EMBEDDING_BASE_URL = ''
+export let EMBEDDING_MODEL = 'Qwen3-Embedding-8B'
+export let EMBEDDING_BASE_URL = BASE_URL
 export let CONSOLIDATION_THRESHOLD = 0.92
 export let CONSOLIDATION_MIN_CLUSTER_SIZE = 2
 export let CONSOLIDATION_DRY_RUN = false
 export let CONSOLIDATION_EMBED_BATCH_SIZE = 100
 
-export function reloadBehaviorAuditConfig(): void {
-  MODEL = resolveStringOverride('BEHAVIOR_AUDIT_MODEL', 'Gemma-4-26B-A4B')
-  BASE_URL = resolveStringOverride('BEHAVIOR_AUDIT_BASE_URL', 'http://localhost:8000/v1')
-
+function reloadPathConfig(): void {
   PROJECT_ROOT = resolveStringOverride('BEHAVIOR_AUDIT_PROJECT_ROOT', DEFAULT_PROJECT_ROOT)
   REPORTS_DIR = resolveStringOverride('BEHAVIOR_AUDIT_REPORTS_DIR', resolve(PROJECT_ROOT, 'reports'))
   AUDIT_BEHAVIOR_DIR = resolveStringOverride(
@@ -114,6 +112,17 @@ export function reloadBehaviorAuditConfig(): void {
     'BEHAVIOR_AUDIT_KEYWORD_VOCABULARY_PATH',
     resolve(AUDIT_BEHAVIOR_DIR, 'keyword-vocabulary.json'),
   )
+  EMBEDDING_CACHE_PATH = resolveStringOverride(
+    'BEHAVIOR_AUDIT_EMBEDDING_CACHE_PATH',
+    resolve(AUDIT_BEHAVIOR_DIR, 'embedding-cache.json'),
+  )
+}
+
+export function reloadBehaviorAuditConfig(): void {
+  MODEL = resolveStringOverride('BEHAVIOR_AUDIT_MODEL', 'Gemma-4-26B-A4B')
+  BASE_URL = resolveStringOverride('BEHAVIOR_AUDIT_BASE_URL', 'http://localhost:8000/v1')
+
+  reloadPathConfig()
 
   PHASE1_TIMEOUT_MS = resolveNumberOverride('BEHAVIOR_AUDIT_PHASE1_TIMEOUT_MS', 1_200_000)
   PHASE2_TIMEOUT_MS = resolveNumberOverride('BEHAVIOR_AUDIT_PHASE2_TIMEOUT_MS', 300_000)
@@ -123,7 +132,7 @@ export function reloadBehaviorAuditConfig(): void {
   VERBOSE = resolveStringOverride('BEHAVIOR_AUDIT_VERBOSE', '0') === '1'
   PROGRESS_RENDERER = resolveStringOverride('BEHAVIOR_AUDIT_PROGRESS_RENDERER', 'auto')
   EXCLUDED_PREFIXES = resolveReadonlyStringList('BEHAVIOR_AUDIT_EXCLUDED_PREFIXES', DEFAULT_EXCLUDED_PREFIXES)
-  EMBEDDING_MODEL = resolveStringOverride('BEHAVIOR_AUDIT_EMBEDDING_MODEL', '')
+  EMBEDDING_MODEL = resolveStringOverride('BEHAVIOR_AUDIT_EMBEDDING_MODEL', 'Qwen3-Embedding-8B')
   EMBEDDING_BASE_URL = resolveStringOverride('BEHAVIOR_AUDIT_EMBEDDING_BASE_URL', BASE_URL)
   CONSOLIDATION_THRESHOLD = resolveNumberOverride('BEHAVIOR_AUDIT_CONSOLIDATION_THRESHOLD', 0.92)
   CONSOLIDATION_MIN_CLUSTER_SIZE = resolveNumberOverride('BEHAVIOR_AUDIT_CONSOLIDATION_MIN_CLUSTER_SIZE', 2)
