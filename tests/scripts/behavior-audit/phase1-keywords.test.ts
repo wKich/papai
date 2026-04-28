@@ -5,24 +5,24 @@ import path from 'node:path'
 
 import { z } from 'zod'
 
-import { normalizeKeywordSlug } from '../../scripts/behavior-audit-phase1-keywords.js'
-import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
-import { createEmptyProgressFixture, mockAuditBehaviorConfig } from './behavior-audit-integration.helpers.js'
+import { normalizeKeywordSlug } from '../../../scripts/behavior-audit/keyword-vocabulary.js'
+import { parseTestFile } from '../../../scripts/behavior-audit/test-parser.js'
+import { createEmptyProgressFixture, mockAuditBehaviorConfig } from '../behavior-audit-integration.helpers.js'
 import {
   restoreBehaviorAuditEnv,
   cleanupTempDirs,
   makeTempDir,
   originalOpenAiApiKey,
   restoreOpenAiApiKey,
-} from './behavior-audit-integration.runtime-helpers.js'
+} from '../behavior-audit-integration.runtime-helpers.js'
 import {
   loadExtractModule,
   loadIncrementalModule,
   loadKeywordVocabularyModule,
-} from './behavior-audit-integration.support.js'
+} from '../behavior-audit-integration.support.js'
 
 type ExtractResult = NonNullable<
-  Awaited<ReturnType<(typeof import('../../scripts/behavior-audit/extract-agent.js'))['extractWithRetry']>>
+  Awaited<ReturnType<(typeof import('../../../scripts/behavior-audit/extract-agent.js'))['extractWithRetry']>>
 >
 
 const ExtractedBehaviorRecordArraySchema = z.array(
@@ -181,7 +181,7 @@ test('runPhase1 fails cleanly when extracted keywords all normalize to empty slu
 })
 
 test('extract-agent exports extractWithRetry', async () => {
-  const mod: unknown = await import(`../../scripts/behavior-audit/extract-agent.js?test=shape-${crypto.randomUUID()}`)
+  const mod: unknown = await import(`../../../scripts/behavior-audit/extract-agent.js?test=shape-${crypto.randomUUID()}`)
   expect(typeof mod).toBe('object')
   expect(mod).toHaveProperty('extractWithRetry')
 })
@@ -472,7 +472,7 @@ test('runPhase1 stores normalized keywords in the extracted record without mutab
 // (the module is kept for legacy data migration and normalizeKeywordSlug utility)
 test('keyword-vocabulary module still exports loadKeywordVocabulary and saveKeywordVocabulary', async () => {
   const mod: unknown = await import(
-    `../../scripts/behavior-audit/keyword-vocabulary.js?test=shape-${crypto.randomUUID()}`
+    `../../../scripts/behavior-audit/keyword-vocabulary.js?test=shape-${crypto.randomUUID()}`
   )
   expect(typeof mod).toBe('object')
   expect(mod).toHaveProperty('loadKeywordVocabulary')
