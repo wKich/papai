@@ -26,6 +26,7 @@ const Phase1bCheckpointSchema = z.strictObject({
   status: z.enum(['not-started', 'in-progress', 'done']),
   lastRunAt: z.string().nullable(),
   threshold: z.number(),
+  minClusterSize: z.number(),
   linkage: z.enum(['single', 'average', 'complete']),
   maxClusterSize: z.number(),
   gapThreshold: z.number(),

@@ -1066,6 +1066,7 @@ describe('behavior-audit incremental manifest', () => {
             status: 'not-started',
             lastRunAt: null,
             threshold: 0,
+            minClusterSize: 2,
             linkage: 'single',
             maxClusterSize: 0,
             gapThreshold: 0,

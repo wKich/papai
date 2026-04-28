@@ -62,6 +62,7 @@ async function markDoneAndSave(
     status: 'done',
     lastRunAt: now,
     threshold,
+    minClusterSize: CONSOLIDATION_MIN_CLUSTER_SIZE,
     linkage: CONSOLIDATION_LINKAGE,
     maxClusterSize: CONSOLIDATION_MAX_CLUSTER_SIZE,
     gapThreshold: CONSOLIDATION_GAP_THRESHOLD,
@@ -115,6 +116,7 @@ function shouldSkipCompletedPhase1b(progress: Progress, slugsBefore: number): bo
     progress.phase1b.status === 'done' &&
     slugsBefore === progress.phase1b.stats.slugsBefore &&
     CONSOLIDATION_THRESHOLD === progress.phase1b.threshold &&
+    CONSOLIDATION_MIN_CLUSTER_SIZE === progress.phase1b.minClusterSize &&
     CONSOLIDATION_LINKAGE === progress.phase1b.linkage &&
     CONSOLIDATION_MAX_CLUSTER_SIZE === progress.phase1b.maxClusterSize &&
     CONSOLIDATION_GAP_THRESHOLD === progress.phase1b.gapThreshold
@@ -150,6 +152,7 @@ async function applyMergesAndSave(
     status: 'done',
     lastRunAt: now,
     threshold: CONSOLIDATION_THRESHOLD,
+    minClusterSize: CONSOLIDATION_MIN_CLUSTER_SIZE,
     linkage: CONSOLIDATION_LINKAGE,
     maxClusterSize: CONSOLIDATION_MAX_CLUSTER_SIZE,
     gapThreshold: CONSOLIDATION_GAP_THRESHOLD,

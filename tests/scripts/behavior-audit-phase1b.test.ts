@@ -235,6 +235,7 @@ test('runPhase1b skips when already done and vocabulary size unchanged', async (
   const progress = makeProgress(true)
   progress.phase1b.status = 'done'
   progress.phase1b.threshold = 0.95
+  progress.phase1b.minClusterSize = 2
   progress.phase1b.linkage = 'single'
   progress.phase1b.maxClusterSize = 0
   progress.phase1b.gapThreshold = 0
@@ -270,15 +271,76 @@ test('runPhase1b skips when already done and vocabulary size unchanged', async (
 })
 
 test('runPhase1b re-runs when clustering settings changed despite unchanged vocabulary size', async () => {
-  process.env['BEHAVIOR_AUDIT_CONSOLIDATION_LINKAGE'] = 'average'
-  process.env['BEHAVIOR_AUDIT_CONSOLIDATION_MAX_CLUSTER_SIZE'] = '5'
-  process.env['BEHAVIOR_AUDIT_CONSOLIDATION_GAP_THRESHOLD'] = '0.15'
+  applyBehaviorAuditEnv(
+    createAuditBehaviorConfig(tempRoot, {
+      EMBEDDING_MODEL: 'test-embed-model',
+      CONSOLIDATION_THRESHOLD: 0.95,
+      CONSOLIDATION_MIN_CLUSTER_SIZE: 2,
+      CONSOLIDATION_LINKAGE: 'average',
+      CONSOLIDATION_MAX_CLUSTER_SIZE: 5,
+      CONSOLIDATION_GAP_THRESHOLD: 0.15,
+      CONSOLIDATION_DRY_RUN: false,
+      CONSOLIDATION_EMBED_BATCH_SIZE: 100,
+    }),
+  )
   reloadBehaviorAuditConfig()
 
   const { runPhase1b } = await loadConsolidateKeywordsModule(`${tag}-settings-changed`)
   const progress = makeProgress(true)
   progress.phase1b.status = 'done'
   progress.phase1b.threshold = 0.95
+  progress.phase1b.minClusterSize = 2
+  progress.phase1b.linkage = 'single'
+  progress.phase1b.maxClusterSize = 0
+  progress.phase1b.gapThreshold = 0
+  progress.phase1b.stats.slugsBefore = 2
+
+  let embedCalled = false
+
+  await runPhase1b(progress, {
+    loadKeywordVocabulary: () => Promise.resolve([makeVocabEntry('alpha'), makeVocabEntry('beta')]),
+    saveKeywordVocabulary: () => Promise.resolve(),
+    getOrEmbed: () => {
+      embedCalled = true
+      return Promise.resolve({
+        raw: [
+          [1, 0],
+          [0, 1],
+        ],
+        normalized: [
+          [1, 0],
+          [0, 1],
+        ],
+      })
+    },
+    embeddingCachePath: null,
+    embeddingModel: 'test-embed-model',
+    loadManifest: () => Promise.resolve(null),
+    remapKeywordsInExtractedFile: () => Promise.resolve({ updated: false, remappedCount: 0 }),
+    saveProgress: () => Promise.resolve(),
+    log: { log: () => {} },
+  })
+
+  expect(embedCalled).toBe(true)
+})
+
+test('runPhase1b re-runs when min cluster size changed despite unchanged vocabulary size', async () => {
+  applyBehaviorAuditEnv(
+    createAuditBehaviorConfig(tempRoot, {
+      EMBEDDING_MODEL: 'test-embed-model',
+      CONSOLIDATION_THRESHOLD: 0.95,
+      CONSOLIDATION_MIN_CLUSTER_SIZE: 3,
+      CONSOLIDATION_DRY_RUN: false,
+      CONSOLIDATION_EMBED_BATCH_SIZE: 100,
+    }),
+  )
+  reloadBehaviorAuditConfig()
+
+  const { runPhase1b } = await loadConsolidateKeywordsModule(`${tag}-min-cluster-size-changed`)
+  const progress = makeProgress(true)
+  progress.phase1b.status = 'done'
+  progress.phase1b.threshold = 0.95
+  progress.phase1b.minClusterSize = 2
   progress.phase1b.linkage = 'single'
   progress.phase1b.maxClusterSize = 0
   progress.phase1b.gapThreshold = 0

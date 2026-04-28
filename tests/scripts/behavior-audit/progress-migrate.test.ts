@@ -78,6 +78,7 @@ test('validateOrMigrateProgress backfills missing phase1b clustering fields for 
   expect(result?.phase1b.status).toBe('done')
   expect(result?.phase1b.lastRunAt).toBe('2026-01-02T00:00:00.000Z')
   expect(result?.phase1b.threshold).toBe(0.92)
+  expect(result?.phase1b.minClusterSize).toBe(2)
   expect(result?.phase1b.linkage).toBe('single')
   expect(result?.phase1b.maxClusterSize).toBe(0)
   expect(result?.phase1b.gapThreshold).toBe(0)

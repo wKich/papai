@@ -20,6 +20,7 @@ export interface Phase1bProgress {
   status: PhaseStatus
   lastRunAt: string | null
   threshold: number
+  minClusterSize: number
   linkage: LinkageMode
   maxClusterSize: number
   gapThreshold: number
@@ -85,6 +86,7 @@ export function emptyPhase1b(): Phase1bProgress {
     status: 'not-started',
     lastRunAt: null,
     threshold: 0,
+    minClusterSize: 2,
     linkage: 'single',
     maxClusterSize: 0,
     gapThreshold: 0,
