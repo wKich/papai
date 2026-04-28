@@ -5,30 +5,30 @@ import path from 'node:path'
 
 import { z } from 'zod'
 
-import { createEmptyManifest as barrelCreateEmptyManifest } from '../../scripts/behavior-audit-phase1-selection.js'
-import type { Phase1Deps } from '../../scripts/behavior-audit/extract.js'
-import type { IncrementalManifest } from '../../scripts/behavior-audit/incremental.js'
+import { createEmptyManifest as barrelCreateEmptyManifest } from '../../../scripts/behavior-audit/incremental.js'
+import type { Phase1Deps } from '../../../scripts/behavior-audit/extract.js'
+import type { IncrementalManifest } from '../../../scripts/behavior-audit/incremental.js'
 import {
   createTextProgressReporter,
   type BehaviorAuditProgressReporter,
   type ProgressEvent,
   type ProgressOutcome,
-} from '../../scripts/behavior-audit/progress-reporter.js'
-import type { Progress } from '../../scripts/behavior-audit/progress.js'
-import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
+} from '../../../scripts/behavior-audit/progress-reporter.js'
+import type { Progress } from '../../../scripts/behavior-audit/progress.js'
+import { parseTestFile } from '../../../scripts/behavior-audit/test-parser.js'
 import {
   createEmptyProgressFixture,
   createManifestTestEntry,
   mockAuditBehaviorConfig,
   writeWorkspaceFile,
-} from './behavior-audit-integration.helpers.js'
-import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
+} from '../behavior-audit-integration.helpers.js'
+import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from '../behavior-audit-integration.runtime-helpers.js'
 import {
   createEmptyManifest,
   getManifestEntry,
   loadExtractModule,
   readSavedManifest,
-} from './behavior-audit-integration.support.js'
+} from '../behavior-audit-integration.support.js'
 
 function createEmptyProgress(filesTotal: number): Progress {
   return createEmptyProgressFixture(filesTotal)
