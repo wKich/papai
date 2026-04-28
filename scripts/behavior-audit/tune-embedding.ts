@@ -3,9 +3,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { reloadBehaviorAuditConfig, EXTRACTED_DIR, EMBEDDING_MODEL } from './config.js'
-import { getOrEmbed } from './embedding-cache.js'
 import { embedSlugBatch } from './consolidate-keywords-agent.js'
-import { buildClustersNormalized, buildConsolidatedVocabulary, buildMergeMap, toNormalizedFloat64Arrays } from './consolidate-keywords-helpers.js'
+import {
+  buildClustersNormalized,
+  buildConsolidatedVocabulary,
+  buildMergeMap,
+  toNormalizedFloat64Arrays,
+} from './consolidate-keywords-helpers.js'
+import { getOrEmbed } from './embedding-cache.js'
 import type { ExtractedBehaviorRecord } from './extracted-store.js'
 import { normalizeKeywordSlug } from './keyword-vocabulary.js'
 import type { KeywordVocabularyEntry } from './keyword-vocabulary.js'
