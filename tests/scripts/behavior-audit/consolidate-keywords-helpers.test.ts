@@ -13,6 +13,7 @@ import {
   electCanonical,
   find,
   remapKeywords,
+  subdivideOversizedClusters,
   union,
 } from '../../../scripts/behavior-audit/consolidate-keywords-helpers.js'
 import type { LinkageMode } from '../../../scripts/behavior-audit/consolidate-keywords-helpers.js'
@@ -231,6 +232,73 @@ describe('buildClustersAdvanced', () => {
 
     expect(clusters).toHaveLength(1)
     expect(clusters[0]).toHaveLength(3)
+  })
+})
+
+describe('subdivideOversizedClusters', () => {
+  function makeNormalized(vectors: readonly (readonly number[])[]): readonly Float64Array[] {
+    return vectors.map((vector) => {
+      const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0))
+      return new Float64Array(vector.map((value) => (magnitude === 0 ? value : value / magnitude)))
+    })
+  }
+
+  test('returns clusters unchanged when all are within maxClusterSize', () => {
+    const embeddings = makeNormalized([
+      [1, 0],
+      [0.99, 0.14],
+      [0, 1],
+    ])
+    const clusters = [[0, 1]]
+
+    const result = subdivideOversizedClusters(embeddings, clusters, 5, 'single', 0.01)
+
+    expect(result).toEqual(clusters)
+  })
+
+  test('splits an oversized cluster by re-clustering above its weakest internal similarity', () => {
+    const embeddings = makeNormalized([
+      [1, 0],
+      [0.99, 0.14],
+      [0.98, 0.2],
+      [0.5, 0.87],
+      [0, 1],
+    ])
+    const clusters = [[0, 1, 2, 3, 4]]
+
+    const result = subdivideOversizedClusters(embeddings, clusters, 2, 'single', 0.01)
+
+    expect(result.length).toBeGreaterThan(1)
+    for (const cluster of result) {
+      expect(cluster.length).toBeLessThanOrEqual(2)
+    }
+    expect(result.flat().toSorted((a, b) => a - b)).toEqual([0, 1, 2, 3, 4])
+  })
+
+  test('returns an oversized cluster unchanged when no further split is possible', () => {
+    const embeddings = makeNormalized([
+      [1, 0],
+      [1, 0],
+      [1, 0],
+    ])
+    const clusters = [[0, 1, 2]]
+
+    const result = subdivideOversizedClusters(embeddings, clusters, 2, 'single', 0.05)
+
+    expect(result).toEqual(clusters)
+  })
+
+  test('does not recurse infinitely and stops when threshold reaches 1.0', () => {
+    const embeddings = makeNormalized([
+      [1, 0],
+      [0.99, 0.14],
+      [0.98, 0.2],
+    ])
+    const clusters = [[0, 1, 2]]
+
+    const result = subdivideOversizedClusters(embeddings, clusters, 2, 'average', 0.1)
+
+    expect(result.length).toBeGreaterThanOrEqual(1)
   })
 })
 
