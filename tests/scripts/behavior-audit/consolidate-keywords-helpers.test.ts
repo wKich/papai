@@ -288,17 +288,17 @@ describe('subdivideOversizedClusters', () => {
     expect(result).toEqual(clusters)
   })
 
-  test('does not recurse infinitely and stops when threshold reaches 1.0', () => {
+  test('uses the 1.0 ceiling attempt when weakest similarity plus step would overshoot it', () => {
     const embeddings = makeNormalized([
       [1, 0],
-      [0.99, 0.14],
-      [0.98, 0.2],
+      [1, 0],
+      [0.999, 0.0447],
     ])
     const clusters = [[0, 1, 2]]
 
-    const result = subdivideOversizedClusters(embeddings, clusters, 2, 'average', 0.1)
+    const result = subdivideOversizedClusters(embeddings, clusters, 2, 'average', 0.01)
 
-    expect(result.length).toBeGreaterThanOrEqual(1)
+    expect(result).toEqual([[0, 1], [2]])
   })
 })
 

@@ -217,7 +217,7 @@ function reclusterOversizedCluster(
   thresholdStep: number,
 ): readonly (readonly number[])[] {
   const weakestSimilarity = findWeakestInternalSimilarity(normalizedEmbeddings, cluster)
-  const startingThreshold = Math.max((weakestSimilarity ?? 1) + thresholdStep, 0)
+  const startingThreshold = Math.min(Math.max((weakestSimilarity ?? 1) + thresholdStep, 0), 1)
   const indexedSubEmbeddings = cluster.flatMap((index) => {
     const embedding = normalizedEmbeddings[index]
     return embedding === undefined ? [] : ([{ index, embedding }] as const)
