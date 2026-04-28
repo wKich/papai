@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace papai's OpenCode-specific agent setup with a Pi-based setup that preserves MCP access, provider/model availability, TDD safety gates, codeindex reindexing, and everyday session workflow parity.
+**Goal:** Replace papai's OpenCode-specific agent setup with a Pi-based setup that preserves MCP access, provider/model availability, `obra/superpowers` skill workflows, `pi-subagents`, TDD safety gates, codeindex reindexing, and a Pi-native TPS status display.
 
-**Architecture:** Keep the migration incremental and reversible. Reuse the existing repo-local `.hooks/` checks, keep secrets in user-scope Pi files instead of project config, move shared project behavior into `.pi/` and `.mcp.json`, and only port the OpenCode plugins that enforce repository behavior. Do not base papai on `roach-pi`, `oh-my-pi`, or experimental upstream superpowers-for-Pi support.
+**Architecture:** Keep the migration incremental and reversible. Reuse the existing repo-local `.hooks/` checks, keep secrets in user-scope Pi files instead of project config, move shared project behavior into `.pi/` and `.mcp.json`, explicitly wire Pi to the already-installed `obra/superpowers` skills, and port the OpenCode plugins that enforce repository behavior. Replace the OpenCode TPS meter with a small Pi-native status extension that uses Pi's footer/status APIs instead of toast-heavy UI.
 
-**Tech Stack:** Pi coding agent, TypeScript Pi extensions, `pi-mcp-adapter`, `pi-subagents`, Bun, existing papai `.hooks/*`, `@upstash/context7-mcp`, `synthetic-search-mcp`, local `codeindex` MCP
+**Tech Stack:** Pi coding agent, TypeScript Pi extensions, `pi-mcp-adapter`, `pi-subagents`, `obra/superpowers` skills via `~/.agents/skills`, Bun, existing papai `.hooks/*`, `@upstash/context7-mcp`, `synthetic-search-mcp`, local `codeindex` MCP
 
 ---
 
@@ -19,40 +19,53 @@
 - Validated: Pi already exists on this machine and already uses a global custom provider extension at `~/.pi/agent/extensions/drowbridge/index.ts`, with `~/.pi/agent/settings.json` defaulting to provider `drowbridge` and model `gemma-4-26b`.
 - Validated: OpenCode credentials currently live in `~/.local/share/opencode/auth.json`, while Pi stores API keys and OAuth tokens in `~/.pi/agent/auth.json` and resolves additional custom providers through `~/.pi/agent/models.json` or provider extensions.
 - Validated: Pi does not ship built-in MCP support; the current maintained path is `pi-mcp-adapter`, which reads `.mcp.json` and `~/.config/mcp/mcp.json`, supports lazy connections, and can promote MCP tools to direct Pi tools via `directTools`.
-- Validated: `pi-subagents` is current and maintained, while `obra/superpowers` Pi support is still experimental and not merged upstream. `roach-pi` explicitly conflicts with superpowers skill names. For papai, use `pi-subagents` plus existing skills instead of replacing the workflow with `roach-pi`.
-- Decision: do not port `opencode-tps-meter` in phase 1. Pi already exposes token, cost, context, and model state in the footer; TPS visualization is useful but non-blocking and should be a follow-up only if the missing UI is felt in practice.
+- Validated: `pi-subagents` is current and maintained, and Pi already discovers skills from `~/.agents/skills/`. On this machine, that directory already contains the core `obra/superpowers` skills used in the current workflow, including `using-superpowers`, `brainstorming`, `writing-plans`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, and `subagent-driven-development`.
+- Validated: upstream `obra/superpowers` Pi support is still experimental and not merged upstream, but that does not block papai because Pi can already consume the installed superpowers skills directly from `~/.agents/skills/`. For papai, preserve those skills explicitly in Pi settings and instructions instead of waiting for upstream Pi support to finish.
+- Validated: `roach-pi` explicitly conflicts with superpowers skill names, so it is incompatible with preserving the existing `obra/superpowers` workflow in this repo.
+- Validated: Pi exposes clean TUI extension APIs for footer/status rendering, including `ctx.ui.setStatus`, `ctx.ui.setWidget`, and `ctx.ui.setFooter`, plus streaming hooks such as `message_update`. That is sufficient to implement a Pi-native TPS display without depending on OpenCode-specific toast APIs.
+- Decision: port the useful parts of `opencode-tps-meter` into a dedicated Pi TPS extension in this migration, but keep it small. Reuse the tracker/tokenizer/config concepts and Pi's status/footer APIs; do not port the old OpenCode toast/publish client abstraction or full multi-surface compatibility layer.
 - Decision: do not use remote Context7 MCP config that depends on undocumented adapter header behavior. Use the supported local stdio server `@upstash/context7-mcp` with `CONTEXT7_API_KEY` in the environment.
 
 ## File Structure
 
-| Path                                         | Responsibility                                                                                                                                     |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.pi/settings.json`                          | Project-local Pi package configuration so papai auto-loads `pi-mcp-adapter` and `pi-subagents`                                                     |
-| `.mcp.json`                                  | Shared project MCP configuration for `context7`, `synthetic`, and `codeindex`                                                                      |
-| `.pi/extensions/tdd-enforcement/index.ts`    | Pi extension that reuses existing `.hooks/` checks for TDD and destructive-git blocking                                                            |
-| `.pi/extensions/codeindex-reindex/index.ts`  | Pi extension that triggers debounced `codeindex` reindex after implementation edits                                                                |
-| `.gitignore`                                 | Ignore project-local Pi install state while keeping shared `.pi` config committed                                                                  |
-| `CLAUDE.md`                                  | Strengthen path-scoped instruction guidance so Pi users still consult `.github/instructions/*.instructions.md` without the OpenCode Copilot plugin |
-| `docs/guides/pi-agent.md`                    | Repo-local operator guide mapping OpenCode habits to Pi commands and documenting the papai-specific setup                                          |
-| `~/.pi/agent/auth.json`                      | User-scope API keys and OAuth tokens for Pi providers                                                                                              |
-| `~/.pi/agent/extensions/drowbridge/index.ts` | Existing global provider extension that should stop embedding a literal API key                                                                    |
-| `~/.pi/agent/models.json`                    | Optional user-scope custom provider definitions for parity with OpenCode's `macbook` provider                                                      |
+| Path                                         | Responsibility                                                                                                                    |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `.pi/settings.json`                          | Project-local Pi package configuration so papai auto-loads `pi-mcp-adapter`, `pi-subagents`, and explicit skill paths when needed |
+| `.mcp.json`                                  | Shared project MCP configuration for `context7`, `synthetic`, and `codeindex`                                                     |
+| `.pi/extensions/tdd-enforcement/index.ts`    | Pi extension that reuses existing `.hooks/` checks for TDD and destructive-git blocking                                           |
+| `.pi/extensions/codeindex-reindex/index.ts`  | Pi extension that triggers debounced `codeindex` reindex after implementation edits                                               |
+| `.pi/extensions/tps-meter/index.ts`          | Pi-native TPS meter extension that shows live throughput in the footer/status bar                                                 |
+| `.pi/extensions/tps-meter/tracker.ts`        | Rolling-window TPS tracker reused or adapted from the OpenCode TPS meter implementation                                           |
+| `.pi/extensions/tps-meter/token-counter.ts`  | Heuristic token counting for assistant text and reasoning deltas                                                                  |
+| `.pi/extensions/tps-meter/config.ts`         | Pi TPS meter config loading from `.pi/tps-meter.json`, `~/.pi/agent/tps-meter.json`, and `TPS_METER_*` env vars                   |
+| `.pi/tps-meter.json`                         | Project-local shared configuration for the Pi TPS extension                                                                       |
+| `.gitignore`                                 | Ignore project-local Pi install state while keeping shared `.pi` config committed                                                 |
+| `CLAUDE.md`                                  | Strengthen path-scoped instruction guidance and tell Pi to preserve the superpowers workflow                                      |
+| `docs/guides/pi-agent.md`                    | Repo-local operator guide mapping OpenCode habits to Pi commands and documenting the papai-specific setup                         |
+| `~/.pi/agent/auth.json`                      | User-scope API keys and OAuth tokens for Pi providers                                                                             |
+| `~/.pi/agent/AGENTS.md`                      | Global Pi instruction file that explicitly loads `using-superpowers` at session start                                             |
+| `~/.pi/agent/extensions/drowbridge/index.ts` | Existing global provider extension that should stop embedding a literal API key                                                   |
+| `~/.pi/agent/models.json`                    | Optional user-scope custom provider definitions for parity with OpenCode's `macbook` provider                                     |
 
 ---
 
-### Task 1: Add The Project Pi Scaffold
+### Task 1: Add The Project Pi Scaffold And Preserve Superpowers Skills
 
 **Files:**
 
 - Create: `.pi/settings.json`
 - Modify: `.gitignore`
+- Modify: `~/.pi/agent/settings.json`
+- Create: `~/.pi/agent/AGENTS.md`
 - Test: `pi list`
 
 - [ ] **Step 1: Create the shared project Pi settings file**
 
 ```json
 {
-  "packages": ["npm:pi-mcp-adapter", "npm:pi-subagents"]
+  "packages": ["npm:pi-mcp-adapter", "npm:pi-subagents"],
+  "skills": ["~/.agents/skills"],
+  "enableSkillCommands": true
 }
 ```
 
@@ -74,9 +87,30 @@ pi install -l npm:pi-mcp-adapter
 pi install -l npm:pi-subagents
 ```
 
-Expected: `.pi/settings.json` contains both package entries and project-local install state appears under `.pi/npm/` or `.pi/git/`.
+Expected: `.pi/settings.json` contains both package entries plus the shared superpowers skill path, and project-local install state appears under `.pi/npm/` or `.pi/git/`.
 
-- [ ] **Step 4: Verify package discovery**
+- [ ] **Step 4: Make Pi's global settings explicitly include the shared superpowers skills path**
+
+```json
+{
+  "defaultProvider": "drowbridge",
+  "defaultModel": "gemma-4-26b",
+  "skills": ["~/.agents/skills"],
+  "enableSkillCommands": true
+}
+```
+
+- [ ] **Step 5: Add a global Pi instruction to start with `using-superpowers`**
+
+```md
+At the start of every conversation, load and follow the `using-superpowers` skill before taking action.
+
+If another `obra/superpowers` skill applies, load it explicitly before responding, editing files, or running commands.
+
+Do not rely on memory of skill contents. Load the current skill each time.
+```
+
+- [ ] **Step 6: Verify package and skill discovery**
 
 Run:
 
@@ -84,7 +118,14 @@ Run:
 pi list
 ```
 
-Expected: the project lists `pi-mcp-adapter` and `pi-subagents` as installed resources.
+Then inside Pi:
+
+```text
+/skill:writing-plans
+/skill:test-driven-development
+```
+
+Expected: the project lists `pi-mcp-adapter` and `pi-subagents` as installed resources, and Pi can load the installed superpowers skills directly.
 
 ---
 
@@ -475,7 +516,204 @@ Expected: `git stash` is refused, implementation-first writes are refused, and c
 
 ---
 
-### Task 5: Close The Instruction And Workflow Gap Left By OpenCode Plugins
+### Task 5: Port The OpenCode TPS Meter To A Pi-Native Footer Extension
+
+**Files:**
+
+- Create: `.pi/extensions/tps-meter/index.ts`
+- Create: `.pi/extensions/tps-meter/tracker.ts`
+- Create: `.pi/extensions/tps-meter/token-counter.ts`
+- Create: `.pi/extensions/tps-meter/config.ts`
+- Create: `.pi/extensions/tps-meter/types.ts`
+- Create: `.pi/tps-meter.json`
+- Test: start Pi, stream a response, and confirm live TPS appears in the footer/status area
+
+- [ ] **Step 1: Keep the extension design intentionally smaller than the OpenCode plugin**
+
+Use this design:
+
+```text
+Pi TPS meter design
+  input source: `message_update` events
+    - count only `text_delta` and `thinking_delta`
+    - ignore tool-call argument deltas and user/system messages
+  token counting: fast heuristic counter (`chars/4` default, `chars/3` optional for code-heavy models)
+  tracking: one rolling tracker for the active assistant stream
+  UI: primary output via `ctx.ui.setStatus("tps-meter", ...)`
+  optional richer mode: `ctx.ui.setWidget("tps-meter", ...)` for multi-line display
+  cleanup: clear status on `message_end` / `agent_end`, optionally keep last-session summary
+```
+
+Expected: the extension is footer-first and does not attempt to replicate OpenCode's toast-oriented UI stack.
+
+- [ ] **Step 2: Reuse the tracker and token counter logic with minimal renaming**
+
+```ts
+// .pi/extensions/tps-meter/token-counter.ts
+export type TokenizerAlgorithm = 'heuristic' | 'word' | 'code'
+
+const countByChars = (text: string, divisor: number): number =>
+  text.length === 0 ? 0 : Math.ceil(text.length / divisor)
+
+const countByWords = (text: string, divisor: number): number => {
+  const trimmed = text.trim()
+  return trimmed.length === 0 ? 0 : Math.ceil(trimmed.split(/\s+/).length / divisor)
+}
+
+export const createTokenizer = (algorithm: TokenizerAlgorithm = 'heuristic') => ({
+  count: (text: string): number =>
+    algorithm === 'word'
+      ? countByWords(text, 0.75)
+      : algorithm === 'code'
+        ? countByChars(text, 3)
+        : countByChars(text, 4),
+})
+```
+
+```ts
+// .pi/extensions/tps-meter/tracker.ts
+export interface Tracker {
+  readonly recordTokens: (count: number, timestamp?: number) => void
+  readonly getInstantTps: () => number
+  readonly getAverageTps: () => number
+  readonly getTotalTokens: () => number
+  readonly getElapsedMs: () => number
+  readonly reset: () => void
+}
+```
+
+Expected: the Pi extension reuses the proven throughput math from `opencode-tps-meter` instead of inventing a second TPS algorithm.
+
+- [ ] **Step 3: Add Pi-native config loading and a shared project config file**
+
+```json
+{
+  "enabled": true,
+  "rollingWindowMs": 1000,
+  "showAverage": true,
+  "showInstant": true,
+  "showTotalTokens": true,
+  "showElapsed": false,
+  "format": "compact",
+  "minVisibleTps": 0,
+  "fallbackTokenHeuristic": "chars_div_4",
+  "showLastSessionInStatus": true,
+  "uiMode": "status"
+}
+```
+
+And load config in this order:
+
+```text
+1. built-in defaults
+2. ~/.pi/agent/tps-meter.json
+3. .pi/tps-meter.json
+4. TPS_METER_* environment variables
+```
+
+Expected: TPS config is shared in-project, overridable per-user, and does not depend on the old `.opencode/tps-meter.json` path.
+
+- [ ] **Step 4: Implement the Pi extension using streaming events and footer/status APIs**
+
+```ts
+import type { ExtensionAPI } from '@mariozechner/pi-coding-agent'
+
+import { loadConfig } from './config.js'
+import { createTokenizer } from './token-counter.js'
+import { createTracker } from './tracker.js'
+
+export default function (pi: ExtensionAPI): void {
+  const config = loadConfig()
+  if (!config.enabled) return
+
+  const tokenizer = createTokenizer(
+    config.fallbackTokenHeuristic === 'chars_div_3'
+      ? 'code'
+      : config.fallbackTokenHeuristic === 'words_div_0_75'
+        ? 'word'
+        : 'heuristic',
+  )
+
+  const tracker = createTracker({ rollingWindowMs: config.rollingWindowMs })
+
+  const renderStatus = (): string => {
+    const parts = [] as string[]
+    if (config.showInstant) parts.push(`TPS ${tracker.getInstantTps().toFixed(1)}`)
+    if (config.showAverage) parts.push(`avg ${tracker.getAverageTps().toFixed(1)}`)
+    if (config.showTotalTokens) parts.push(`tok ${tracker.getTotalTokens()}`)
+    if (config.showElapsed) parts.push(`${Math.floor(tracker.getElapsedMs() / 1000)}s`)
+    return parts.join(' | ')
+  }
+
+  const refresh = (ctx: Parameters<Parameters<ExtensionAPI['on']>[1]>[1]): void => {
+    const text = renderStatus()
+    if (text.length === 0) return
+    ctx.ui.setStatus('tps-meter', text)
+  }
+
+  pi.on('message_update', async (event, ctx) => {
+    const deltaEvent = event.assistantMessageEvent
+    if (deltaEvent.type !== 'text_delta' && deltaEvent.type !== 'thinking_delta') return
+
+    const delta = typeof deltaEvent.delta === 'string' ? deltaEvent.delta : ''
+    const count = tokenizer.count(delta)
+    if (count <= 0) return
+
+    tracker.recordTokens(count)
+    if (tracker.getInstantTps() < config.minVisibleTps) return
+    refresh(ctx)
+  })
+
+  pi.on('message_end', async (_event, ctx) => {
+    if (config.showLastSessionInStatus) {
+      refresh(ctx)
+      return
+    }
+    ctx.ui.setStatus('tps-meter', undefined)
+    tracker.reset()
+  })
+
+  pi.on('agent_end', async (_event, ctx) => {
+    if (!config.showLastSessionInStatus) {
+      ctx.ui.setStatus('tps-meter', undefined)
+      tracker.reset()
+      return
+    }
+    refresh(ctx)
+  })
+}
+```
+
+Expected: assistant output updates the footer/status live during streaming, and the extension stays Pi-native by using `message_update` plus `ctx.ui.setStatus`.
+
+- [ ] **Step 5: Add an optional richer widget mode without replacing the whole footer**
+
+```ts
+const refreshWidget = (ctx: Parameters<Parameters<ExtensionAPI['on']>[1]>[1]): void => {
+  ctx.ui.setWidget('tps-meter', [
+    `TPS ${tracker.getInstantTps().toFixed(1)} | avg ${tracker.getAverageTps().toFixed(1)}`,
+    `tokens ${tracker.getTotalTokens()} | elapsed ${Math.floor(tracker.getElapsedMs() / 1000)}s`,
+  ])
+}
+```
+
+Use this only when `uiMode === 'widget'`. Do not replace the full footer in phase 1 unless the status slot proves too cramped in real usage.
+
+- [ ] **Step 6: Verify the Pi TPS extension manually**
+
+Run:
+
+```bash
+pi
+```
+
+Then ask for a response long enough to stream for a few seconds.
+
+Expected: a live TPS status appears in the footer/status area, updates during assistant streaming, and either clears or preserves the last-session summary according to config.
+
+---
+
+### Task 6: Close The Instruction And Workflow Gap Left By OpenCode Plugins
 
 **Files:**
 
@@ -512,16 +750,27 @@ The `.github/copilot-instructions.md` file is part of the repository's instructi
 - Use `/mcp` to inspect and reconnect servers
 - `context7`, `synthetic`, and `codeindex` are exposed as direct tools via `pi-mcp-adapter`
 
+## Superpowers workflow
+
+- Pi loads `obra/superpowers` skills from `~/.agents/skills`
+- `~/.pi/agent/AGENTS.md` should tell Pi to begin with `using-superpowers`
+- Use `/skill:name` for deterministic loading when needed
+
 ## Subagents
 
 - `pi-subagents` is the supported multi-agent layer
 - Do not install `roach-pi` in this repo; it conflicts with superpowers skill names
 
+## TPS meter
+
+- Use the Pi-native TPS extension under `.pi/extensions/tps-meter`
+- Prefer footer/status rendering over toast-heavy UI
+- Keep the first version compact and assistant-stream focused
+
 ## Non-goals for phase 1
 
 - No `oh-my-pi` fork adoption
-- No `opencode-tps-meter` parity extension
-- No dependency on experimental upstream `obra/superpowers` Pi support
+- No dependency on experimental upstream `obra/superpowers` Pi support package integration
 ```
 
 - [ ] **Step 3: Verify the instruction and workflow surface in Pi**
@@ -536,7 +785,7 @@ Expected: the startup header shows the root `CLAUDE.md`, project packages, and r
 
 ---
 
-### Task 6: Run End-To-End Papai Verification In Pi
+### Task 7: Run End-To-End Papai Verification In Pi
 
 **Files:**
 
@@ -620,20 +869,46 @@ Then inside Pi:
 
 Expected: the team can continue, browse, branch in-place, fork to a new session, and clone the active branch without depending on OpenCode's session UI.
 
+- [ ] **Step 7: Verify superpowers skill availability and subagent workflow**
+
+Run inside Pi:
+
+```text
+/skill:writing-plans
+/skill:verification-before-completion
+Use a reviewer subagent to review the current diff.
+```
+
+Expected: Pi can load the installed `obra/superpowers` skills and delegate through `pi-subagents` in the same repo session.
+
+- [ ] **Step 8: Verify the TPS footer/status behavior**
+
+Run inside Pi:
+
+```text
+Generate a long streamed response and confirm the TPS meter updates live.
+```
+
+Expected: the Pi TPS extension shows live throughput in the footer/status area without relying on OpenCode toasts.
+
 ---
 
 ## Migration Notes
 
 - `@ekroon/opencode-copilot-instructions` is intentionally not ported 1:1 in phase 1. Pi already loads `CLAUDE.md`, and papai's root `CLAUDE.md` can be tightened to explicitly require consulting `.github/copilot-instructions.md` and matching `.github/instructions/*.instructions.md` files. Build a custom Pi instruction-loader extension only if post-migration usage shows that this lighter approach is insufficient.
-- `opencode-tps-meter` is intentionally deferred. If missing TPS feedback becomes painful, port it as a separate Pi extension after the functional migration succeeds.
+- `obra/superpowers` does not need to wait for upstream Pi support to finish. Pi already discovers skills from `~/.agents/skills`, so papai can preserve the existing workflow immediately by making that path explicit in Pi settings and AGENTS instructions.
+- The Pi TPS extension should reuse the current tracker/token-counter ideas from `opencode-tps-meter`, but it should not inherit OpenCode's client-toast compatibility layer. Keep the design Pi-native and footer-first.
 - Keep repo-shared MCP config in `.mcp.json`. Use `.pi/mcp.json` only for Pi-specific local overrides that should not be committed.
 - Keep secrets out of repo files. Use environment variables, Pi auth storage, or shell-command key resolution in user-scope Pi files.
 
 ## Success Criteria
 
 - Papai starts in Pi with working direct tools for `context7`, `synthetic`, and `codeindex`.
+- Papai preserves the current `obra/superpowers` workflow in Pi through `~/.agents/skills` and explicit Pi instructions.
+- `pi-subagents` remains available for multi-agent workflows that superpowers skills expect.
 - The repo still blocks destructive `git stash` and `git checkout --` flows.
 - The repo still enforces test-first edits for implementation files.
 - `codeindex` still reindexes automatically after qualifying implementation edits.
+- Pi shows live TPS stats in the footer/status area during assistant streaming.
 - Users can reach their preferred providers and models from Pi without depending on OpenCode config or auth files.
-- The day-to-day OpenCode workflow has a documented Pi equivalent for sessions, branching, MCP, and subagents.
+- The day-to-day OpenCode workflow has a documented Pi equivalent for sessions, branching, MCP, superpowers skills, subagents, and TPS visibility.
