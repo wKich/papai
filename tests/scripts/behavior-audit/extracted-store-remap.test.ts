@@ -13,9 +13,10 @@ import {
   makeTempDir,
   restoreBehaviorAuditEnv,
 } from '../behavior-audit-integration.runtime-helpers.js'
+import { makeExtractedRecord } from './test-fixtures.js'
 
 function makeRecord(overrides: Partial<ExtractedBehaviorRecord> = {}): ExtractedBehaviorRecord {
-  return {
+  return makeExtractedRecord({
     behaviorId: 'bid-1',
     testKey: 'tests/foo.test.ts::does something',
     testFile: 'tests/foo.test.ts',
@@ -25,9 +26,8 @@ function makeRecord(overrides: Partial<ExtractedBehaviorRecord> = {}): Extracted
     behavior: 'When something happens',
     context: 'test context',
     keywords: ['existing-slug', 'another-slug'],
-    extractedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
-  }
+  })
 }
 
 function writeExtractedFixture(testFile: string, records: ExtractedBehaviorRecord[]): void {

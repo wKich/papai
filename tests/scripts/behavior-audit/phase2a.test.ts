@@ -22,6 +22,7 @@ import {
   loadProgressModule,
   readSavedManifest,
 } from '../behavior-audit-integration.support.js'
+import { makeExtractedRecord } from './test-fixtures.js'
 
 afterEach(() => {
   restoreBehaviorAuditEnv()
@@ -109,7 +110,7 @@ describe('behavior-audit phase 2a classification', () => {
     readonly context: string
     readonly keywords: readonly string[]
   }): ExtractedBehaviorRecord {
-    return {
+    return makeExtractedRecord({
       behaviorId: input.testKey,
       testKey: input.testKey,
       testFile: input.testFile,
@@ -119,8 +120,7 @@ describe('behavior-audit phase 2a classification', () => {
       behavior: input.behavior,
       context: input.context,
       keywords: input.keywords,
-      extractedAt: '2026-04-21T12:00:00.000Z',
-    }
+    })
   }
 
   async function writeExtractedArtifact(

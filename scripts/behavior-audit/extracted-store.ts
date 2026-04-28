@@ -7,6 +7,79 @@ import { z } from 'zod'
 import { extractedArtifactPathForTestFile } from './artifact-paths.js'
 import { remapKeywords } from './consolidate-keywords-helpers.js'
 
+const EvidenceRefSchema = z
+  .object({
+    kind: z.enum([
+      'test-source',
+      'implementation-source',
+      'helper-source',
+      'manifest-dependency',
+      'codeindex-symbol',
+      'codeindex-reference',
+    ]),
+    filePath: z.string(),
+    startLine: z.number(),
+    endLine: z.number(),
+    snippet: z.string(),
+    supports: z.enum(['behavior', 'context', 'keyword']),
+    symbolKey: z.string().optional(),
+    qualifiedName: z.string().optional(),
+  })
+  .strict()
+
+const KeywordEvidenceSchema = z
+  .object({
+    keyword: z.string(),
+    evidence: z.array(EvidenceRefSchema).readonly(),
+    novelty: z.enum(['existing', 'new', 'uncertain']),
+  })
+  .strict()
+
+const ExtractionConfidenceSchema = z
+  .object({
+    behavior: z.enum(['high', 'medium', 'low']),
+    context: z.enum(['high', 'medium', 'low']),
+    keywords: z.enum(['high', 'medium', 'low']),
+    overall: z.enum(['high', 'medium', 'low']),
+  })
+  .strict()
+
+const CodeindexQueryProvenanceSchema = z
+  .object({
+    tool: z.enum(['code_search', 'code_symbol', 'code_impact', 'code_index']),
+    query: z.string(),
+    resultCount: z.number(),
+  })
+  .strict()
+
+const CodeindexProvenanceSchema = z
+  .object({
+    enabled: z.boolean(),
+    mode: z.enum(['direct', 'mcp', 'unavailable']),
+    indexStatus: z.enum(['fresh', 'stale', 'missing', 'unknown']),
+    queries: z.array(CodeindexQueryProvenanceSchema).readonly(),
+  })
+  .strict()
+
+const ExtractionProvenanceSchema = z
+  .object({
+    promptVersion: z.string(),
+    verifierVersion: z.string(),
+    evidenceFilesRead: z.array(z.string()).readonly(),
+    dependencyPaths: z.array(z.string()).readonly(),
+    codeindex: CodeindexProvenanceSchema,
+  })
+  .strict()
+
+const ExtractionVerificationSchema = z
+  .object({
+    behaviorVerdict: z.enum(['supported', 'partially-supported', 'unsupported', 'not-verified']),
+    contextVerdict: z.enum(['supported', 'partially-supported', 'unsupported', 'not-verified']),
+    keywordVerdict: z.enum(['supported', 'partially-supported', 'unsupported', 'not-verified']),
+    notes: z.array(z.string()).readonly(),
+  })
+  .strict()
+
 const ExtractedBehaviorRecordSchema = z
   .object({
     behaviorId: z.string(),
@@ -19,6 +92,29 @@ const ExtractedBehaviorRecordSchema = z
     context: z.string(),
     keywords: z.array(z.string()).readonly(),
     extractedAt: z.string(),
+    behaviorEvidence: z.array(EvidenceRefSchema).readonly(),
+    contextEvidence: z.array(EvidenceRefSchema).readonly(),
+    keywordEvidence: z.array(KeywordEvidenceSchema).readonly(),
+    confidence: ExtractionConfidenceSchema,
+    trustFlags: z
+      .array(
+        z.enum([
+          'evidence-collection-failed',
+          'extractor-used-inference',
+          'unsupported-behavior-claim',
+          'unsupported-context-claim',
+          'weak-behavior-evidence',
+          'weak-context-evidence',
+          'guessed-implementation-path',
+          'novel-keyword',
+          'weak-keyword-evidence',
+          'verification-failed',
+          'verifier-disagreed',
+        ]),
+      )
+      .readonly(),
+    provenance: ExtractionProvenanceSchema,
+    verification: ExtractionVerificationSchema,
   })
   .strict()
   .readonly()

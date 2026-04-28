@@ -7,10 +7,18 @@ import { BASE_URL, MAX_RETRIES, MAX_STEPS, MODEL, PHASE1_TIMEOUT_MS, RETRY_BACKO
 import { addAgentUsage, type AgentResult, type AgentUsage } from './phase-stats.js'
 import { makeAuditTools } from './tools.js'
 
+const ClaimRefSchema = z.object({
+  evidenceIndex: z.number(),
+  claim: z.string(),
+})
+
 const ExtractionResultSchema = z.object({
   behavior: z.string(),
   context: z.string(),
   keywords: z.array(z.string()).min(1).max(20),
+  behaviorClaimRefs: z.array(ClaimRefSchema),
+  contextClaimRefs: z.array(ClaimRefSchema),
+  uncertaintyNotes: z.array(z.string()),
 })
 
 export type ExtractionResult = z.infer<typeof ExtractionResultSchema>
@@ -35,6 +43,11 @@ Return structured output with:
 - behavior: plain-language feature description beginning with "When..."
 - context: technical implementation summary for developers
 - keywords: 10-20 canonical lowercase slug keywords describing the behavior
+- behaviorClaimRefs: for each distinct behavior claim, provide { evidenceIndex, claim } referencing the evidence bundle index
+- contextClaimRefs: for each distinct context claim, provide { evidenceIndex, claim } referencing the evidence bundle index
+- uncertaintyNotes: list any claims not directly supported by provided evidence, or mark where you inferred beyond the evidence
+
+When evidence is provided, always reference it by index. Distinguish between observed behavior (what the test directly demonstrates) and inferred context (what you deduce from implementation patterns).
 
 Keywords must be short canonical slugs like group-targeting or identity-resolution.`
 

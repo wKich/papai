@@ -64,15 +64,27 @@ export interface ConsolidateBehaviorInput {
   readonly behavior: string
   readonly context: string
   readonly keywords: readonly string[]
+  readonly confidence: { readonly context: 'high' | 'medium' | 'low' }
+  readonly trustFlags: readonly string[]
+}
+
+function buildBehaviorEntry(b: ConsolidateBehaviorInput, index: number): string {
+  const hasUnsupportedContext = b.trustFlags.includes('unsupported-context-claim')
+  const contextLine = hasUnsupportedContext
+    ? '   Context: (omitted — unsupported claim)'
+    : b.confidence.context === 'low'
+      ? '   Context: (low confidence — treat as approximate)'
+      : `   Context: ${b.context}`
+  const trustWarnings = b.trustFlags
+    .filter((f) => f === 'guessed-implementation-path' || f === 'unsupported-context-claim')
+    .map((f) => `   ⚠ ${f}`)
+    .join('\n')
+  const trustSection = trustWarnings.length > 0 ? `\n${trustWarnings}` : ''
+  return `${index + 1}. BehaviorId: "${b.behaviorId}"\n   TestKey: "${b.testKey}"\n   Domain: ${b.domain}\n   Visibility: ${b.visibility}\n   Feature key: ${b.featureKey}\n   Feature label: ${b.featureLabel ?? '(none)'}\n   Keywords: ${b.keywords.join(', ')}\n   Behavior: ${b.behavior}\n${contextLine}${trustSection}`
 }
 
 function buildPrompt(featureKey: string, behaviors: readonly ConsolidateBehaviorInput[]): string {
-  const behaviorList = behaviors
-    .map(
-      (b, i) =>
-        `${i + 1}. BehaviorId: "${b.behaviorId}"\n   TestKey: "${b.testKey}"\n   Domain: ${b.domain}\n   Visibility: ${b.visibility}\n   Feature key: ${b.featureKey}\n   Feature label: ${b.featureLabel ?? '(none)'}\n   Keywords: ${b.keywords.join(', ')}\n   Behavior: ${b.behavior}\n   Context: ${b.context}`,
-    )
-    .join('\n\n')
+  const behaviorList = behaviors.map((b, i) => buildBehaviorEntry(b, i)).join('\n\n')
   return `Feature key: ${featureKey}\n\nBehavior pool:\n\n${behaviorList}`
 }
 

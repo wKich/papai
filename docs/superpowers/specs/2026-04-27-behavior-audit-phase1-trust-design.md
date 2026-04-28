@@ -1,7 +1,7 @@
 # Behavior Audit Phase 1 Trustworthiness Design
 
 Date: 2026-04-27
-Status: Proposed
+Status: Proposed (not yet implemented)
 
 ## Problem
 
@@ -10,6 +10,62 @@ Phase 1 currently produces structurally valid extracted behavior artifacts, but 
 The repository already includes `codeindex`, a local symbol-first index and MCP server for TypeScript/JavaScript code search. Phase 1 should use it as the primary source for deterministic symbol resolution, dependency discovery, and implementation evidence instead of relying on guessed file paths or model-directed grep exploration.
 
 The highest-leverage improvement is to make phase 1 artifacts evidence-bearing and confidence-aware. The pipeline should still be fully automated and best-effort, but every downstream phase should be able to tell which parts of an artifact are strongly grounded, weakly grounded, inferred, or unsupported.
+
+## Current State (as of 2026-04-28)
+
+The behavior-audit pipeline is functional with a four-phase architecture (extract → classify → consolidate → evaluate). Phase 1 works but has no trust infrastructure:
+
+### Current `ExtractedBehaviorRecord` (10 fields)
+
+Defined in `scripts/behavior-audit/extracted-store.ts`:
+
+```ts
+interface ExtractedBehaviorRecord {
+  readonly behaviorId: string
+  readonly testKey: string
+  readonly testFile: string
+  readonly domain: string
+  readonly testName: string
+  readonly fullPath: string
+  readonly behavior: string
+  readonly context: string
+  readonly keywords: readonly string[]
+  readonly extractedAt: string
+}
+```
+
+No evidence, confidence, trust flags, provenance, or verification fields exist.
+
+### Current Phase 1 Flow (single-pass)
+
+1. `extract-prompts.ts:buildExtractionPrompt` builds a prompt with test source and a guessed implementation path (`tests/` → `src/` via `deriveImplPath`).
+2. `extract-agent.ts:extractWithRetry` calls an OpenAI-compatible LLM with `readFile`, `grep`, `findFiles`, `listDir` tools.
+3. The LLM returns `{ behavior, context, keywords }` prose.
+4. `extract-phase1-helpers.ts:buildBehaviorRecord` wraps the output into an `ExtractedBehaviorRecord`.
+5. `extract-incremental.ts:updateManifestForExtractedTest` computes fingerprints and dependency paths using the `deriveImplPath` heuristic.
+
+No evidence collection, no verifier pass, no confidence scoring.
+
+### Current Tools
+
+Defined in `scripts/behavior-audit/tools.ts`:
+
+- `readFile` — read file by project-relative path
+- `grep` — regex search in `src/` and `tests/`
+- `findFiles` — glob-style file discovery
+- `listDir` — directory listing
+
+No codeindex integration.
+
+### Current Downstream Behavior
+
+- Phase 2a (`classify.ts`) consumes all extracted records equally — no confidence filtering.
+- Phase 2b (`consolidate.ts`) passes all classified behaviors into consolidation prompts without trust awareness.
+- Phase 3 (`evaluate.ts`) evaluates consolidated features without trust quality context.
+
+### Current Reporting
+
+`report-rebuild-helpers.ts` builds domain summaries and story evaluations. No trust quality metrics exist.
 
 ## Goals
 
@@ -46,6 +102,8 @@ This is stronger than prompt hardening alone, but avoids the cost and complexity
 ## Artifact Model
 
 `ExtractedBehaviorRecord` should remain the canonical durable phase 1 object, but it should become evidence-bearing.
+
+### Proposed Schema (replaces current 10-field schema)
 
 ```ts
 interface ExtractedBehaviorRecord {
@@ -172,7 +230,19 @@ Behavior-audit should still keep the existing read-only file tools as fallbacks 
 
 ## Phase 1 Flow
 
-### 1. Evidence Collection
+### Current Flow (single-pass, no trust)
+
+```text
+test source + guessed impl path
+  → LLM extractor (with readFile/grep/findFiles/listDir tools)
+  → { behavior, context, keywords }
+  → buildBehaviorRecord
+  → ExtractedBehaviorRecord (10 fields)
+```
+
+### Proposed Flow (two-pass, trust-aware)
+
+#### 1. Evidence Collection
 
 Before calling the extractor, phase 1 should build an evidence bundle for the test case.
 
@@ -188,11 +258,11 @@ The bundle should include:
 8. Short source snippets around directly referenced functions, helpers, and assertions.
 9. Any known dependency files from the manifest entry.
 
-The current guessed `tests/` to `src/` implementation-path heuristic should not be used as factual context. If it is retained temporarily as a fallback hint, any artifact depending on it must receive `guessed-implementation-path` and lowered context confidence.
+The current guessed `tests/` to `src/` implementation-path heuristic (in `extract-prompts.ts:deriveImplPath` and `extract-incremental.ts:deriveImplPath`) should not be used as factual context. If it is retained temporarily as a fallback hint, any artifact depending on it must receive `guessed-implementation-path` and lowered context confidence.
 
 If codeindex is unavailable, missing, or stale, phase 1 may fall back to test-source-only extraction plus existing file tools. The artifact must record this in `provenance.codeindex` and lower implementation-context confidence when implementation evidence could not be resolved.
 
-### 2. Evidence-Backed Extraction
+#### 2. Evidence-Backed Extraction
 
 The extractor prompt should ask for structured claims rather than prose-only output.
 
@@ -206,7 +276,7 @@ Extractor output should include:
 
 The extractor may still produce best-effort output when evidence is incomplete, but it must represent uncertainty in the structured output.
 
-### 3. Verification and Scoring
+#### 3. Verification and Scoring
 
 A verifier pass should receive the extractor output and the evidence bundle.
 
@@ -219,13 +289,19 @@ The verifier should return:
 
 The verifier should be stricter than the extractor. Its job is not to improve prose quality; its job is to prevent unsupported text from being treated as equally trustworthy canonical data. When verifying implementation-context claims, it should prefer codeindex-backed `codeindex-symbol` and `codeindex-reference` evidence over model-inferred file relationships.
 
-### 4. Canonical Record Construction
+#### 4. Canonical Record Construction
 
 Phase 1 should construct the final `ExtractedBehaviorRecord` from extractor output plus verifier output.
 
 If extraction succeeds but verification fails, phase 1 should persist the artifact with `verification-failed`, `not-verified` verdicts, and low confidence. If the artifact cannot satisfy the schema, the test remains failed and should not be marked complete.
 
 ## Downstream Behavior
+
+### Current Behavior (no confidence filtering)
+
+Phase 2a (`classify.ts`) reads all extracted records via `readExtractedFile` and passes them directly to the classify agent. Phase 2b (`consolidate.ts`) passes all classified behaviors into consolidation prompts. No trust or confidence filtering occurs at any stage.
+
+### Proposed Behavior (confidence-aware)
 
 Phase 2 should apply a default machine policy when reading extracted artifacts:
 
@@ -239,6 +315,12 @@ Phase 2 should apply a default machine policy when reading extracted artifacts:
 This keeps the system fully automated while preventing phase 1 noise from being amplified downstream.
 
 ## Reporting
+
+### Current Reporting (no trust metrics)
+
+`report-rebuild-helpers.ts` builds domain summaries with persona scores, flaw frequencies, and improvement frequencies. No trust quality metrics exist.
+
+### Proposed Reporting (trust-aware)
 
 Generated reports should expose trust quality metrics.
 
@@ -311,16 +393,43 @@ The announcement/userConfig-style hallucination should be included as an explici
 
 This design intentionally breaks the extracted artifact schema.
 
-Rollout order:
+### Completed
 
-1. Update phase 1 schemas and tests.
-2. Add codeindex-backed evidence bundle construction with file-tool fallback.
-3. Add codeindex provenance and trust flags.
-4. Add evidence-backed extractor output.
-5. Add verifier agent and confidence policy.
-6. Update phase 2a and phase 2b readers and prompts to be confidence-aware.
-7. Update incremental manifest dependency tracking to prefer codeindex-resolved dependencies where available.
-8. Update report rebuild with trust metrics.
+- [x] Phase 1 extraction pipeline (`extract-phase1-single-test.ts`, `extract-phase1-runner.ts`, `extract-phase1-persist.ts`)
+- [x] Phase 1 types and deps (`extract-phase1-types.ts`)
+- [x] Extracted behavior store with Zod schema (`extracted-store.ts`)
+- [x] Extraction agent with retry (`extract-agent.ts`)
+- [x] Extraction prompts (`extract-prompts.ts`)
+- [x] Incremental manifest and dependency tracking (`incremental.ts`, `extract-incremental.ts`)
+- [x] Phase 2a classification (`classify.ts`, `classify-agent.ts`)
+- [x] Phase 2b consolidation (`consolidate.ts`, `consolidate-agent.ts`)
+- [x] Phase 3 evaluation (`evaluate.ts`, `evaluate-agent.ts`)
+- [x] Report rebuild (`report-rebuild-helpers.ts`)
+- [x] Basic audit tools (`tools.ts`: readFile, grep, findFiles, listDir)
+
+### Not Yet Implemented
+
+- [ ] Evidence bundle construction (pre-extraction codeindex-backed evidence collection)
+- [ ] Codeindex integration in behavior-audit (no codeindex references exist in `scripts/behavior-audit/`)
+- [ ] Evidence-bearing `ExtractedBehaviorRecord` schema (9 new fields)
+- [ ] Supporting types (`EvidenceRef`, `KeywordEvidence`, `ExtractionConfidence`, `TrustFlag`, `ExtractionProvenance`, `CodeindexProvenance`, `ExtractionVerification`)
+- [ ] Evidence-backed extractor prompt (structured claims with evidence references)
+- [ ] Verifier agent and confidence policy
+- [ ] Trust flags and provenance tracking
+- [ ] Confidence-aware downstream filtering in phase 2a/2b
+- [ ] Trust quality metrics in reports
+- [ ] Migration/clearing of old extracted artifacts
+
+### Remaining Rollout Order
+
+1. Update phase 1 schemas and tests — add the 9 new fields and supporting types to `ExtractedBehaviorRecord`.
+2. Add codeindex-backed evidence bundle construction with file-tool fallback — new module (e.g., `extract-evidence.ts`) that calls codeindex before extraction.
+3. Add codeindex provenance and trust flags — wire `CodeindexProvenance` into `ExtractionProvenance`.
+4. Add evidence-backed extractor output — update `extract-prompts.ts` and `extract-agent.ts` to request structured claims with evidence references.
+5. Add verifier agent and confidence policy — new module (e.g., `extract-verifier.ts`) that checks extractor output against evidence bundle.
+6. Update phase 2a and phase 2b readers and prompts to be confidence-aware — modify `classify-phase2a-helpers.ts` and `consolidate-helpers.ts`.
+7. Update incremental manifest dependency tracking to prefer codeindex-resolved dependencies where available — update `extract-incremental.ts:loadFileDependencies`.
+8. Update report rebuild with trust metrics — update `report-rebuild-helpers.ts`.
 9. Clear or regenerate old extracted artifacts because old and new schemas should not mix.
 10. Run a small selected audit and inspect trust flags, especially codeindex freshness and ambiguity flags.
 11. Run the full audit after selected-run quality is acceptable.

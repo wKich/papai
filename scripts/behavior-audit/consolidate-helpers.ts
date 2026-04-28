@@ -94,6 +94,8 @@ async function loadJoinedInput(input: {
     behavior: extractedRecord.behavior,
     context: extractedRecord.context,
     keywords: extractedRecord.keywords,
+    confidence: extractedRecord.confidence,
+    trustFlags: extractedRecord.trustFlags,
   }
 }
 

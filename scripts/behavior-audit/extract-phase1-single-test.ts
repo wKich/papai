@@ -1,13 +1,27 @@
-import { MAX_RETRIES } from './config.js'
+import { buildProvenance, prepareExtractionContext, type ExtractionContext } from './extract-phase1-evidence.js'
 import { buildBehaviorRecord } from './extract-phase1-helpers.js'
 import type { Phase1RunnerDeps, SingleTestResult } from './extract-phase1-types.js'
-import { buildExtractionPrompt } from './extract-prompts.js'
-import { emitPhase1ItemStart, reportPhase1Failure, reportPhase1Skipped } from './extract-reporting.js'
+import { verifyExtraction, type VerificationResult } from './extract-verifier.js'
+import type { ExtractedBehaviorRecord } from './extracted-store.js'
 import type { IncrementalManifest } from './incremental.js'
 import { normalizeKeywordSlug } from './keyword-vocabulary.js'
 import type { AgentUsage } from './phase-stats.js'
 import type { Progress } from './progress.js'
 import type { ParsedTestFile, TestCase } from './test-parser.js'
+
+type ExtractionClaims = {
+  readonly behavior: string
+  readonly context: string
+  readonly keywords: readonly string[]
+  readonly behaviorClaimRefs: readonly { readonly evidenceIndex: number; readonly claim: string }[]
+  readonly contextClaimRefs: readonly { readonly evidenceIndex: number; readonly claim: string }[]
+  readonly uncertaintyNotes: readonly string[]
+}
+
+type ExtractedWithUsage = {
+  readonly result: ExtractionClaims
+  readonly usage: AgentUsage
+}
 
 export type ExtractionAttemptResult =
   | {
@@ -27,18 +41,39 @@ function normalizeKeywords(keywords: readonly string[]): readonly string[] {
   return [...new Set(keywords.map((keyword) => normalizeKeywordSlug(keyword)).filter(Boolean))]
 }
 
+function buildRecord(input: {
+  readonly testCase: TestCase
+  readonly testFile: ParsedTestFile
+  readonly testKey: string
+  readonly extracted: ExtractedWithUsage
+  readonly evidence: ExtractionContext['evidence']
+  readonly verification: VerificationResult
+  readonly normalizedKeywords: readonly string[]
+}): ExtractedBehaviorRecord {
+  return buildBehaviorRecord(
+    input.testCase,
+    input.testFile.filePath,
+    input.testKey,
+    input.extracted.result.behavior,
+    input.extracted.result.context,
+    input.normalizedKeywords,
+    input.evidence.behaviorEvidence,
+    input.evidence.contextEvidence,
+    [],
+    input.verification.confidence,
+    input.verification.trustFlags,
+    buildProvenance(input.evidence),
+    input.verification.verification,
+  )
+}
+
 function buildSuccessfulTestResult(input: {
   readonly testCase: TestCase
   readonly testFile: ParsedTestFile
   readonly testKey: string
-  readonly extracted: {
-    readonly result: {
-      readonly behavior: string
-      readonly context: string
-      readonly keywords: readonly string[]
-    }
-    readonly usage: AgentUsage
-  }
+  readonly extracted: ExtractedWithUsage
+  readonly evidence: ExtractionContext['evidence']
+  readonly verification: VerificationResult
   readonly manifest: IncrementalManifest
   readonly deps: Phase1RunnerDeps
   readonly startedAtMs: number
@@ -48,14 +83,7 @@ function buildSuccessfulTestResult(input: {
     throw new Error('Expected normalized keywords before building successful result')
   }
 
-  const record = buildBehaviorRecord(
-    input.testCase,
-    input.testFile.filePath,
-    input.testKey,
-    input.extracted.result.behavior,
-    input.extracted.result.context,
-    normalizedKeywords,
-  )
+  const record = buildRecord({ ...input, normalizedKeywords })
   return input.deps
     .updateManifestForExtractedTest({
       manifest: input.manifest,
@@ -74,7 +102,6 @@ function buildSuccessfulTestResult(input: {
       },
     }))
 }
-
 function runExtractionFailure(input: {
   readonly deps: Phase1RunnerDeps
   readonly progress: Progress
@@ -115,59 +142,50 @@ function toFailureOrKeywords(input: {
   }
 }
 
-export function beginSingleTest(input: {
-  readonly deps: Phase1RunnerDeps
-  readonly progress: Progress
+function verifyAndBuildResult(input: {
   readonly testCase: TestCase
-  readonly testFilePath: string
-  readonly displayIndex: number
-  readonly totalTests: number
-}): { readonly testKey: string } | null {
-  const testKey = toTestKey(input.testFilePath, input.testCase)
-  emitPhase1ItemStart({
-    deps: input.deps,
-    itemId: testKey,
-    context: input.testFilePath,
-    title: input.testCase.name,
-    index: input.displayIndex,
-    total: input.totalTests,
+  readonly testFile: ParsedTestFile
+  readonly testKey: string
+  readonly extracted: ExtractedWithUsage
+  readonly evidence: ExtractionContext['evidence']
+  readonly manifest: IncrementalManifest
+  readonly deps: Phase1RunnerDeps
+  readonly startedAtMs: number
+}): Promise<ExtractionAttemptResult> {
+  const verification = verifyExtraction({
+    behavior: input.extracted.result.behavior,
+    context: input.extracted.result.context,
+    keywords: input.extracted.result.keywords,
+    behaviorClaimRefs: input.extracted.result.behaviorClaimRefs,
+    contextClaimRefs: input.extracted.result.contextClaimRefs,
+    uncertaintyNotes: input.extracted.result.uncertaintyNotes,
+    behaviorEvidence: input.evidence.behaviorEvidence,
+    contextEvidence: input.evidence.contextEvidence,
+    codeindexEnabled: input.evidence.codeindex.enabled,
   })
 
-  if (input.deps.getFailedTestAttempts(input.progress, testKey) < MAX_RETRIES) {
-    return { testKey }
-  }
-
-  reportPhase1Skipped({
-    deps: input.deps,
-    itemId: testKey,
-    context: input.testFilePath,
-    title: input.testCase.name,
-    index: input.displayIndex,
-    total: input.totalTests,
+  return buildSuccessfulTestResult({
+    ...input,
+    evidence: input.evidence,
+    verification,
   })
-  return null
 }
 
-export function emitSingleTestFailure(input: {
-  readonly deps: Phase1RunnerDeps
-  readonly testKey: string
-  readonly testFilePath: string
-  readonly title: string
-  readonly displayIndex: number
-  readonly totalTests: number
-  readonly detail: string
-}): null {
-  reportPhase1Failure({
-    deps: input.deps,
-    itemId: input.testKey,
-    context: input.testFilePath,
-    title: input.title,
-    index: input.displayIndex,
-    total: input.totalTests,
-    detail: input.detail,
-    usage: undefined,
-  })
-  return null
+function buildExtractionOutput(
+  extracted: NonNullable<Awaited<ReturnType<Phase1RunnerDeps['extractWithRetry']>>>,
+  keywords: readonly string[],
+): ExtractedWithUsage {
+  return {
+    result: {
+      behavior: extracted.result.behavior,
+      context: extracted.result.context,
+      keywords,
+      behaviorClaimRefs: extracted.result.behaviorClaimRefs,
+      contextClaimRefs: extracted.result.contextClaimRefs,
+      uncertaintyNotes: extracted.result.uncertaintyNotes,
+    },
+    usage: extracted.usage,
+  }
 }
 
 export async function tryExtractTest(input: {
@@ -179,7 +197,14 @@ export async function tryExtractTest(input: {
   readonly deps: Phase1RunnerDeps
 }): Promise<ExtractionAttemptResult> {
   const startedAtMs = performance.now()
-  const extracted = await input.deps.extractWithRetry(buildExtractionPrompt(input.testCase, input.testFile.filePath), 0)
+  const { evidence, prompt } = await prepareExtractionContext(
+    input.testCase,
+    input.testFile.filePath,
+    input.testKey,
+    input.manifest,
+  )
+
+  const extracted = await input.deps.extractWithRetry(prompt, 0)
   if (extracted === null) {
     return runExtractionFailure({
       deps: input.deps,
@@ -199,64 +224,14 @@ export async function tryExtractTest(input: {
     return normalized.failure
   }
 
-  return buildSuccessfulTestResult({
+  return verifyAndBuildResult({
     testCase: input.testCase,
     testFile: input.testFile,
     testKey: input.testKey,
-    extracted: {
-      result: {
-        behavior: extracted.result.behavior,
-        context: extracted.result.context,
-        keywords: normalized.keywords,
-      },
-      usage: extracted.usage,
-    },
+    extracted: buildExtractionOutput(extracted, normalized.keywords),
+    evidence,
     manifest: input.manifest,
     deps: input.deps,
     startedAtMs,
   })
-}
-
-export async function processSingleTestCase(input: {
-  readonly testCase: TestCase
-  readonly testFile: ParsedTestFile
-  readonly displayIndex: number
-  readonly totalTests: number
-  readonly progress: Progress
-  readonly manifest: IncrementalManifest
-  readonly deps: Phase1RunnerDeps
-}): Promise<SingleTestResult> {
-  const started = beginSingleTest({
-    deps: input.deps,
-    progress: input.progress,
-    testCase: input.testCase,
-    testFilePath: input.testFile.filePath,
-    displayIndex: input.displayIndex,
-    totalTests: input.totalTests,
-  })
-  if (started === null) {
-    return null
-  }
-
-  const extraction = await tryExtractTest({
-    testCase: input.testCase,
-    testFile: input.testFile,
-    testKey: started.testKey,
-    progress: input.progress,
-    manifest: input.manifest,
-    deps: input.deps,
-  })
-  if (extraction.kind === 'failed') {
-    return emitSingleTestFailure({
-      deps: input.deps,
-      testKey: started.testKey,
-      testFilePath: input.testFile.filePath,
-      title: input.testCase.name,
-      displayIndex: input.displayIndex,
-      totalTests: input.totalTests,
-      detail: extraction.detail,
-    })
-  }
-
-  return extraction.result
 }

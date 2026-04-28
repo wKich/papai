@@ -5,9 +5,36 @@ import { z } from 'zod'
 import { consolidatedArtifactPathForFeatureKey, evaluatedArtifactPathForFeatureKey } from './artifact-paths.js'
 import { PROJECT_ROOT } from './config.js'
 import type { EvaluatedFeatureRecord } from './evaluated-store.js'
+import type { ExtractedBehaviorRecord } from './extracted-store.js'
 import type { ConsolidatedManifest } from './incremental.js'
 import type { DomainSummary } from './report-index-helpers.js'
 import type { ConsolidatedBehavior, StoryEvaluation } from './report-writer.js'
+
+export interface TrustMetrics {
+  readonly totalExtracted: number
+  readonly fullyGrounded: number
+  readonly unsupportedContext: number
+  readonly inferredContext: number
+  readonly novelKeywords: number
+  readonly belowConfidenceThreshold: number
+  readonly verificationFailed: number
+  readonly withoutFreshCodeindex: number
+  readonly fallbackFileSearch: number
+}
+
+export function collectTrustMetrics(extractedRecords: readonly ExtractedBehaviorRecord[]): TrustMetrics {
+  return {
+    totalExtracted: extractedRecords.length,
+    fullyGrounded: extractedRecords.filter((r) => r.confidence.overall === 'high' && r.trustFlags.length === 0).length,
+    unsupportedContext: extractedRecords.filter((r) => r.trustFlags.includes('unsupported-context-claim')).length,
+    inferredContext: extractedRecords.filter((r) => r.trustFlags.includes('extractor-used-inference')).length,
+    novelKeywords: extractedRecords.filter((r) => r.trustFlags.includes('novel-keyword')).length,
+    belowConfidenceThreshold: extractedRecords.filter((r) => r.confidence.overall === 'low').length,
+    verificationFailed: extractedRecords.filter((r) => r.trustFlags.includes('verification-failed')).length,
+    withoutFreshCodeindex: extractedRecords.filter((r) => r.provenance.codeindex.indexStatus !== 'fresh').length,
+    fallbackFileSearch: extractedRecords.filter((r) => !r.provenance.codeindex.enabled).length,
+  }
+}
 
 const PersonaScoreSchema = z
   .object({
@@ -91,7 +118,11 @@ function collectFeatureArtifactPaths(
   return artifactPaths
 }
 
-export function buildSummary(domain: string, evals: readonly StoryEvaluation[]): DomainSummary {
+export function buildSummary(
+  domain: string,
+  evals: readonly StoryEvaluation[],
+  extractedRecords?: readonly ExtractedBehaviorRecord[],
+): DomainSummary {
   const avg = (fn: (e: StoryEvaluation) => number): number => evals.reduce((s, e) => s + fn(e), 0) / evals.length
   const pAvg = (p: 'maria' | 'dani' | 'viktor'): number => avg((e) => (e[p].discover + e[p].use + e[p].retain) / 3)
   const personaScores: ReadonlyArray<readonly [string, number]> = [
@@ -107,6 +138,7 @@ export function buildSummary(domain: string, evals: readonly StoryEvaluation[]):
     avgUse: avg((e) => (e.maria.use + e.dani.use + e.viktor.use) / 3),
     avgRetain: avg((e) => (e.maria.retain + e.dani.retain + e.viktor.retain) / 3),
     worstPersona: `${worst[0]} (${worst[1].toFixed(1)})`,
+    ...(extractedRecords !== undefined && { trustMetrics: collectTrustMetrics(extractedRecords) }),
   }
 }
 

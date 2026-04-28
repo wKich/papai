@@ -201,6 +201,24 @@ test('extracted-store round-trips extracted records under the extracted domain d
       context: 'Uses the task provider create flow.',
       keywords: ['task-create'],
       extractedAt: '2026-04-23T12:00:00.000Z',
+      behaviorEvidence: [],
+      contextEvidence: [],
+      keywordEvidence: [],
+      confidence: { behavior: 'low', context: 'low', keywords: 'low', overall: 'low' },
+      trustFlags: [],
+      provenance: {
+        promptVersion: 'test',
+        verifierVersion: 'test',
+        evidenceFilesRead: [],
+        dependencyPaths: [],
+        codeindex: { enabled: false, mode: 'unavailable', indexStatus: 'unknown', queries: [] },
+      },
+      verification: {
+        behaviorVerdict: 'not-verified',
+        contextVerdict: 'not-verified',
+        keywordVerdict: 'not-verified',
+        notes: [],
+      },
     },
   ] as const
 
@@ -899,6 +917,24 @@ test('progress reset helpers clear checkpoint state without touching canonical a
       context: 'Uses the task provider create flow.',
       keywords: ['task-create'],
       extractedAt: '2026-04-23T12:00:00.000Z',
+      behaviorEvidence: [],
+      contextEvidence: [],
+      keywordEvidence: [],
+      confidence: { behavior: 'low', context: 'low', keywords: 'low', overall: 'low' },
+      trustFlags: [],
+      provenance: {
+        promptVersion: 'test',
+        verifierVersion: 'test',
+        evidenceFilesRead: [],
+        dependencyPaths: [],
+        codeindex: { enabled: false, mode: 'unavailable', indexStatus: 'unknown', queries: [] },
+      },
+      verification: {
+        behaviorVerdict: 'not-verified',
+        contextVerdict: 'not-verified',
+        keywordVerdict: 'not-verified',
+        notes: [],
+      },
     },
   ])
   await evaluatedStore.writeEvaluatedFile('task-creation', [
@@ -968,6 +1004,24 @@ test('progress reset helpers clear checkpoint state without touching canonical a
       context: 'Uses the task provider create flow.',
       keywords: ['task-create'],
       extractedAt: '2026-04-23T12:00:00.000Z',
+      behaviorEvidence: [],
+      contextEvidence: [],
+      keywordEvidence: [],
+      confidence: { behavior: 'low', context: 'low', keywords: 'low', overall: 'low' },
+      trustFlags: [],
+      provenance: {
+        promptVersion: 'test',
+        verifierVersion: 'test',
+        evidenceFilesRead: [],
+        dependencyPaths: [],
+        codeindex: { enabled: false, mode: 'unavailable', indexStatus: 'unknown', queries: [] },
+      },
+      verification: {
+        behaviorVerdict: 'not-verified',
+        contextVerdict: 'not-verified',
+        keywordVerdict: 'not-verified',
+        notes: [],
+      },
     },
   ])
   expect(await evaluatedStore.readEvaluatedFile('task-creation')).toEqual([

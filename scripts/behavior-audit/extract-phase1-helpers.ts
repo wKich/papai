@@ -1,5 +1,13 @@
 import { extractedArtifactPathForTestFile } from './artifact-paths.js'
 import { getDomain } from './domain-map.js'
+import type {
+  EvidenceRef,
+  ExtractionConfidence,
+  ExtractionProvenance,
+  ExtractionVerification,
+  KeywordEvidence,
+  TrustFlag,
+} from './extract-trust-types.js'
 import type { ExtractedBehaviorRecord } from './extracted-store.js'
 import { readExtractedFile, writeExtractedFile } from './extracted-store.js'
 import { markFileDone } from './progress.js'
@@ -147,6 +155,13 @@ export function buildBehaviorRecord(
   extractedBehavior: string,
   extractedContext: string,
   keywords: readonly string[],
+  behaviorEvidence: readonly EvidenceRef[],
+  contextEvidence: readonly EvidenceRef[],
+  keywordEvidence: readonly KeywordEvidence[],
+  confidence: ExtractionConfidence,
+  trustFlags: readonly TrustFlag[],
+  provenance: ExtractionProvenance,
+  verification: ExtractionVerification,
 ): ExtractedBehaviorRecord {
   return {
     behaviorId: testKey,
@@ -159,5 +174,12 @@ export function buildBehaviorRecord(
     context: extractedContext,
     keywords,
     extractedAt: new Date().toISOString(),
+    behaviorEvidence,
+    contextEvidence,
+    keywordEvidence,
+    confidence,
+    trustFlags,
+    provenance,
+    verification,
   }
 }

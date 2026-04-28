@@ -52,7 +52,7 @@ function expectDoneFinishEvent(event: ProgressEvent | undefined): DoneFinishEven
 }
 
 const ExtractedBehaviorRecordArraySchema = z.array(
-  z.strictObject({
+  z.object({
     behaviorId: z.string(),
     testKey: z.string(),
     testFile: z.string(),
@@ -63,6 +63,34 @@ const ExtractedBehaviorRecordArraySchema = z.array(
     context: z.string(),
     keywords: z.array(z.string()).readonly(),
     extractedAt: z.string(),
+    behaviorEvidence: z.array(z.unknown()).readonly(),
+    contextEvidence: z.array(z.unknown()).readonly(),
+    keywordEvidence: z.array(z.unknown()).readonly(),
+    confidence: z.object({
+      behavior: z.string(),
+      context: z.string(),
+      keywords: z.string(),
+      overall: z.string(),
+    }),
+    trustFlags: z.array(z.unknown()).readonly(),
+    provenance: z.object({
+      promptVersion: z.string(),
+      verifierVersion: z.string(),
+      evidenceFilesRead: z.array(z.string()).readonly(),
+      dependencyPaths: z.array(z.string()).readonly(),
+      codeindex: z.object({
+        enabled: z.boolean(),
+        mode: z.string(),
+        indexStatus: z.string(),
+        queries: z.array(z.unknown()).readonly(),
+      }),
+    }),
+    verification: z.object({
+      behaviorVerdict: z.string(),
+      contextVerdict: z.string(),
+      keywordVerdict: z.string(),
+      notes: z.array(z.string()).readonly(),
+    }),
   }),
 )
 
@@ -198,6 +226,9 @@ describe('behavior-audit phase 1 incremental selection', () => {
               behavior: 'When the injected test extractor runs, the bot persists the injected behavior.',
               context: 'Uses the injected phase 1 extractor dependency.',
               keywords: ['injected-extraction'],
+              behaviorClaimRefs: [],
+              contextClaimRefs: [],
+              uncertaintyNotes: [],
             },
             usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
           }),
@@ -327,6 +358,24 @@ describe('behavior-audit phase 1 incremental selection', () => {
             context: 'Stale selected context.',
             keywords: ['stale-selected'],
             extractedAt: '2026-04-20T12:00:00.000Z',
+            behaviorEvidence: [],
+            contextEvidence: [],
+            keywordEvidence: [],
+            confidence: { behavior: 'low', context: 'low', keywords: 'low', overall: 'low' },
+            trustFlags: [],
+            provenance: {
+              promptVersion: 'test',
+              verifierVersion: 'test',
+              evidenceFilesRead: [],
+              dependencyPaths: [],
+              codeindex: { enabled: false, mode: 'unavailable', indexStatus: 'unknown', queries: [] },
+            },
+            verification: {
+              behaviorVerdict: 'not-verified',
+              contextVerdict: 'not-verified',
+              keywordVerdict: 'not-verified',
+              notes: [],
+            },
           },
         ],
         null,
@@ -462,6 +511,9 @@ describe('behavior-audit phase 1 incremental selection', () => {
               behavior: 'When selected work reruns, downstream checkpoints are invalidated first.',
               context: 'Resets downstream checkpoint state before saving in-progress phase 1 state.',
               keywords: ['phase1-reset'],
+              behaviorClaimRefs: [],
+              contextClaimRefs: [],
+              uncertaintyNotes: [],
             },
             usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
           }),

@@ -15,6 +15,7 @@ import {
   restoreBehaviorAuditEnv,
 } from './behavior-audit-integration.runtime-helpers.js'
 import { loadConsolidateKeywordsModule, readSavedManifest } from './behavior-audit-integration.support.js'
+import { makeExtractedRecord as makeFixtureRecord } from './behavior-audit/test-fixtures.js'
 
 function makeVocabEntry(slug: string, description = 'desc'): KeywordVocabularyEntry {
   return {
@@ -26,7 +27,7 @@ function makeVocabEntry(slug: string, description = 'desc'): KeywordVocabularyEn
 }
 
 function makeExtractedRecord(overrides: Partial<ExtractedBehaviorRecord> = {}): ExtractedBehaviorRecord {
-  return {
+  return makeFixtureRecord({
     behaviorId: 'bid-1',
     testKey: 'tests/foo.test.ts::does something',
     testFile: 'tests/foo.test.ts',
@@ -36,9 +37,8 @@ function makeExtractedRecord(overrides: Partial<ExtractedBehaviorRecord> = {}): 
     behavior: 'When something happens',
     context: 'ctx',
     keywords: ['slug-a', 'slug-b'],
-    extractedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
-  }
+  })
 }
 
 function makeProgress(phase1Done: boolean): Progress {
