@@ -3,16 +3,16 @@ import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 
-import type { Phase2aDeps } from '../../scripts/behavior-audit-phase2a.js'
-import { reloadBehaviorAuditConfig } from '../../scripts/behavior-audit/config.js'
-import type { ExtractedBehaviorRecord } from '../../scripts/behavior-audit/extracted-store.js'
-import type { IncrementalManifest } from '../../scripts/behavior-audit/incremental.js'
+import type { Phase2aDeps } from '../../../scripts/behavior-audit/classify.js'
+import { reloadBehaviorAuditConfig } from '../../../scripts/behavior-audit/config.js'
+import type { ExtractedBehaviorRecord } from '../../../scripts/behavior-audit/extracted-store.js'
+import type { IncrementalManifest } from '../../../scripts/behavior-audit/incremental.js'
 import {
   createAuditBehaviorPaths,
   createManifestTestEntry,
   mockAuditBehaviorConfig,
-} from './behavior-audit-integration.helpers.js'
-import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
+} from '../behavior-audit-integration.helpers.js'
+import { cleanupTempDirs, makeTempDir, restoreBehaviorAuditEnv } from '../behavior-audit-integration.runtime-helpers.js'
 import {
   getManifestEntry,
   importWithGuard,
@@ -21,7 +21,7 @@ import {
   loadIncrementalModule,
   loadProgressModule,
   readSavedManifest,
-} from './behavior-audit-integration.support.js'
+} from '../behavior-audit-integration.support.js'
 
 afterEach(() => {
   restoreBehaviorAuditEnv()
