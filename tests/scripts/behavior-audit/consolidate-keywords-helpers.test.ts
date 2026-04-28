@@ -2,7 +2,9 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   averageLinkageSimilarity,
+  buildClustersAdvanced,
   buildClusters,
+  buildClustersNormalized,
   buildConsolidatedVocabulary,
   buildMergeMap,
   buildUnionFind,
@@ -13,6 +15,7 @@ import {
   remapKeywords,
   union,
 } from '../../../scripts/behavior-audit/consolidate-keywords-helpers.js'
+import type { LinkageMode } from '../../../scripts/behavior-audit/consolidate-keywords-helpers.js'
 import type { KeywordVocabularyEntry } from '../../../scripts/behavior-audit/keyword-vocabulary.js'
 
 // ── cosineSimilarity ──────────────────────────────────────────────────────────
@@ -137,6 +140,81 @@ describe('completeLinkageSimilarity', () => {
     const embs = [new Float64Array([1, 0]), new Float64Array([1, 0])]
     const result = completeLinkageSimilarity(embs, [0], [1])
     expect(result).toBeCloseTo(1)
+  })
+})
+
+describe('buildClustersAdvanced', () => {
+  function makeNormalized(vectors: readonly (readonly number[])[]): readonly Float64Array[] {
+    return vectors.map((vector) => {
+      const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0))
+      return new Float64Array(vector.map((value) => (magnitude === 0 ? value : value / magnitude)))
+    })
+  }
+
+  function normalizeClusters(clusters: readonly (readonly number[])[]): readonly (readonly number[])[] {
+    return [...clusters].map((cluster) => [...cluster].sort((a, b) => a - b)).sort((a, b) => a[0]! - b[0]!)
+  }
+
+  test.each<LinkageMode>(['average', 'complete'])('%s linkage prevents transitive chaining', (linkage) => {
+    const s = 1 / Math.sqrt(2)
+    const embeddings = makeNormalized([
+      [1, 0, 0],
+      [s, s, 0],
+      [0, 1, 0],
+    ])
+
+    const clusters = buildClustersAdvanced(embeddings, 0.5, 2, linkage)
+
+    expect(normalizeClusters(clusters)).toEqual([[0, 1]])
+  })
+
+  test('single linkage matches buildClustersNormalized behavior', () => {
+    const s = 1 / Math.sqrt(2)
+    const embeddings = makeNormalized([
+      [1, 0, 0],
+      [s, s, 0],
+      [0, 1, 0],
+    ])
+
+    const clusters = buildClustersAdvanced(embeddings, 0.5, 2, 'single')
+    const original = buildClustersNormalized(embeddings, 0.5, 2)
+
+    expect(normalizeClusters(clusters)).toEqual(normalizeClusters(original))
+  })
+
+  test('returns empty for threshold above all similarities', () => {
+    const embeddings = makeNormalized([
+      [1, 0],
+      [0, 1],
+    ])
+
+    const clusters = buildClustersAdvanced(embeddings, 0.99, 2, 'average')
+
+    expect(clusters).toHaveLength(0)
+  })
+
+  test('respects minClusterSize', () => {
+    const embeddings = makeNormalized([
+      [1, 0],
+      [1, 0],
+    ])
+
+    const clusters = buildClustersAdvanced(embeddings, 0.5, 3, 'average')
+
+    expect(clusters).toHaveLength(0)
+  })
+
+  test('single linkage with all identical vectors returns one cluster', () => {
+    const embeddings = makeNormalized([
+      [1, 0],
+      [1, 0],
+      [1, 0],
+    ])
+
+    const clusters = buildClustersAdvanced(embeddings, 0.99, 2, 'single')
+
+    expect(clusters).toHaveLength(1)
+    expect(clusters[0]).toHaveLength(3)
   })
 })
 

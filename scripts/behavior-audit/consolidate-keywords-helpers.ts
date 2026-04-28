@@ -42,30 +42,7 @@ export function buildClusters(
   threshold: number,
   minClusterSize: number,
 ): readonly (readonly number[])[] {
-  const n = embeddings.length
-  const uf = buildUnionFind(n)
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      const embI = embeddings[i]
-      const embJ = embeddings[j]
-      if (embI !== undefined && embJ !== undefined && cosineSimilarity(embI, embJ) >= threshold) {
-        union(uf, i, j)
-      }
-    }
-  }
-
-  const groups = new Map<number, number[]>()
-  for (let i = 0; i < n; i++) {
-    const root = find(uf, i)
-    const group = groups.get(root)
-    if (group === undefined) {
-      groups.set(root, [i])
-    } else {
-      group.push(i)
-    }
-  }
-
-  return [...groups.values()].filter((g) => g.length >= minClusterSize).map((g) => [...g])
+  return buildClustersNormalized(toNormalizedFloat64Arrays(embeddings), threshold, minClusterSize)
 }
 
 export function electCanonical(cluster: readonly KeywordVocabularyEntry[]): KeywordVocabularyEntry {
@@ -180,7 +157,6 @@ export function averageLinkageSimilarity(
   clusterB: readonly number[],
 ): number {
   if (clusterA.length === 0 || clusterB.length === 0) return 0
-
   let total = 0
   let count = 0
   for (const i of clusterA) {
@@ -193,7 +169,6 @@ export function averageLinkageSimilarity(
       count++
     }
   }
-
   return count === 0 ? 0 : total / count
 }
 
@@ -203,7 +178,6 @@ export function completeLinkageSimilarity(
   clusterB: readonly number[],
 ): number {
   if (clusterA.length === 0 || clusterB.length === 0) return 0
-
   let minSimilarity = Infinity
   for (const i of clusterA) {
     const embI = embeddings[i]
@@ -217,8 +191,78 @@ export function completeLinkageSimilarity(
       }
     }
   }
-
   return minSimilarity === Infinity ? 0 : minSimilarity
+}
+
+export type LinkageMode = 'single' | 'average' | 'complete'
+
+function findBestAgglomerativeMerge(
+  clusters: readonly (readonly number[])[],
+  threshold: number,
+  linkageSimilarity: (
+    embeddings: readonly Float64Array[],
+    clusterA: readonly number[],
+    clusterB: readonly number[],
+  ) => number,
+  normalizedEmbeddings: readonly Float64Array[],
+): readonly [number, number] | undefined {
+  let bestSimilarity = Number.NEGATIVE_INFINITY
+  let bestPair: readonly [number, number] | undefined
+  for (let i = 0; i < clusters.length; i++) {
+    const clusterA = clusters[i]
+    if (clusterA === undefined) {
+      continue
+    }
+    for (let j = i + 1; j < clusters.length; j++) {
+      const clusterB = clusters[j]
+      if (clusterB === undefined) {
+        continue
+      }
+      const similarity = linkageSimilarity(normalizedEmbeddings, clusterA, clusterB)
+      if (similarity >= threshold && similarity > bestSimilarity) {
+        bestSimilarity = similarity
+        bestPair = [i, j]
+      }
+    }
+  }
+  return bestPair
+}
+
+function mergeClusters(
+  clusters: readonly (readonly number[])[],
+  mergePair: readonly [number, number],
+): readonly (readonly number[])[] {
+  const [bestA, bestB] = mergePair
+  const clusterA = clusters[bestA]
+  const clusterB = clusters[bestB]
+  if (clusterA === undefined || clusterB === undefined) return clusters
+  return clusters.flatMap((cluster, index) => {
+    if (index === bestA) {
+      return [[...clusterA, ...clusterB]]
+    }
+    return index === bestB ? [] : [cluster]
+  })
+}
+
+export function buildClustersAdvanced(
+  normalizedEmbeddings: readonly Float64Array[],
+  threshold: number,
+  minClusterSize: number,
+  linkage: LinkageMode,
+): readonly (readonly number[])[] {
+  if (linkage === 'single') {
+    return buildClustersNormalized(normalizedEmbeddings, threshold, minClusterSize)
+  }
+  if (normalizedEmbeddings.length === 0) return []
+  const linkageSimilarity = linkage === 'average' ? averageLinkageSimilarity : completeLinkageSimilarity
+  let clusters: readonly (readonly number[])[] = normalizedEmbeddings.map((_, index) => [index])
+  for (;;) {
+    const bestPair = findBestAgglomerativeMerge(clusters, threshold, linkageSimilarity, normalizedEmbeddings)
+    if (bestPair === undefined) {
+      return clusters.filter((cluster) => cluster.length >= minClusterSize)
+    }
+    clusters = mergeClusters(clusters, bestPair)
+  }
 }
 
 export function buildClustersNormalized(
@@ -237,7 +281,6 @@ export function buildClustersNormalized(
       }
     }
   }
-
   const groups = new Map<number, number[]>()
   for (let i = 0; i < n; i++) {
     const root = find(uf, i)
@@ -248,6 +291,5 @@ export function buildClustersNormalized(
       group.push(i)
     }
   }
-
-  return [...groups.values()].filter((g) => g.length >= minClusterSize).map((g) => [...g])
+  return [...groups.values()].filter((group) => group.length >= minClusterSize).map((group) => [...group])
 }
