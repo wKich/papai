@@ -5,11 +5,13 @@ import { join } from 'node:path'
 import { reloadBehaviorAuditConfig, EXTRACTED_DIR, EMBEDDING_MODEL } from './config.js'
 import { embedSlugBatch } from './consolidate-keywords-agent.js'
 import {
-  buildClustersNormalized,
+  buildClustersAdvanced,
   buildConsolidatedVocabulary,
   buildMergeMap,
+  subdivideOversizedClusters,
   toNormalizedFloat64Arrays,
 } from './consolidate-keywords-helpers.js'
+import type { LinkageMode } from './consolidate-keywords-helpers.js'
 import { getOrEmbed } from './embedding-cache.js'
 import type { ExtractedBehaviorRecord } from './extracted-store.js'
 import { normalizeKeywordSlug } from './keyword-vocabulary.js'
@@ -18,6 +20,9 @@ import type { KeywordVocabularyEntry } from './keyword-vocabulary.js'
 interface TuneParams {
   readonly threshold: number
   readonly minClusterSize: number
+  readonly maxClusterSize: number
+  readonly linkage: LinkageMode
+  readonly gapThreshold: number
   readonly reembed: boolean
   readonly cacheDir: string
 }
@@ -34,6 +39,9 @@ interface TuneResult {
 function parseArgs(args: readonly string[]): TuneParams {
   let threshold = 0.92
   let minClusterSize = 2
+  let maxClusterSize = 0
+  let linkage: LinkageMode = 'single'
+  let gapThreshold = 0
   let reembed = false
   for (let i = 0; i < args.length; i++) {
     const flag = args[i]
@@ -46,12 +54,24 @@ function parseArgs(args: readonly string[]): TuneParams {
       minClusterSize = Number(value)
       i++
     }
+    if (flag === '--max-cluster-size' && value !== undefined) {
+      maxClusterSize = Number(value)
+      i++
+    }
+    if (flag === '--linkage' && value !== undefined) {
+      linkage = value === 'average' || value === 'complete' ? value : 'single'
+      i++
+    }
+    if (flag === '--gap-threshold' && value !== undefined) {
+      gapThreshold = Number(value)
+      i++
+    }
     if (flag === '--re-embed') {
       reembed = true
     }
   }
   const cacheDir = join(tmpdir(), 'tune-embed-cache')
-  return { threshold, minClusterSize, reembed, cacheDir }
+  return { threshold, minClusterSize, maxClusterSize, linkage, gapThreshold, reembed, cacheDir }
 }
 
 async function collectJsonFiles(dir: string): Promise<readonly string[]> {
@@ -107,6 +127,24 @@ async function writeTempKeywordList(prefix: string, keywords: readonly string[])
   return path
 }
 
+function buildTuneClusters(normalized: readonly Float64Array[], params: TuneParams): readonly (readonly number[])[] {
+  console.log(
+    `[tune] Clustering at threshold=${params.threshold}, minClusterSize=${params.minClusterSize}, linkage=${params.linkage}, gap=${params.gapThreshold}, maxClusterSize=${params.maxClusterSize}...`,
+  )
+
+  const clusters = buildClustersAdvanced(
+    normalized,
+    params.threshold,
+    params.minClusterSize,
+    params.linkage,
+    params.gapThreshold,
+  )
+
+  return params.maxClusterSize > 0
+    ? subdivideOversizedClusters(normalized, clusters, params.maxClusterSize, params.linkage, 0.01)
+    : clusters
+}
+
 async function runTune(params: TuneParams): Promise<TuneResult> {
   reloadBehaviorAuditConfig()
 
@@ -136,8 +174,7 @@ async function runTune(params: TuneParams): Promise<TuneResult> {
   )
 
   const normalized = toNormalizedFloat64Arrays(embeddingData.normalized)
-  console.log(`[tune] Clustering at threshold=${params.threshold}, minClusterSize=${params.minClusterSize}...`)
-  const clusters = buildClustersNormalized(normalized, params.threshold, params.minClusterSize)
+  const clusters = buildTuneClusters(normalized, params)
   const mergeMap = buildMergeMap(vocabulary, clusters)
 
   const consolidated = buildConsolidatedVocabulary(vocabulary, mergeMap, now)
@@ -153,6 +190,9 @@ function printSummary(result: TuneResult, params: TuneParams): void {
   console.log('=== Embedding Tuning Summary ===')
   console.log(`  threshold:       ${params.threshold}`)
   console.log(`  minClusterSize:  ${params.minClusterSize}`)
+  console.log(`  linkage:         ${params.linkage}`)
+  console.log(`  maxClusterSize:  ${params.maxClusterSize > 0 ? params.maxClusterSize : 'none'}`)
+  console.log(`  gapThreshold:    ${params.gapThreshold}`)
   console.log(`  initial slugs:   ${result.initialCount}`)
   console.log(`  final slugs:     ${result.finalCount}`)
   console.log(`  merges applied:  ${result.merges}`)
