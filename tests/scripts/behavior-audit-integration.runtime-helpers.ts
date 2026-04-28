@@ -33,6 +33,9 @@ const behaviorAuditEnvKeys = [
   'BEHAVIOR_AUDIT_CONSOLIDATION_MIN_CLUSTER_SIZE',
   'BEHAVIOR_AUDIT_CONSOLIDATION_DRY_RUN',
   'BEHAVIOR_AUDIT_CONSOLIDATION_EMBED_BATCH_SIZE',
+  'BEHAVIOR_AUDIT_CONSOLIDATION_LINKAGE',
+  'BEHAVIOR_AUDIT_CONSOLIDATION_MAX_CLUSTER_SIZE',
+  'BEHAVIOR_AUDIT_CONSOLIDATION_GAP_THRESHOLD',
 ] as const
 const originalBehaviorAuditEnv = new Map(behaviorAuditEnvKeys.map((key) => [key, process.env[key]]))
 
@@ -115,6 +118,15 @@ function clearBehaviorAuditEnvKey(key: (typeof behaviorAuditEnvKeys)[number]): v
       return
     case 'BEHAVIOR_AUDIT_CONSOLIDATION_EMBED_BATCH_SIZE':
       delete process.env['BEHAVIOR_AUDIT_CONSOLIDATION_EMBED_BATCH_SIZE']
+      return
+    case 'BEHAVIOR_AUDIT_CONSOLIDATION_LINKAGE':
+      delete process.env['BEHAVIOR_AUDIT_CONSOLIDATION_LINKAGE']
+      return
+    case 'BEHAVIOR_AUDIT_CONSOLIDATION_MAX_CLUSTER_SIZE':
+      delete process.env['BEHAVIOR_AUDIT_CONSOLIDATION_MAX_CLUSTER_SIZE']
+      return
+    case 'BEHAVIOR_AUDIT_CONSOLIDATION_GAP_THRESHOLD':
+      delete process.env['BEHAVIOR_AUDIT_CONSOLIDATION_GAP_THRESHOLD']
   }
 }
 
@@ -161,6 +173,9 @@ export function applyBehaviorAuditEnv(config: BehaviorAuditTestConfig): void {
   process.env['BEHAVIOR_AUDIT_CONSOLIDATION_MIN_CLUSTER_SIZE'] = String(config.CONSOLIDATION_MIN_CLUSTER_SIZE)
   process.env['BEHAVIOR_AUDIT_CONSOLIDATION_DRY_RUN'] = config.CONSOLIDATION_DRY_RUN ? '1' : '0'
   process.env['BEHAVIOR_AUDIT_CONSOLIDATION_EMBED_BATCH_SIZE'] = String(config.CONSOLIDATION_EMBED_BATCH_SIZE)
+  delete process.env['BEHAVIOR_AUDIT_CONSOLIDATION_LINKAGE']
+  delete process.env['BEHAVIOR_AUDIT_CONSOLIDATION_MAX_CLUSTER_SIZE']
+  delete process.env['BEHAVIOR_AUDIT_CONSOLIDATION_GAP_THRESHOLD']
 }
 
 export function restoreBehaviorAuditEnv(): void {

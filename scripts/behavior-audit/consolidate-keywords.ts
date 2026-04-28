@@ -62,6 +62,9 @@ async function markDoneAndSave(
     status: 'done',
     lastRunAt: now,
     threshold,
+    linkage: CONSOLIDATION_LINKAGE,
+    maxClusterSize: CONSOLIDATION_MAX_CLUSTER_SIZE,
+    gapThreshold: CONSOLIDATION_GAP_THRESHOLD,
     stats: { slugsBefore, slugsAfter: slugsBefore, mergesApplied: 0, behaviorsUpdated: 0, keywordsRemapped: 0 },
   }
   await deps.saveProgress(progress)
@@ -107,6 +110,17 @@ function logDryRunMerges(mergeMap: ReadonlyMap<string, string>, deps: Pick<Phase
   deps.log.log(`No files were modified.`)
 }
 
+function shouldSkipCompletedPhase1b(progress: Progress, slugsBefore: number): boolean {
+  return (
+    progress.phase1b.status === 'done' &&
+    slugsBefore === progress.phase1b.stats.slugsBefore &&
+    CONSOLIDATION_THRESHOLD === progress.phase1b.threshold &&
+    CONSOLIDATION_LINKAGE === progress.phase1b.linkage &&
+    CONSOLIDATION_MAX_CLUSTER_SIZE === progress.phase1b.maxClusterSize &&
+    CONSOLIDATION_GAP_THRESHOLD === progress.phase1b.gapThreshold
+  )
+}
+
 async function applyMergesAndSave(
   progress: Progress,
   vocabulary: readonly KeywordVocabularyEntry[],
@@ -136,6 +150,9 @@ async function applyMergesAndSave(
     status: 'done',
     lastRunAt: now,
     threshold: CONSOLIDATION_THRESHOLD,
+    linkage: CONSOLIDATION_LINKAGE,
+    maxClusterSize: CONSOLIDATION_MAX_CLUSTER_SIZE,
+    gapThreshold: CONSOLIDATION_GAP_THRESHOLD,
     stats: {
       slugsBefore: vocabulary.length,
       slugsAfter,
@@ -168,11 +185,7 @@ export async function runPhase1b(progress: Progress, deps: Phase1bDeps = default
     return
   }
 
-  if (
-    !CONSOLIDATION_DRY_RUN &&
-    progress.phase1b.status === 'done' &&
-    vocabulary.length === progress.phase1b.stats.slugsBefore
-  ) {
+  if (!CONSOLIDATION_DRY_RUN && shouldSkipCompletedPhase1b(progress, vocabulary.length)) {
     deps.log.log('[Phase 1b] Already complete, skipping.\n')
     return
   }
