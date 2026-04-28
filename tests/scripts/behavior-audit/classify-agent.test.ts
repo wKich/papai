@@ -5,11 +5,10 @@ import * as realAi from 'ai'
 import { stepCountIs } from 'ai'
 import { Output } from 'ai'
 
-import type { ClassifyAgentDeps } from '../../scripts/behavior-audit-classify-agent.js'
-import type { ClassificationResult } from '../../scripts/behavior-audit/classify-agent.js'
-import { reloadBehaviorAuditConfig } from '../../scripts/behavior-audit/config.js'
-import { cleanupTempDirs, restoreBehaviorAuditEnv } from './behavior-audit-integration.runtime-helpers.js'
-import { loadClassifyAgentModule } from './behavior-audit-integration.support.js'
+import type { ClassifyAgentDeps, ClassificationResult } from '../../../scripts/behavior-audit/classify-agent.js'
+import { reloadBehaviorAuditConfig } from '../../../scripts/behavior-audit/config.js'
+import { cleanupTempDirs, restoreBehaviorAuditEnv } from '../behavior-audit-integration.runtime-helpers.js'
+import { loadClassifyAgentModule } from '../behavior-audit-integration.support.js'
 
 afterEach(() => {
   restoreBehaviorAuditEnv()
