@@ -18,6 +18,18 @@ import {
 } from '../../../scripts/behavior-audit/consolidate-keywords-helpers.js'
 import type { LinkageMode } from '../../../scripts/behavior-audit/consolidate-keywords-helpers.js'
 import type { KeywordVocabularyEntry } from '../../../scripts/behavior-audit/keyword-vocabulary.js'
+import { parseArgs } from '../../../scripts/behavior-audit/tune-embedding.js'
+
+function makeNormalized(vectors: readonly (readonly number[])[]): readonly Float64Array[] {
+  return vectors.map((vector) => {
+    const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0))
+    return new Float64Array(vector.map((value) => (magnitude === 0 ? value : value / magnitude)))
+  })
+}
+
+function normalizeClusters(clusters: readonly (readonly number[])[]): readonly (readonly number[])[] {
+  return clusters.map((cluster) => cluster.toSorted((a, b) => a - b)).toSorted((a, b) => a[0]! - b[0]!)
+}
 
 // ── cosineSimilarity ──────────────────────────────────────────────────────────
 
@@ -145,17 +157,6 @@ describe('completeLinkageSimilarity', () => {
 })
 
 describe('buildClustersAdvanced', () => {
-  function makeNormalized(vectors: readonly (readonly number[])[]): readonly Float64Array[] {
-    return vectors.map((vector) => {
-      const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0))
-      return new Float64Array(vector.map((value) => (magnitude === 0 ? value : value / magnitude)))
-    })
-  }
-
-  function normalizeClusters(clusters: readonly (readonly number[])[]): readonly (readonly number[])[] {
-    return [...clusters].map((cluster) => [...cluster].sort((a, b) => a - b)).sort((a, b) => a[0]! - b[0]!)
-  }
-
   test.each<LinkageMode>(['average', 'complete'])('%s linkage prevents transitive chaining', (linkage) => {
     const s = 1 / Math.sqrt(2)
     const embeddings = makeNormalized([
@@ -164,7 +165,7 @@ describe('buildClustersAdvanced', () => {
       [0, 1, 0],
     ])
 
-    const clusters = buildClustersAdvanced(embeddings, 0.5, 2, linkage)
+    const clusters = buildClustersAdvanced(embeddings, 0.5, 2, linkage, 0)
 
     expect(normalizeClusters(clusters)).toEqual([[0, 1]])
   })
@@ -177,7 +178,7 @@ describe('buildClustersAdvanced', () => {
       [0, 1, 0],
     ])
 
-    const clusters = buildClustersAdvanced(embeddings, 0.5, 2, 'single')
+    const clusters = buildClustersAdvanced(embeddings, 0.5, 2, 'single', 0)
     const original = buildClustersNormalized(embeddings, 0.5, 2)
 
     expect(normalizeClusters(clusters)).toEqual(normalizeClusters(original))
@@ -190,9 +191,9 @@ describe('buildClustersAdvanced', () => {
       [0.8, -1 / 15, Math.sqrt(80) / 15],
     ])
 
-    const singleClusters = buildClustersAdvanced(embeddings, 0.7, 2, 'single')
-    const averageClusters = buildClustersAdvanced(embeddings, 0.7, 2, 'average')
-    const completeClusters = buildClustersAdvanced(embeddings, 0.7, 2, 'complete')
+    const singleClusters = buildClustersAdvanced(embeddings, 0.7, 2, 'single', 0)
+    const averageClusters = buildClustersAdvanced(embeddings, 0.7, 2, 'average', 0)
+    const completeClusters = buildClustersAdvanced(embeddings, 0.7, 2, 'complete', 0)
 
     expect(normalizeClusters(singleClusters)).toEqual([[0, 1, 2]])
     expect(normalizeClusters(averageClusters)).toEqual([[0, 1, 2]])
@@ -205,7 +206,7 @@ describe('buildClustersAdvanced', () => {
       [0, 1],
     ])
 
-    const clusters = buildClustersAdvanced(embeddings, 0.99, 2, 'average')
+    const clusters = buildClustersAdvanced(embeddings, 0.99, 2, 'average', 0)
 
     expect(clusters).toHaveLength(0)
   })
@@ -216,7 +217,7 @@ describe('buildClustersAdvanced', () => {
       [1, 0],
     ])
 
-    const clusters = buildClustersAdvanced(embeddings, 0.5, 3, 'average')
+    const clusters = buildClustersAdvanced(embeddings, 0.5, 3, 'average', 0)
 
     expect(clusters).toHaveLength(0)
   })
@@ -228,7 +229,7 @@ describe('buildClustersAdvanced', () => {
       [1, 0],
     ])
 
-    const clusters = buildClustersAdvanced(embeddings, 0.99, 2, 'single')
+    const clusters = buildClustersAdvanced(embeddings, 0.99, 2, 'single', 0)
 
     expect(clusters).toHaveLength(1)
     expect(clusters[0]).toHaveLength(3)
@@ -236,17 +237,6 @@ describe('buildClustersAdvanced', () => {
 })
 
 describe('buildClustersAdvanced gap threshold', () => {
-  function makeNormalized(vectors: readonly (readonly number[])[]): readonly Float64Array[] {
-    return vectors.map((vector) => {
-      const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0))
-      return new Float64Array(vector.map((value) => (magnitude === 0 ? value : value / magnitude)))
-    })
-  }
-
-  function normalizeClusters(clusters: readonly (readonly number[])[]): readonly (readonly number[])[] {
-    return [...clusters].map((cluster) => [...cluster].sort((a, b) => a - b)).sort((a, b) => a[0]! - b[0]!)
-  }
-
   test('single linkage gap threshold blocks ambiguous merges', () => {
     const embeddings = makeNormalized([
       [1, 0, 0],
@@ -254,7 +244,7 @@ describe('buildClustersAdvanced gap threshold', () => {
       [0.85, -0.53, 0],
     ])
 
-    const withoutGap = buildClustersAdvanced(embeddings, 0.8, 2, 'single')
+    const withoutGap = buildClustersAdvanced(embeddings, 0.8, 2, 'single', 0)
     const withGap = buildClustersAdvanced(embeddings, 0.8, 2, 'single', 0.2)
 
     expect(normalizeClusters(withoutGap)).toEqual([[0, 1, 2]])
@@ -270,7 +260,7 @@ describe('buildClustersAdvanced gap threshold', () => {
         [0.85, -0.53, 0],
       ])
 
-      const withoutGap = buildClustersAdvanced(embeddings, 0.8, 2, linkage)
+      const withoutGap = buildClustersAdvanced(embeddings, 0.8, 2, linkage, 0)
       const withGap = buildClustersAdvanced(embeddings, 0.8, 2, linkage, 0.2)
 
       expect(withoutGap).toHaveLength(1)
@@ -290,7 +280,7 @@ describe('buildClustersAdvanced gap threshold', () => {
         [0, 0, 0, 0.85, Math.sqrt(1 - 0.85 ** 2)],
       ])
 
-      const withoutGap = buildClustersAdvanced(embeddings, 0.8, 2, linkage)
+      const withoutGap = buildClustersAdvanced(embeddings, 0.8, 2, linkage, 0)
       const withGap = buildClustersAdvanced(embeddings, 0.8, 2, linkage, 0.06)
 
       expect(normalizeClusters(withoutGap)).toContainEqual([3, 4])
@@ -300,13 +290,6 @@ describe('buildClustersAdvanced gap threshold', () => {
 })
 
 describe('subdivideOversizedClusters', () => {
-  function makeNormalized(vectors: readonly (readonly number[])[]): readonly Float64Array[] {
-    return vectors.map((vector) => {
-      const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0))
-      return new Float64Array(vector.map((value) => (magnitude === 0 ? value : value / magnitude)))
-    })
-  }
-
   test('returns clusters unchanged when all are within maxClusterSize', () => {
     const embeddings = makeNormalized([
       [1, 0],
@@ -315,7 +298,7 @@ describe('subdivideOversizedClusters', () => {
     ])
     const clusters = [[0, 1]]
 
-    const result = subdivideOversizedClusters(embeddings, clusters, 5, 'single', 0.01)
+    const result = subdivideOversizedClusters(embeddings, clusters, 5, 'single', 0.01, 0)
 
     expect(result).toEqual(clusters)
   })
@@ -330,7 +313,7 @@ describe('subdivideOversizedClusters', () => {
     ])
     const clusters = [[0, 1, 2, 3, 4]]
 
-    const result = subdivideOversizedClusters(embeddings, clusters, 2, 'single', 0.01)
+    const result = subdivideOversizedClusters(embeddings, clusters, 2, 'single', 0.01, 0)
 
     expect(result.length).toBeGreaterThan(1)
     for (const cluster of result) {
@@ -347,7 +330,7 @@ describe('subdivideOversizedClusters', () => {
     ])
     const clusters = [[0, 1, 2]]
 
-    const result = subdivideOversizedClusters(embeddings, clusters, 2, 'single', 0.05)
+    const result = subdivideOversizedClusters(embeddings, clusters, 2, 'single', 0.05, 0)
 
     expect(result).toEqual(clusters)
   })
@@ -360,20 +343,53 @@ describe('subdivideOversizedClusters', () => {
     ])
     const clusters = [[0, 1, 2]]
 
-    const result = subdivideOversizedClusters(embeddings, clusters, 2, 'average', 0.01)
+    const result = subdivideOversizedClusters(embeddings, clusters, 2, 'average', 0.01, 0)
 
     expect(result).toEqual([[0, 1], [2]])
+  })
+
+  test('preserves gapThreshold while re-splitting oversized clusters', () => {
+    const embeddings = makeNormalized([
+      [1, 0],
+      [1, 0],
+      [1, 0],
+      [1, 0],
+    ])
+    const clusters = [[0, 1, 2, 3]]
+
+    const result = subdivideOversizedClusters(embeddings, clusters, 2, 'single', 0.05, 0.1)
+
+    expect(result).toEqual([[0], [1], [2], [3]])
+  })
+})
+
+describe('parseArgs', () => {
+  test('rejects unsupported linkage values explicitly', () => {
+    expect(() => parseArgs(['--linkage', 'ward'])).toThrow("Unsupported linkage 'ward'")
+  })
+
+  test.each([
+    ['--threshold', 'NaN'],
+    ['--threshold', 'Infinity'],
+    ['--min-cluster-size', 'NaN'],
+    ['--max-cluster-size', 'Infinity'],
+    ['--gap-threshold', 'NaN'],
+  ])('rejects non-finite numeric value for %s', (flag, value) => {
+    expect(() => parseArgs([flag, value])).toThrow(`Invalid numeric value for ${flag}: ${value}`)
   })
 })
 
 // ── electCanonical ────────────────────────────────────────────────────────────
 
-function makeEntry(slug: string, createdAt = '2026-01-01T00:00:00.000Z'): KeywordVocabularyEntry {
+function makeEntry(slug: string, createdAt: string | null): KeywordVocabularyEntry {
+  if (createdAt === null) {
+    return { slug, description: 'desc', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }
+  }
   return { slug, description: 'desc', createdAt, updatedAt: '2026-01-01T00:00:00.000Z' }
 }
 
 test('electCanonical selects the shorter slug', () => {
-  const entries = [makeEntry('long-slug-name'), makeEntry('short')]
+  const entries = [makeEntry('long-slug-name', null), makeEntry('short', null)]
   const canonical = electCanonical(entries)
   expect(canonical.slug).toBe('short')
 })
@@ -387,7 +403,7 @@ test('electCanonical breaks slug length tie by earliest createdAt', () => {
 // ── buildMergeMap ─────────────────────────────────────────────────────────────
 
 test('buildMergeMap maps non-canonical slugs to canonical slug', () => {
-  const vocab = [makeEntry('short'), makeEntry('longer-version'), makeEntry('also-longer')]
+  const vocab = [makeEntry('short', null), makeEntry('longer-version', null), makeEntry('also-longer', null)]
   // cluster: indices [0, 1, 2] — 'short' is canonical
   const clusters = [[0, 1, 2]]
   const mergeMap = buildMergeMap(vocab, clusters)
@@ -398,7 +414,7 @@ test('buildMergeMap maps non-canonical slugs to canonical slug', () => {
 })
 
 test('buildMergeMap does not include unclustered entries', () => {
-  const vocab = [makeEntry('solo'), makeEntry('a'), makeEntry('b')]
+  const vocab = [makeEntry('solo', null), makeEntry('a', null), makeEntry('b', null)]
   // indices 1 and 2 are clustered; 0 is solo
   const clusters = [[1, 2]]
   const mergeMap = buildMergeMap(vocab, clusters)

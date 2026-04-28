@@ -17,6 +17,23 @@ import type { ExtractedBehaviorRecord } from './extracted-store.js'
 import { normalizeKeywordSlug } from './keyword-vocabulary.js'
 import type { KeywordVocabularyEntry } from './keyword-vocabulary.js'
 
+const VALID_LINKAGES: readonly LinkageMode[] = ['single', 'average', 'complete']
+
+function parseFiniteNumber(flag: string, value: string): number {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) {
+    throw new TypeError(`Invalid numeric value for ${flag}: ${value}`)
+  }
+  return parsed
+}
+
+function parseLinkage(value: string): LinkageMode {
+  if (value === 'single' || value === 'average' || value === 'complete') {
+    return value
+  }
+  throw new Error(`Unsupported linkage '${value}'. Expected one of: ${VALID_LINKAGES.join(', ')}`)
+}
+
 interface TuneParams {
   readonly threshold: number
   readonly minClusterSize: number
@@ -36,7 +53,7 @@ interface TuneResult {
   readonly mergePairs: ReadonlyArray<readonly [string, string]>
 }
 
-function parseArgs(args: readonly string[]): TuneParams {
+export function parseArgs(args: readonly string[]): TuneParams {
   let threshold = 0.92
   let minClusterSize = 2
   let maxClusterSize = 0
@@ -47,23 +64,23 @@ function parseArgs(args: readonly string[]): TuneParams {
     const flag = args[i]
     const value = args[i + 1]
     if (flag === '--threshold' && value !== undefined) {
-      threshold = Number(value)
+      threshold = parseFiniteNumber(flag, value)
       i++
     }
     if (flag === '--min-cluster-size' && value !== undefined) {
-      minClusterSize = Number(value)
+      minClusterSize = parseFiniteNumber(flag, value)
       i++
     }
     if (flag === '--max-cluster-size' && value !== undefined) {
-      maxClusterSize = Number(value)
+      maxClusterSize = parseFiniteNumber(flag, value)
       i++
     }
     if (flag === '--linkage' && value !== undefined) {
-      linkage = value === 'average' || value === 'complete' ? value : 'single'
+      linkage = parseLinkage(value)
       i++
     }
     if (flag === '--gap-threshold' && value !== undefined) {
-      gapThreshold = Number(value)
+      gapThreshold = parseFiniteNumber(flag, value)
       i++
     }
     if (flag === '--re-embed') {
@@ -141,7 +158,7 @@ function buildTuneClusters(normalized: readonly Float64Array[], params: TunePara
   )
 
   return params.maxClusterSize > 0
-    ? subdivideOversizedClusters(normalized, clusters, params.maxClusterSize, params.linkage, 0.01)
+    ? subdivideOversizedClusters(normalized, clusters, params.maxClusterSize, params.linkage, 0.01, params.gapThreshold)
     : clusters
 }
 
@@ -218,7 +235,7 @@ async function writeTempFiles(result: TuneResult): Promise<void> {
   console.log(`  final keywords:   ${finalPath}`)
 }
 
-export async function runTuneEmbedding(args: readonly string[] = process.argv.slice(2)): Promise<void> {
+export async function runTuneEmbedding(args: readonly string[]): Promise<void> {
   const params = parseArgs(args)
   const result = await runTune(params)
   printSummary(result, params)
@@ -229,7 +246,7 @@ export async function runTuneEmbedding(args: readonly string[] = process.argv.sl
 }
 
 if (import.meta.main) {
-  await runTuneEmbedding().catch((error: unknown) => {
+  await runTuneEmbedding(process.argv.slice(2)).catch((error: unknown) => {
     console.error('Fatal error:', error instanceof Error ? error.message : String(error))
     process.exit(1)
   })

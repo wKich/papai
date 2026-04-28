@@ -10,6 +10,9 @@ export {
   cosineSimilarity,
   dotProduct,
   find,
+  findWeakestInternalSimilarity,
+  mapToGlobalClusters,
+  toIndexedSubEmbeddings,
   toNormalizedFloat64Arrays,
   union,
 } from './consolidate-keywords-clustering.js'
@@ -48,7 +51,11 @@ export function buildMergeMap(
 export function remapKeywords(keywords: readonly string[], mergeMap: ReadonlyMap<string, string>): readonly string[] {
   const seen = new Set<string>()
   return keywords
-    .map((kw) => mergeMap.get(kw) ?? kw)
+    .map((kw) => {
+      const mapped = mergeMap.get(kw)
+      if (mapped === undefined) return kw
+      return mapped
+    })
     .filter((kw) => {
       if (seen.has(kw)) return false
       seen.add(kw)
@@ -63,7 +70,11 @@ export function buildConsolidatedVocabulary(
 ): readonly KeywordVocabularyEntry[] {
   const groups = new Map<string, KeywordVocabularyEntry[]>()
   for (const entry of vocabulary) {
-    const canonicalSlug = mergeMap.get(entry.slug) ?? entry.slug
+    const mappedSlug = mergeMap.get(entry.slug)
+    let canonicalSlug = entry.slug
+    if (mappedSlug !== undefined) {
+      canonicalSlug = mappedSlug
+    }
     const existing = groups.get(canonicalSlug)
     if (existing === undefined) {
       groups.set(canonicalSlug, [entry])

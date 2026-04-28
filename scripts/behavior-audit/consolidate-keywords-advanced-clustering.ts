@@ -3,6 +3,9 @@ import {
   buildClustersNormalized,
   completeLinkageSimilarity,
   dotProduct,
+  findWeakestInternalSimilarity,
+  mapToGlobalClusters,
+  toIndexedSubEmbeddings,
 } from './consolidate-keywords-clustering.js'
 import type { LinkageMode } from './consolidate-keywords-clustering.js'
 
@@ -30,6 +33,7 @@ function mergeClusters(clusters: readonly Cluster[], mergePair: readonly [number
 function filterClusters(clusters: readonly Cluster[], minClusterSize: number): readonly Cluster[] {
   return clusters.filter((cluster) => cluster.length >= minClusterSize)
 }
+
 function getLinkageSimilarity(linkage: Exclude<LinkageMode, 'single'>): LinkageSimilarity {
   return linkage === 'average' ? averageLinkageSimilarity : completeLinkageSimilarity
 }
@@ -122,7 +126,7 @@ function buildCandidatePairs(
         return similarity >= threshold ? ([[i, j, similarity]] as const) : []
       }),
     )
-    .sort((a, b) => b[2] - a[2])
+    .toSorted((a, b) => b[2] - a[2])
 }
 
 function findClusterIndex(clusters: readonly Cluster[], item: number): number {
@@ -173,7 +177,7 @@ function buildClustersNonSingle(
   threshold: number,
   minClusterSize: number,
   linkage: Exclude<LinkageMode, 'single'>,
-  gapThreshold: number = 0,
+  gapThreshold: number,
 ): readonly Cluster[] {
   let clusters: readonly Cluster[] = normalizedEmbeddings.map((_, index) => [index])
   const linkageSimilarity = getLinkageSimilarity(linkage)
@@ -202,12 +206,12 @@ export function buildClustersAdvanced(
   threshold: number,
   minClusterSize: number,
   linkage: LinkageMode,
-  gapThreshold: number = 0,
+  gapThreshold: number,
 ): readonly Cluster[] {
   if (gapThreshold <= 0) {
     return linkage === 'single'
       ? buildClustersNormalized(normalizedEmbeddings, threshold, minClusterSize)
-      : buildClustersNonSingle(normalizedEmbeddings, threshold, minClusterSize, linkage)
+      : buildClustersNonSingle(normalizedEmbeddings, threshold, minClusterSize, linkage, 0)
   }
   if (normalizedEmbeddings.length === 0) return []
   if (linkage === 'single') {
@@ -216,39 +220,26 @@ export function buildClustersAdvanced(
   return buildClustersNonSingle(normalizedEmbeddings, threshold, minClusterSize, linkage, gapThreshold)
 }
 
-function findWeakestInternalSimilarity(
+function splitGlobalClusters(
   normalizedEmbeddings: readonly Float64Array[],
-  cluster: readonly number[],
-): number | undefined {
-  let weakestSimilarity = Infinity
-  for (let i = 0; i < cluster.length; i++) {
-    const embI = normalizedEmbeddings[cluster[i]!]
-    if (embI === undefined) continue
-    for (let j = i + 1; j < cluster.length; j++) {
-      const embJ = normalizedEmbeddings[cluster[j]!]
-      if (embJ === undefined) continue
-      const similarity = dotProduct(embI, embJ)
-      if (similarity < weakestSimilarity) weakestSimilarity = similarity
-    }
-  }
-  return weakestSimilarity === Infinity ? undefined : weakestSimilarity
-}
-
-function toIndexedSubEmbeddings(
-  normalizedEmbeddings: readonly Float64Array[],
-  cluster: readonly number[],
-): readonly { readonly index: number; readonly embedding: Float64Array }[] {
-  return cluster.flatMap((index) => {
-    const embedding = normalizedEmbeddings[index]
-    return embedding === undefined ? [] : ([{ index, embedding }] as const)
-  })
-}
-
-function mapToGlobalClusters(
-  indexedSubEmbeddings: readonly { readonly index: number; readonly embedding: Float64Array }[],
-  localClusters: readonly Cluster[],
+  globalClusters: readonly Cluster[],
+  maxClusterSize: number,
+  linkage: LinkageMode,
+  thresholdStep: number,
+  gapThreshold: number,
 ): readonly Cluster[] {
-  return localClusters.map((localCluster) => localCluster.map((localIndex) => indexedSubEmbeddings[localIndex]!.index))
+  return globalClusters.flatMap((globalCluster) =>
+    globalCluster.length > maxClusterSize
+      ? reclusterOversizedCluster(
+          normalizedEmbeddings,
+          globalCluster,
+          maxClusterSize,
+          linkage,
+          thresholdStep,
+          gapThreshold,
+        )
+      : [globalCluster],
+  )
 }
 
 function reclusterOversizedCluster(
@@ -257,27 +248,33 @@ function reclusterOversizedCluster(
   maxClusterSize: number,
   linkage: LinkageMode,
   thresholdStep: number,
+  gapThreshold: number,
 ): readonly Cluster[] {
   const weakestSimilarity = findWeakestInternalSimilarity(normalizedEmbeddings, cluster)
-  const startingThreshold = Math.min(Math.max((weakestSimilarity ?? 1) + thresholdStep, 0), 1)
+  let baseThreshold = 1
+  if (weakestSimilarity !== undefined) {
+    baseThreshold = weakestSimilarity
+  }
+  const startingThreshold = Math.min(Math.max(baseThreshold + thresholdStep, 0), 1)
   const indexedSubEmbeddings = toIndexedSubEmbeddings(normalizedEmbeddings, cluster)
   if (indexedSubEmbeddings.length <= 1) return [cluster]
 
   const subEmbeddings = indexedSubEmbeddings.map(({ embedding }) => embedding)
   for (let threshold = startingThreshold; threshold <= 1; threshold = Math.min(threshold + thresholdStep, 1)) {
-    const localClusters = buildClustersAdvanced(subEmbeddings, threshold, 1, linkage)
+    const localClusters = buildClustersAdvanced(subEmbeddings, threshold, 1, linkage, gapThreshold)
     if (localClusters.length <= 1 && threshold < 1) continue
 
     const globalClusters = mapToGlobalClusters(indexedSubEmbeddings, localClusters)
     if (globalClusters.length <= 1) return [cluster]
-
-    return globalClusters.flatMap((globalCluster) =>
-      globalCluster.length > maxClusterSize
-        ? reclusterOversizedCluster(normalizedEmbeddings, globalCluster, maxClusterSize, linkage, thresholdStep)
-        : [globalCluster],
+    return splitGlobalClusters(
+      normalizedEmbeddings,
+      globalClusters,
+      maxClusterSize,
+      linkage,
+      thresholdStep,
+      gapThreshold,
     )
   }
-
   return [cluster]
 }
 
@@ -287,14 +284,14 @@ export function subdivideOversizedClusters(
   maxClusterSize: number,
   linkage: LinkageMode,
   thresholdStep: number,
+  gapThreshold: number,
 ): readonly Cluster[] {
   if (maxClusterSize <= 0 || thresholdStep <= 0) {
     return clusters.map((cluster) => [...cluster])
   }
-
   return clusters.flatMap((cluster) =>
     cluster.length > maxClusterSize
-      ? reclusterOversizedCluster(normalizedEmbeddings, cluster, maxClusterSize, linkage, thresholdStep)
+      ? reclusterOversizedCluster(normalizedEmbeddings, cluster, maxClusterSize, linkage, thresholdStep, gapThreshold)
       : [[...cluster]],
   )
 }

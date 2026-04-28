@@ -1,7 +1,11 @@
 export type UnionFind = { parent: Int32Array; rank: Uint8Array }
 
 export function cosineSimilarity(a: readonly number[], b: readonly number[]): number {
-  const dot = a.reduce((sum, ai, i) => sum + ai * (b[i] ?? 0), 0)
+  const dot = a.reduce((sum, ai, i) => {
+    const other = b[i]
+    if (other === undefined) return sum
+    return sum + ai * other
+  }, 0)
   const magA = Math.sqrt(a.reduce((sum, ai) => sum + ai * ai, 0))
   const magB = Math.sqrt(b.reduce((sum, bi) => sum + bi * bi, 0))
   return magA === 0 || magB === 0 ? 0 : dot / (magA * magB)
@@ -31,7 +35,12 @@ export function union(uf: UnionFind, i: number, j: number): void {
     uf.parent[rj] = ri
   } else {
     uf.parent[rj] = ri
-    uf.rank[ri] = (uf.rank[ri] ?? 0) + 1
+    const rank = uf.rank[ri]
+    if (rank === undefined) {
+      uf.rank[ri] = 1
+    } else {
+      uf.rank[ri] = rank + 1
+    }
   }
 }
 
@@ -48,7 +57,11 @@ export function toNormalizedFloat64Arrays(embeddings: readonly (readonly number[
     const arr = new Float64Array(emb.length)
     let mag = 0
     for (let k = 0; k < emb.length; k++) {
-      const v = emb[k] ?? 0
+      const rawValue = emb[k]
+      let v = 0
+      if (rawValue !== undefined) {
+        v = rawValue
+      }
       arr[k] = v
       mag += v * v
     }
@@ -69,6 +82,41 @@ export function dotProduct(a: Float64Array, b: Float64Array): number {
     sum += a[k]! * b[k]!
   }
   return sum
+}
+
+export function findWeakestInternalSimilarity(
+  normalizedEmbeddings: readonly Float64Array[],
+  cluster: readonly number[],
+): number | undefined {
+  let weakestSimilarity = Infinity
+  for (let i = 0; i < cluster.length; i++) {
+    const embI = normalizedEmbeddings[cluster[i]!]
+    if (embI === undefined) continue
+    for (let j = i + 1; j < cluster.length; j++) {
+      const embJ = normalizedEmbeddings[cluster[j]!]
+      if (embJ === undefined) continue
+      const similarity = dotProduct(embI, embJ)
+      if (similarity < weakestSimilarity) weakestSimilarity = similarity
+    }
+  }
+  return weakestSimilarity === Infinity ? undefined : weakestSimilarity
+}
+
+export function toIndexedSubEmbeddings(
+  normalizedEmbeddings: readonly Float64Array[],
+  cluster: readonly number[],
+): readonly { readonly index: number; readonly embedding: Float64Array }[] {
+  return cluster.flatMap((index) => {
+    const embedding = normalizedEmbeddings[index]
+    return embedding === undefined ? [] : ([{ index, embedding }] as const)
+  })
+}
+
+export function mapToGlobalClusters(
+  indexedSubEmbeddings: readonly { readonly index: number; readonly embedding: Float64Array }[],
+  localClusters: readonly (readonly number[])[],
+): readonly (readonly number[])[] {
+  return localClusters.map((localCluster) => localCluster.map((localIndex) => indexedSubEmbeddings[localIndex]!.index))
 }
 
 export function averageLinkageSimilarity(
@@ -143,6 +191,5 @@ export function buildClustersNormalized(
       group.push(i)
     }
   }
-
-  return [...groups.values()].filter((group) => group.length >= minClusterSize).map((group) => [...group])
+  return [...groups.values()].filter((group) => group.length >= minClusterSize).map((group) => group.slice())
 }
