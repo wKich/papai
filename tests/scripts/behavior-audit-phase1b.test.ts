@@ -128,9 +128,11 @@ test('runPhase1b skips when phase 1 is not done', async () => {
     saveKeywordVocabulary: () => {
       throw new Error('should not write vocab')
     },
-    embedSlugBatch: () => {
+    getOrEmbed: () => {
       throw new Error('should not embed')
     },
+    embeddingCachePath: null,
+    embeddingModel: 'test-embed-model',
     loadManifest: () => Promise.resolve(null),
     remapKeywordsInExtractedFile: () => Promise.resolve({ updated: false, remappedCount: 0 }),
     saveProgress: (p) => {
@@ -156,9 +158,11 @@ test('runPhase1b soft-skips when EMBEDDING_MODEL is empty', async () => {
     saveKeywordVocabulary: () => {
       throw new Error('should not write vocab')
     },
-    embedSlugBatch: () => {
+    getOrEmbed: () => {
       throw new Error('should not embed')
     },
+    embeddingCachePath: null,
+    embeddingModel: '',
     loadManifest: () => Promise.resolve(null),
     remapKeywordsInExtractedFile: () => Promise.resolve({ updated: false, remappedCount: 0 }),
     saveProgress: () => Promise.resolve(),
@@ -200,7 +204,15 @@ test('runPhase1b applies merges, updates vocabulary, remaps extracted files, res
   await runPhase1b(progress, {
     loadKeywordVocabulary: () => Promise.resolve(vocab),
     saveKeywordVocabulary: () => Promise.resolve(),
-    embedSlugBatch: () => Promise.resolve([nearlyIdentical, normalized]),
+    getOrEmbed: (_cachePath, _model, vocabArg, _deps) => {
+      expect(vocabArg).toHaveLength(2)
+      return Promise.resolve({
+        raw: [nearlyIdentical, normalized],
+        normalized: [nearlyIdentical, normalized],
+      })
+    },
+    embeddingCachePath: null,
+    embeddingModel: 'test-embed-model',
     loadManifest: () => readSavedManifest(config.INCREMENTAL_MANIFEST_PATH),
     remapKeywordsInExtractedFile: (_testFile, mergeMap) => {
       expect(mergeMap.has('longer-alias')).toBe(true)
@@ -229,10 +241,21 @@ test('runPhase1b skips when already done and vocabulary size unchanged', async (
   await runPhase1b(progress, {
     loadKeywordVocabulary: () => Promise.resolve([makeVocabEntry('a'), makeVocabEntry('b')]),
     saveKeywordVocabulary: () => Promise.resolve(),
-    embedSlugBatch: () => {
+    getOrEmbed: () => {
       embedCalled = true
-      return Promise.resolve([])
+      return Promise.resolve({
+        raw: [
+          [1, 0],
+          [0, 1],
+        ],
+        normalized: [
+          [1, 0],
+          [0, 1],
+        ],
+      })
     },
+    embeddingCachePath: null,
+    embeddingModel: 'test-embed-model',
     loadManifest: () => Promise.resolve(null),
     remapKeywordsInExtractedFile: () => Promise.resolve({ updated: false, remappedCount: 0 }),
     saveProgress: () => Promise.resolve(),
@@ -251,11 +274,19 @@ test('runPhase1b skips phase2/3 reset when no merges produced', async () => {
   await runPhase1b(progress, {
     loadKeywordVocabulary: () => Promise.resolve([makeVocabEntry('alpha'), makeVocabEntry('beta')]),
     saveKeywordVocabulary: () => Promise.resolve(),
-    embedSlugBatch: () =>
-      Promise.resolve([
-        [1, 0, 0],
-        [0, 1, 0],
-      ]),
+    getOrEmbed: () =>
+      Promise.resolve({
+        raw: [
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
+        normalized: [
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
+      }),
+    embeddingCachePath: null,
+    embeddingModel: 'test-embed-model',
     loadManifest: () => Promise.resolve(null),
     remapKeywordsInExtractedFile: () => Promise.resolve({ updated: false, remappedCount: 0 }),
     saveProgress: () => Promise.resolve(),
@@ -286,11 +317,18 @@ test('runPhase1b dry-run does not save vocabulary or progress', async () => {
       vocabSaved = true
       return Promise.resolve()
     },
-    embedSlugBatch: () =>
-      Promise.resolve([
-        [1, 0, 0],
-        [0.99, 0.1, 0].map((v, _, arr) => v / Math.sqrt(arr.reduce((s, x) => s + x * x, 0))),
-      ]),
+    getOrEmbed: () => {
+      const normVec = [0.99, 0.1, 0].map((v, _, arr) => v / Math.sqrt(arr.reduce((s, x) => s + x * x, 0)))
+      return Promise.resolve({
+        raw: [
+          [1, 0, 0],
+          [0.99, 0.1, 0],
+        ],
+        normalized: [[1, 0, 0], normVec],
+      })
+    },
+    embeddingCachePath: null,
+    embeddingModel: 'test-embed-model',
     loadManifest: () => Promise.resolve(null),
     remapKeywordsInExtractedFile: () => Promise.resolve({ updated: false, remappedCount: 0 }),
     saveProgress: () => {

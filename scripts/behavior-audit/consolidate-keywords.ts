@@ -2,11 +2,17 @@ import {
   CONSOLIDATION_DRY_RUN,
   CONSOLIDATION_MIN_CLUSTER_SIZE,
   CONSOLIDATION_THRESHOLD,
+  EMBEDDING_CACHE_PATH,
   EMBEDDING_MODEL,
 } from './config.js'
-import type { embedSlugBatch as EmbedSlugBatch } from './consolidate-keywords-agent.js'
 import { embedSlugBatch } from './consolidate-keywords-agent.js'
-import { buildClusters, buildConsolidatedVocabulary, buildMergeMap } from './consolidate-keywords-helpers.js'
+import {
+  buildClustersNormalized,
+  buildConsolidatedVocabulary,
+  buildMergeMap,
+  toNormalizedFloat64Arrays,
+} from './consolidate-keywords-helpers.js'
+import { getOrEmbed } from './embedding-cache.js'
 import type { remapKeywordsInExtractedFile as RemapFn } from './extracted-store.js'
 import { remapKeywordsInExtractedFile } from './extracted-store.js'
 import type { IncrementalManifest } from './incremental.js'
@@ -20,7 +26,9 @@ import { saveProgress } from './progress.js'
 export interface Phase1bDeps {
   readonly loadKeywordVocabulary: typeof loadKeywordVocabulary
   readonly saveKeywordVocabulary: typeof saveKeywordVocabulary
-  readonly embedSlugBatch: typeof EmbedSlugBatch
+  readonly getOrEmbed: typeof getOrEmbed
+  readonly embeddingCachePath: string | null
+  readonly embeddingModel: string
   readonly loadManifest: () => Promise<IncrementalManifest | null>
   readonly remapKeywordsInExtractedFile: typeof RemapFn
   readonly saveProgress: typeof saveProgress
@@ -30,7 +38,9 @@ export interface Phase1bDeps {
 const defaultPhase1bDeps: Phase1bDeps = {
   loadKeywordVocabulary,
   saveKeywordVocabulary,
-  embedSlugBatch,
+  getOrEmbed,
+  embeddingCachePath: EMBEDDING_CACHE_PATH,
+  embeddingModel: EMBEDDING_MODEL,
   loadManifest,
   remapKeywordsInExtractedFile,
   saveProgress,
@@ -55,13 +65,15 @@ async function markDoneAndSave(
 
 async function computeMergeMap(
   vocabulary: readonly KeywordVocabularyEntry[],
-  deps: Pick<Phase1bDeps, 'embedSlugBatch' | 'log'>,
+  deps: Pick<Phase1bDeps, 'getOrEmbed' | 'embeddingCachePath' | 'embeddingModel' | 'log'>,
 ): Promise<ReadonlyMap<string, string>> {
-  deps.log.log(`[Phase 1b] Embedding ${vocabulary.length} slugs...`)
-  const slugInputs = vocabulary.map((e) => `${e.slug}: ${e.description}`)
-  const embeddings = await deps.embedSlugBatch(slugInputs)
+  const embeddingData = await deps.getOrEmbed(deps.embeddingCachePath, deps.embeddingModel, vocabulary, {
+    embedSlugBatch,
+    log: deps.log,
+  })
+  const normalized = toNormalizedFloat64Arrays(embeddingData.normalized)
   deps.log.log(`[Phase 1b] Clustering at threshold ${CONSOLIDATION_THRESHOLD}...`)
-  const clusters = buildClusters(embeddings, CONSOLIDATION_THRESHOLD, CONSOLIDATION_MIN_CLUSTER_SIZE)
+  const clusters = buildClustersNormalized(normalized, CONSOLIDATION_THRESHOLD, CONSOLIDATION_MIN_CLUSTER_SIZE)
   return buildMergeMap(vocabulary, clusters)
 }
 
