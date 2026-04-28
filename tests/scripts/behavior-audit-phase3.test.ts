@@ -4,7 +4,6 @@ import path from 'node:path'
 
 import { z } from 'zod'
 
-import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit.ts'
 import type { Phase2aDeps } from '../../scripts/behavior-audit/classify.js'
 import type { Phase2bDeps } from '../../scripts/behavior-audit/consolidate.js'
 import { writeReports } from '../../scripts/behavior-audit/evaluate-reporting.js'
@@ -14,6 +13,7 @@ import {
   type ConsolidatedManifest,
   type IncrementalSelection,
 } from '../../scripts/behavior-audit/incremental.js'
+import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit/index.js'
 import {
   createTextProgressReporter,
   type BehaviorAuditProgressReporter,

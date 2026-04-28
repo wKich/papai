@@ -1,4 +1,3 @@
-import type * as ResetModule from '../../scripts/behavior-audit-reset.js'
 import type * as ClassifiedStoreModule from '../../scripts/behavior-audit/classified-store.js'
 import type * as ClassifyAgentModule from '../../scripts/behavior-audit/classify-agent.js'
 import type * as ConsolidateKeywordsModule from '../../scripts/behavior-audit/consolidate-keywords.js'
@@ -12,6 +11,7 @@ import type * as KeywordVocabularyModule from '../../scripts/behavior-audit/keyw
 import type { Progress } from '../../scripts/behavior-audit/progress.js'
 import type * as ProgressModule from '../../scripts/behavior-audit/progress.js'
 import type * as ReportWriterModule from '../../scripts/behavior-audit/report-writer.js'
+import type * as ResetModule from '../../scripts/behavior-audit/reset.js'
 
 export type IncrementalModuleShape = typeof IncrementalModule
 export type ProgressModuleShape = typeof ProgressModule
