@@ -1,5 +1,8 @@
 import {
   CONSOLIDATION_DRY_RUN,
+  CONSOLIDATION_GAP_THRESHOLD,
+  CONSOLIDATION_LINKAGE,
+  CONSOLIDATION_MAX_CLUSTER_SIZE,
   CONSOLIDATION_MIN_CLUSTER_SIZE,
   CONSOLIDATION_THRESHOLD,
   EMBEDDING_CACHE_PATH,
@@ -7,9 +10,10 @@ import {
 } from './config.js'
 import { embedSlugBatch } from './consolidate-keywords-agent.js'
 import {
-  buildClustersNormalized,
+  buildClustersAdvanced,
   buildConsolidatedVocabulary,
   buildMergeMap,
+  subdivideOversizedClusters,
   toNormalizedFloat64Arrays,
 } from './consolidate-keywords-helpers.js'
 import { getOrEmbed } from './embedding-cache.js'
@@ -72,8 +76,26 @@ async function computeMergeMap(
     log: deps.log,
   })
   const normalized = toNormalizedFloat64Arrays(embeddingData.normalized)
-  deps.log.log(`[Phase 1b] Clustering at threshold ${CONSOLIDATION_THRESHOLD}...`)
-  const clusters = buildClustersNormalized(normalized, CONSOLIDATION_THRESHOLD, CONSOLIDATION_MIN_CLUSTER_SIZE)
+  deps.log.log(
+    `[Phase 1b] Clustering at threshold ${CONSOLIDATION_THRESHOLD}, linkage=${CONSOLIDATION_LINKAGE}, maxClusterSize=${CONSOLIDATION_MAX_CLUSTER_SIZE}, gap=${CONSOLIDATION_GAP_THRESHOLD}...`,
+  )
+  let clusters = buildClustersAdvanced(
+    normalized,
+    CONSOLIDATION_THRESHOLD,
+    CONSOLIDATION_MIN_CLUSTER_SIZE,
+    CONSOLIDATION_LINKAGE,
+    CONSOLIDATION_GAP_THRESHOLD,
+  )
+  if (CONSOLIDATION_MAX_CLUSTER_SIZE > 0) {
+    clusters = subdivideOversizedClusters(
+      normalized,
+      clusters,
+      CONSOLIDATION_MAX_CLUSTER_SIZE,
+      CONSOLIDATION_LINKAGE,
+      0.01,
+      CONSOLIDATION_GAP_THRESHOLD,
+    )
+  }
   return buildMergeMap(vocabulary, clusters)
 }
 
