@@ -1,10 +1,12 @@
-import { expect, test } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 
 import {
+  averageLinkageSimilarity,
   buildClusters,
   buildConsolidatedVocabulary,
   buildMergeMap,
   buildUnionFind,
+  completeLinkageSimilarity,
   cosineSimilarity,
   electCanonical,
   find,
@@ -94,6 +96,48 @@ test('buildClusters respects minClusterSize', () => {
   const b = [0.9 / mag, 0.1 / mag]
   const clusters = buildClusters([a, b], 0.99, 3)
   expect(clusters).toHaveLength(0)
+})
+
+describe('averageLinkageSimilarity', () => {
+  test('returns 1 for identical singleton clusters', () => {
+    const embs = [new Float64Array([1, 0, 0])]
+    const result = averageLinkageSimilarity(embs, [0], [0])
+    expect(result).toBeCloseTo(1)
+  })
+
+  test('returns correct average for known vectors', () => {
+    const s = 1 / Math.sqrt(2)
+    const embs = [new Float64Array([1, 0]), new Float64Array([s, s]), new Float64Array([0, 1])]
+    const result = averageLinkageSimilarity(embs, [0, 1], [2])
+    expect(result).toBeCloseTo(s / 2)
+  })
+
+  test('returns 0 for orthogonal clusters', () => {
+    const embs = [new Float64Array([1, 0, 0]), new Float64Array([0, 1, 0])]
+    const result = averageLinkageSimilarity(embs, [0], [1])
+    expect(result).toBeCloseTo(0)
+  })
+})
+
+describe('completeLinkageSimilarity', () => {
+  test('returns 1 for identical singleton clusters', () => {
+    const embs = [new Float64Array([1, 0, 0])]
+    const result = completeLinkageSimilarity(embs, [0], [0])
+    expect(result).toBeCloseTo(1)
+  })
+
+  test('returns minimum pairwise similarity', () => {
+    const s = 1 / Math.sqrt(2)
+    const embs = [new Float64Array([1, 0]), new Float64Array([s, s]), new Float64Array([0, 1])]
+    const result = completeLinkageSimilarity(embs, [0, 1], [2])
+    expect(result).toBeCloseTo(0)
+  })
+
+  test('returns max when all pairs have same similarity', () => {
+    const embs = [new Float64Array([1, 0]), new Float64Array([1, 0])]
+    const result = completeLinkageSimilarity(embs, [0], [1])
+    expect(result).toBeCloseTo(1)
+  })
 })
 
 // ── electCanonical ────────────────────────────────────────────────────────────
