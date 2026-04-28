@@ -1,7 +1,9 @@
-import { describe, expect, mock, test } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+
+import { runTuneEmbedding } from '../../../scripts/behavior-audit/tune-embedding.js'
 
 type RecordedSubdivideCall = {
   readonly maxClusterSize: number
@@ -12,22 +14,9 @@ type RecordedSubdivideCall = {
 
 type MockVocabularyEntry = {
   readonly slug: string
-}
-
-type TuneEmbeddingModule = {
-  readonly runTuneEmbedding: (args: readonly string[]) => Promise<void>
-}
-
-function isTuneEmbeddingModule(value: unknown): value is TuneEmbeddingModule {
-  return typeof value === 'object' && value !== null && 'runTuneEmbedding' in value
-}
-
-async function loadTuneEmbeddingModule(tag: string): Promise<TuneEmbeddingModule> {
-  const mod: unknown = await import(`../../../scripts/behavior-audit/tune-embedding.js?test=${tag}`)
-  if (!isTuneEmbeddingModule(mod)) {
-    throw new Error('Unexpected tune-embedding module shape')
-  }
-  return mod
+  readonly description: string
+  readonly createdAt: string
+  readonly updatedAt: string
 }
 
 async function makeExtractedDir(): Promise<string> {
@@ -42,31 +31,26 @@ describe('tune-embedding wiring', () => {
     const extractedDir = await makeExtractedDir()
     const recordedCalls: RecordedSubdivideCall[] = []
 
-    void mock.module('../../../scripts/behavior-audit/config.js', () => ({
-      EXTRACTED_DIR: extractedDir,
-      EMBEDDING_MODEL: 'test-embedding-model',
+    await runTuneEmbedding(['--max-cluster-size', '2', '--gap-threshold', '0.17', '--linkage', 'complete'], {
+      extractedDir,
+      embeddingModel: 'test-embedding-model',
       reloadBehaviorAuditConfig: (): void => {},
-    }))
-
-    void mock.module('../../../scripts/behavior-audit/consolidate-keywords-agent.js', () => ({
       embedSlugBatch: (): Promise<readonly number[][]> => Promise.resolve([]),
-    }))
-
-    void mock.module('../../../scripts/behavior-audit/embedding-cache.js', () => ({
-      getOrEmbed: (): Promise<{ readonly normalized: readonly (readonly number[])[] }> =>
+      getOrEmbed: (): Promise<{
+        readonly raw: readonly (readonly number[])[]
+        readonly normalized: readonly (readonly number[])[]
+      }> =>
         Promise.resolve({
+          raw: [
+            [1, 0],
+            [0, 1],
+          ],
           normalized: [
             [1, 0],
             [0, 1],
           ],
         }),
-    }))
-
-    void mock.module('../../../scripts/behavior-audit/keyword-vocabulary.js', () => ({
       normalizeKeywordSlug: (keyword: string): string => keyword.toLowerCase(),
-    }))
-
-    void mock.module('../../../scripts/behavior-audit/consolidate-keywords-helpers.js', () => ({
       buildClustersAdvanced: (): readonly (readonly number[])[] => [[0, 1]],
       buildMergeMap: (): ReadonlyMap<string, string> => new Map<string, string>(),
       buildConsolidatedVocabulary: (vocabulary: readonly MockVocabularyEntry[]): readonly MockVocabularyEntry[] =>
@@ -84,18 +68,7 @@ describe('tune-embedding wiring', () => {
         recordedCalls.push({ maxClusterSize, linkage, thresholdStep, gapThreshold })
         return clusters
       },
-    }))
-
-    const tuneEmbedding = await loadTuneEmbeddingModule(crypto.randomUUID())
-
-    await tuneEmbedding.runTuneEmbedding([
-      '--max-cluster-size',
-      '2',
-      '--gap-threshold',
-      '0.17',
-      '--linkage',
-      'complete',
-    ])
+    })
 
     expect(recordedCalls).toEqual([
       {

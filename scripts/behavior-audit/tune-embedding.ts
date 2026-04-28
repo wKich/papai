@@ -19,6 +19,34 @@ import type { KeywordVocabularyEntry } from './keyword-vocabulary.js'
 
 const VALID_LINKAGES: readonly LinkageMode[] = ['single', 'average', 'complete']
 
+interface TuneEmbeddingDeps {
+  readonly extractedDir: string
+  readonly embeddingModel: string
+  readonly reloadBehaviorAuditConfig: () => void
+  readonly embedSlugBatch: typeof embedSlugBatch
+  readonly buildClustersAdvanced: typeof buildClustersAdvanced
+  readonly buildConsolidatedVocabulary: typeof buildConsolidatedVocabulary
+  readonly buildMergeMap: typeof buildMergeMap
+  readonly subdivideOversizedClusters: typeof subdivideOversizedClusters
+  readonly toNormalizedFloat64Arrays: typeof toNormalizedFloat64Arrays
+  readonly getOrEmbed: typeof getOrEmbed
+  readonly normalizeKeywordSlug: typeof normalizeKeywordSlug
+}
+
+const defaultTuneEmbeddingDeps: TuneEmbeddingDeps = {
+  extractedDir: EXTRACTED_DIR,
+  embeddingModel: EMBEDDING_MODEL,
+  reloadBehaviorAuditConfig,
+  embedSlugBatch,
+  buildClustersAdvanced,
+  buildConsolidatedVocabulary,
+  buildMergeMap,
+  subdivideOversizedClusters,
+  toNormalizedFloat64Arrays,
+  getOrEmbed,
+  normalizeKeywordSlug,
+}
+
 function parseFiniteNumber(flag: string, value: string): number {
   const parsed = Number(value)
   if (!Number.isFinite(parsed)) {
@@ -106,10 +134,10 @@ async function readAllRecords(files: readonly string[]): Promise<readonly Extrac
   return parsed.flat()
 }
 
-async function collectUniqueKeywords(): Promise<readonly string[]> {
+async function collectUniqueKeywords(deps: TuneEmbeddingDeps): Promise<readonly string[]> {
   let files: readonly string[]
   try {
-    files = await collectJsonFiles(EXTRACTED_DIR)
+    files = await collectJsonFiles(deps.extractedDir)
   } catch {
     return []
   }
@@ -120,7 +148,7 @@ async function collectUniqueKeywords(): Promise<readonly string[]> {
     if (!Array.isArray(record.keywords)) continue
     for (const kw of record.keywords) {
       if (typeof kw !== 'string') continue
-      const slug = normalizeKeywordSlug(kw)
+      const slug = deps.normalizeKeywordSlug(kw)
       if (slug.length > 0) {
         keywordSet.add(slug)
       }
@@ -144,12 +172,16 @@ async function writeTempKeywordList(prefix: string, keywords: readonly string[])
   return path
 }
 
-function buildTuneClusters(normalized: readonly Float64Array[], params: TuneParams): readonly (readonly number[])[] {
+function buildTuneClusters(
+  normalized: readonly Float64Array[],
+  params: TuneParams,
+  deps: TuneEmbeddingDeps,
+): readonly (readonly number[])[] {
   console.log(
     `[tune] Clustering at threshold=${params.threshold}, minClusterSize=${params.minClusterSize}, linkage=${params.linkage}, gap=${params.gapThreshold}, maxClusterSize=${params.maxClusterSize}...`,
   )
 
-  const clusters = buildClustersAdvanced(
+  const clusters = deps.buildClustersAdvanced(
     normalized,
     params.threshold,
     params.minClusterSize,
@@ -158,14 +190,21 @@ function buildTuneClusters(normalized: readonly Float64Array[], params: TunePara
   )
 
   return params.maxClusterSize > 0
-    ? subdivideOversizedClusters(normalized, clusters, params.maxClusterSize, params.linkage, 0.01, params.gapThreshold)
+    ? deps.subdivideOversizedClusters(
+        normalized,
+        clusters,
+        params.maxClusterSize,
+        params.linkage,
+        0.01,
+        params.gapThreshold,
+      )
     : clusters
 }
 
-async function runTune(params: TuneParams): Promise<TuneResult> {
-  reloadBehaviorAuditConfig()
+async function runTune(params: TuneParams, deps: TuneEmbeddingDeps): Promise<TuneResult> {
+  deps.reloadBehaviorAuditConfig()
 
-  const initialKeywords = await collectUniqueKeywords()
+  const initialKeywords = await collectUniqueKeywords(deps)
   const initialCount = initialKeywords.length
   if (initialCount === 0) {
     return {
@@ -182,19 +221,19 @@ async function runTune(params: TuneParams): Promise<TuneResult> {
   const vocabulary = toVocabulary(initialKeywords, now)
   const cachePath = join(params.cacheDir, 'embedding-cache.json')
 
-  const embeddingData = await getOrEmbed(
+  const embeddingData = await deps.getOrEmbed(
     cachePath,
-    EMBEDDING_MODEL,
+    deps.embeddingModel,
     vocabulary,
-    { embedSlugBatch, log: console },
+    { embedSlugBatch: deps.embedSlugBatch, log: console },
     params.reembed,
   )
 
-  const normalized = toNormalizedFloat64Arrays(embeddingData.normalized)
-  const clusters = buildTuneClusters(normalized, params)
-  const mergeMap = buildMergeMap(vocabulary, clusters)
+  const normalized = deps.toNormalizedFloat64Arrays(embeddingData.normalized)
+  const clusters = buildTuneClusters(normalized, params, deps)
+  const mergeMap = deps.buildMergeMap(vocabulary, clusters)
 
-  const consolidated = buildConsolidatedVocabulary(vocabulary, mergeMap, now)
+  const consolidated = deps.buildConsolidatedVocabulary(vocabulary, mergeMap, now)
   const finalKeywords = consolidated.map((e) => e.slug)
   const finalCount = finalKeywords.length
   const mergePairs = extractMergePairs(mergeMap)
@@ -230,14 +269,16 @@ function printSummary(result: TuneResult, params: TuneParams): void {
 async function writeTempFiles(result: TuneResult): Promise<void> {
   const initialPath = await writeTempKeywordList('initial', result.initialKeywords)
   const finalPath = await writeTempKeywordList('final', result.finalKeywords)
-  console.log('')
-  console.log(`  initial keywords: ${initialPath}`)
-  console.log(`  final keywords:   ${finalPath}`)
+  console.log(`\n  initial keywords: ${initialPath}\n  final keywords:   ${finalPath}`)
 }
 
-export async function runTuneEmbedding(args: readonly string[]): Promise<void> {
+export async function runTuneEmbedding(
+  args: readonly string[],
+  deps: Partial<TuneEmbeddingDeps> | null,
+): Promise<void> {
   const params = parseArgs(args)
-  const result = await runTune(params)
+  const resolvedDeps = deps === null ? defaultTuneEmbeddingDeps : { ...defaultTuneEmbeddingDeps, ...deps }
+  const result = await runTune(params, resolvedDeps)
   printSummary(result, params)
   if (result.initialCount > 0) {
     await writeTempFiles(result)
@@ -246,7 +287,7 @@ export async function runTuneEmbedding(args: readonly string[]): Promise<void> {
 }
 
 if (import.meta.main) {
-  await runTuneEmbedding(process.argv.slice(2)).catch((error: unknown) => {
+  await runTuneEmbedding(process.argv.slice(2), null).catch((error: unknown) => {
     console.error('Fatal error:', error instanceof Error ? error.message : String(error))
     process.exit(1)
   })
