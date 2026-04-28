@@ -1,15 +1,15 @@
 import { describe, expect, mock, test } from 'bun:test'
 import assert from 'node:assert/strict'
 
-import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit-interrupted-run.js'
+import { runBehaviorAudit, type BehaviorAuditDeps } from '../../../scripts/behavior-audit/index.js'
 import type {
   ConsolidatedManifest,
   IncrementalManifest,
   IncrementalSelection,
-} from '../../scripts/behavior-audit/incremental.js'
-import type { Progress } from '../../scripts/behavior-audit/progress.js'
-import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
-import { createEmptyProgressFixture, createIncrementalManifestFixture } from './behavior-audit-integration.helpers.js'
+} from '../../../scripts/behavior-audit/incremental.js'
+import type { Progress } from '../../../scripts/behavior-audit/progress.js'
+import { parseTestFile } from '../../../scripts/behavior-audit/test-parser.js'
+import { createEmptyProgressFixture, createIncrementalManifestFixture } from '../behavior-audit-integration.helpers.js'
 
 function createEmptyProgress(filesTotal: number): Progress {
   return createEmptyProgressFixture(filesTotal)
