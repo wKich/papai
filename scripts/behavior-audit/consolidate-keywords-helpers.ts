@@ -145,3 +145,62 @@ export function buildConsolidatedVocabulary(
     })
     .toSorted((a, b) => a.slug.localeCompare(b.slug))
 }
+
+export function toNormalizedFloat64Arrays(embeddings: readonly (readonly number[])[]): readonly Float64Array[] {
+  return embeddings.map((emb) => {
+    const arr = new Float64Array(emb.length)
+    let mag = 0
+    for (let k = 0; k < emb.length; k++) {
+      const v = emb[k] ?? 0
+      arr[k] = v
+      mag += v * v
+    }
+    mag = Math.sqrt(mag)
+    if (mag > 0) {
+      for (let k = 0; k < arr.length; k++) {
+        arr[k] = arr[k]! / mag
+      }
+    }
+    return arr
+  })
+}
+
+export function dotProduct(a: Float64Array, b: Float64Array): number {
+  let sum = 0
+  const len = Math.min(a.length, b.length)
+  for (let k = 0; k < len; k++) {
+    sum += a[k]! * b[k]!
+  }
+  return sum
+}
+
+export function buildClustersNormalized(
+  normalizedEmbeddings: readonly Float64Array[],
+  threshold: number,
+  minClusterSize: number,
+): readonly (readonly number[])[] {
+  const n = normalizedEmbeddings.length
+  const uf = buildUnionFind(n)
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const embI = normalizedEmbeddings[i]
+      const embJ = normalizedEmbeddings[j]
+      if (embI !== undefined && embJ !== undefined && dotProduct(embI, embJ) >= threshold) {
+        union(uf, i, j)
+      }
+    }
+  }
+
+  const groups = new Map<number, number[]>()
+  for (let i = 0; i < n; i++) {
+    const root = find(uf, i)
+    const group = groups.get(root)
+    if (group === undefined) {
+      groups.set(root, [i])
+    } else {
+      group.push(i)
+    }
+  }
+
+  return [...groups.values()].filter((g) => g.length >= minClusterSize).map((g) => [...g])
+}
