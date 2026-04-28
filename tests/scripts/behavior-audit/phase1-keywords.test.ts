@@ -181,7 +181,9 @@ test('runPhase1 fails cleanly when extracted keywords all normalize to empty slu
 })
 
 test('extract-agent exports extractWithRetry', async () => {
-  const mod: unknown = await import(`../../../scripts/behavior-audit/extract-agent.js?test=shape-${crypto.randomUUID()}`)
+  const mod: unknown = await import(
+    `../../../scripts/behavior-audit/extract-agent.js?test=shape-${crypto.randomUUID()}`
+  )
   expect(typeof mod).toBe('object')
   expect(mod).toHaveProperty('extractWithRetry')
 })

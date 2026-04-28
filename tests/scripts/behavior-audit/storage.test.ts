@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 
-import { createEmptyProgress } from '../../../scripts/behavior-audit/progress.js'
 import type { ConsolidatedManifest } from '../../../scripts/behavior-audit/incremental.js'
+import { createEmptyProgress } from '../../../scripts/behavior-audit/progress.js'
 import { mockAuditBehaviorConfig, mockReportsConfig } from '../behavior-audit-integration.helpers.js'
 import {
   restoreBehaviorAuditEnv,
@@ -776,7 +776,7 @@ test('resetBehaviorAudit phase2 clears audit-behavior phase2 outputs but preserv
   })
 
   const mod: ResetModuleShape = await importWithGuard(
-    `../../scripts/behavior-audit-reset.ts?test=${crypto.randomUUID()}`,
+    `../../scripts/behavior-audit/reset.ts?test=${crypto.randomUUID()}`,
     isResetModule,
     'Unexpected reset module shape',
   )
@@ -853,7 +853,7 @@ test('resetBehaviorAudit phase3 clears evaluated and stories outputs only', asyn
   await progressModule.saveProgress(progress)
 
   const mod: ResetModuleShape = await importWithGuard(
-    `../../scripts/behavior-audit-reset.ts?test=${crypto.randomUUID()}`,
+    `../../scripts/behavior-audit/reset.ts?test=${crypto.randomUUID()}`,
     isResetModule,
     'Unexpected reset module shape',
   )

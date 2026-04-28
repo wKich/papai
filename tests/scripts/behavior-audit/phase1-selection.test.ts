@@ -5,8 +5,8 @@ import path from 'node:path'
 
 import { z } from 'zod'
 
-import { createEmptyManifest as barrelCreateEmptyManifest } from '../../../scripts/behavior-audit/incremental.js'
 import type { Phase1Deps } from '../../../scripts/behavior-audit/extract.js'
+import { createEmptyManifest as barrelCreateEmptyManifest } from '../../../scripts/behavior-audit/incremental.js'
 import type { IncrementalManifest } from '../../../scripts/behavior-audit/incremental.js'
 import {
   createTextProgressReporter,

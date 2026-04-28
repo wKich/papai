@@ -326,7 +326,7 @@ export function loadReportWriterModule(tag: string): Promise<ReportWriterModuleS
 
 export function loadResetModule(tag: string): Promise<ResetModuleShape> {
   return importWithGuard(
-    `../../scripts/behavior-audit-reset.js?test=${tag}`,
+    `../../scripts/behavior-audit/reset.js?test=${tag}`,
     isResetModule,
     'Unexpected reset module shape',
   )

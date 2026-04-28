@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test'
 import assert from 'node:assert'
 
-import { runBehaviorAudit, type BehaviorAuditDeps } from '../../../scripts/behavior-audit/index.js'
 import { reloadBehaviorAuditConfig } from '../../../scripts/behavior-audit/config.js'
 import type {
   ConsolidatedManifest,
   IncrementalManifest,
   IncrementalSelection,
 } from '../../../scripts/behavior-audit/incremental.js'
+import { runBehaviorAudit, type BehaviorAuditDeps } from '../../../scripts/behavior-audit/index.js'
 import {
   resolveProgressRenderer,
   type BehaviorAuditProgressReporter,
