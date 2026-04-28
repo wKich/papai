@@ -9,7 +9,7 @@ import {
   STORIES_DIR,
 } from './behavior-audit/config.js'
 import { loadProgress, saveProgress } from './behavior-audit/progress-io.js'
-import { resetPhase2AndPhase3, resetPhase3 } from './behavior-audit/progress.js'
+import { resetPhase2AndPhase3, resetPhase3 } from './behavior-audit/progress-resets.js'
 
 export type ResetTarget = 'phase2' | 'phase3' | 'all'
 

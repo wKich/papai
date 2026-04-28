@@ -1,6 +1,12 @@
 import type { ConsolidatedBehavior } from './report-writer.js'
 
 export { loadProgress, saveProgress } from './progress-io.js'
+export {
+  invalidatePhase3ForReevaluation,
+  resetPhase1bAndBelow,
+  resetPhase2AndPhase3,
+  resetPhase3,
+} from './progress-resets.js'
 export type PhaseStatus = 'not-started' | 'in-progress' | 'done'
 
 export interface FailedEntry {
@@ -275,21 +281,4 @@ export function markBehaviorFailed(progress: Progress, key: string, error: strin
 
 export function getFailedBehaviorAttempts(progress: Progress, key: string): number {
   return progress.phase3.failedConsolidatedIds[key]?.attempts ?? 0
-}
-
-export function resetPhase1bAndBelow(progress: Progress): void {
-  progress.phase1b = emptyPhase1b()
-  progress.phase2a = emptyPhase2a()
-  progress.phase2b = emptyPhase2b()
-  progress.phase3 = emptyPhase3()
-}
-
-export function resetPhase2AndPhase3(progress: Progress): void {
-  progress.phase2a = emptyPhase2a()
-  progress.phase2b = emptyPhase2b()
-  progress.phase3 = emptyPhase3()
-}
-
-export function resetPhase3(progress: Progress): void {
-  progress.phase3 = emptyPhase3()
 }

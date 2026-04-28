@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
@@ -6,7 +6,14 @@ import path from 'node:path'
 import { z } from 'zod'
 
 import { createEmptyManifest as barrelCreateEmptyManifest } from '../../scripts/behavior-audit-phase1-selection.js'
+import type { Phase1Deps } from '../../scripts/behavior-audit/extract.js'
 import type { IncrementalManifest } from '../../scripts/behavior-audit/incremental.js'
+import {
+  createTextProgressReporter,
+  type BehaviorAuditProgressReporter,
+  type ProgressEvent,
+  type ProgressOutcome,
+} from '../../scripts/behavior-audit/progress-reporter.js'
 import type { Progress } from '../../scripts/behavior-audit/progress.js'
 import { parseTestFile } from '../../scripts/behavior-audit/test-parser.js'
 import {
@@ -25,6 +32,23 @@ import {
 
 function createEmptyProgress(filesTotal: number): Progress {
   return createEmptyProgressFixture(filesTotal)
+}
+
+type Phase1DepsHasWriteStdout = 'writeStdout' extends keyof Phase1Deps ? true : false
+
+const phase1DepsHasWriteStdout: Phase1DepsHasWriteStdout = false
+
+function isDoneFinishEvent(event: ProgressEvent | undefined): event is DoneFinishEvent {
+  return event !== undefined && event.kind === 'item-finish' && event.outcome.kind === 'done'
+}
+
+type DoneFinishEvent = Extract<ProgressEvent, { readonly kind: 'item-finish' }> & {
+  readonly outcome: Extract<ProgressOutcome, { readonly kind: 'done' }>
+}
+
+function expectDoneFinishEvent(event: ProgressEvent | undefined): DoneFinishEvent {
+  assert.ok(isDoneFinishEvent(event), 'Expected done finish event')
+  return event
 }
 
 const ExtractedBehaviorRecordArraySchema = z.array(
@@ -49,6 +73,38 @@ function expectExtractedRecord(
   expect(record.behavior).toBe(input.behavior)
   expect(record.context).toBe(input.context)
   expect(record.keywords).toEqual(input.keywords)
+}
+
+function createRecordingReporter(): {
+  readonly events: ProgressEvent[]
+  readonly lines: string[]
+  readonly endCalls: { readonly count: () => number }
+  readonly reporter: BehaviorAuditProgressReporter
+} {
+  const events: ProgressEvent[] = []
+  const lines: string[] = []
+  let endCallCount = 0
+  const textReporter = createTextProgressReporter({
+    log: mock((line: string) => {
+      lines.push(line)
+    }),
+  })
+
+  return {
+    events,
+    lines,
+    endCalls: { count: () => endCallCount },
+    reporter: {
+      emit(event): void {
+        events.push(event)
+        textReporter.emit(event)
+      },
+      end(): void {
+        endCallCount += 1
+        textReporter.end()
+      },
+    },
+  }
 }
 
 afterEach(() => {
@@ -100,12 +156,15 @@ describe('behavior-audit phase 1 incremental selection', () => {
 
   test('runPhase1 only processes selected test keys and writes manifest updates after successful extraction', async () => {
     expect(barrelCreateEmptyManifest().version).toBe(1)
+    expect(phase1DepsHasWriteStdout).toBe(false)
     const extract = await loadExtractModule(crypto.randomUUID())
     const testFilePath = 'tests/tools/sample.test.ts'
     const extractedArtifactPath = path.join(reportsDir, 'audit-behavior', 'extracted', 'tools', 'sample.test.json')
     const parsedFile = parseTestFile(testFilePath, await Bun.file(path.join(root, testFilePath)).text())
     const selectedKey = 'tests/tools/sample.test.ts::suite > selected case'
     const progress = createEmptyProgress(1)
+    const { events, lines, endCalls, reporter } = createRecordingReporter()
+    const logLines: string[] = []
     const manifest: IncrementalManifest = {
       ...createEmptyManifest(),
       phaseVersions: { phase1: 'phase1-v1', phase2: 'phase2-v1', reports: 'reports-v1' },
@@ -132,6 +191,7 @@ describe('behavior-audit phase 1 incremental selection', () => {
         manifest,
       },
       {
+        reporter,
         extractWithRetry: () =>
           Promise.resolve({
             result: {
@@ -141,8 +201,60 @@ describe('behavior-audit phase 1 incremental selection', () => {
             },
             usage: { inputTokens: 100, outputTokens: 50, toolCalls: 2, toolNames: ['readFile', 'grep'] },
           }),
+        log: {
+          log: mock((line: string) => {
+            logLines.push(line)
+          }),
+        },
       },
     )
+
+    expect(events).toHaveLength(3)
+    expect(events[0]).toEqual({
+      kind: 'item-start',
+      phase: 'phase1',
+      itemId: selectedKey,
+      context: testFilePath,
+      title: 'selected case',
+      index: 1,
+      total: 1,
+    })
+    expect(events[1]).toEqual({
+      kind: 'artifact-write',
+      phase: 'phase1',
+      context: testFilePath,
+      detail: 'wrote 1 behaviors',
+    })
+    expect(events[2]).toMatchObject({
+      kind: 'item-finish',
+      phase: 'phase1',
+      itemId: selectedKey,
+      context: testFilePath,
+      title: 'selected case',
+      outcome: {
+        kind: 'done',
+        usage: {
+          inputTokens: 100,
+          outputTokens: 50,
+          toolCalls: 2,
+        },
+      },
+    })
+    const finishEvent = expectDoneFinishEvent(events[2])
+    expect(typeof finishEvent.outcome.elapsedMs).toBe('number')
+    expect(lines).toHaveLength(2)
+    const artifactLine = lines[0]
+    assert(artifactLine !== undefined, 'Expected artifact reporter line')
+    expect(artifactLine).toBe('[Phase 1] [tests/tools/sample.test.ts] wrote 1 behaviors')
+    const successLine = lines[1]
+    assert(successLine !== undefined, 'Expected success reporter line')
+    expect(successLine).toMatch(
+      /^\[Phase 1\] \[tests\/tools\/sample\.test\.ts\] \[1\/1\] "selected case" — 2 tools, 150 tok in .+ ✓$/,
+    )
+    expect(logLines).toHaveLength(2)
+    expect(logLines[0]).toBe('[Phase 1] 1/1 — tests/tools/sample.test.ts')
+    expect(logLines[1]).toMatch(/^\n\[Phase 1 complete\] 1 files, 1 behaviors extracted, 0 failed/)
+    expect(endCalls.count()).toBe(0)
 
     expect(progress.phase1.completedTests[testFilePath]).toEqual({ [selectedKey]: 'done' })
     expect(progress.phase2a.status).toBe('not-started')
@@ -193,6 +305,7 @@ describe('behavior-audit phase 1 incremental selection', () => {
     const extractedArtifactPath = path.join(reportsDir, 'audit-behavior', 'extracted', 'tools', 'sample.test.json')
     const parsedFile = parseTestFile(testFilePath, await Bun.file(path.join(root, testFilePath)).text())
     const progress = createEmptyProgress(1)
+    const { events, lines, reporter } = createRecordingReporter()
 
     progress.phase1.completedFiles.push(testFilePath)
     progress.phase1.completedTests[testFilePath] = { [selectedKey]: 'done' }
@@ -229,15 +342,95 @@ describe('behavior-audit phase 1 incremental selection', () => {
         manifest: createEmptyManifest(),
       },
       {
+        reporter,
         extractWithRetry: () => Promise.resolve(null),
       },
     )
+
+    expect(events).toEqual([
+      {
+        kind: 'item-start',
+        phase: 'phase1',
+        itemId: selectedKey,
+        context: testFilePath,
+        title: 'selected case',
+        index: 1,
+        total: 1,
+      },
+      {
+        kind: 'item-finish',
+        phase: 'phase1',
+        itemId: selectedKey,
+        context: testFilePath,
+        title: 'selected case',
+        outcome: {
+          kind: 'failed',
+          detail: 'extraction failed',
+        },
+      },
+    ])
+    expect(lines).toEqual(['[Phase 1] [tests/tools/sample.test.ts] [1/1] "selected case" — extraction failed ✗'])
 
     expect(await Bun.file(extractedArtifactPath).exists()).toBe(false)
     expect(progress.phase1.completedFiles).toEqual([])
     expect(progress.phase1.completedTests[testFilePath]).toBeUndefined()
     expect(progress.phase1.stats.filesDone).toBe(0)
     expect(progress.phase1.stats.testsExtracted).toBe(0)
+  })
+
+  test('runPhase1 emits skipped selected tests through the reporter when max retries are reached', async () => {
+    const extract = await loadExtractModule(crypto.randomUUID())
+    const testFilePath = 'tests/tools/sample.test.ts'
+    const parsedFile = parseTestFile(testFilePath, await Bun.file(path.join(root, testFilePath)).text())
+    const selectedKey = 'tests/tools/sample.test.ts::suite > selected case'
+    const progress = createEmptyProgress(1)
+    const { events, lines, reporter } = createRecordingReporter()
+
+    progress.phase1.failedTests[selectedKey] = {
+      error: 'previous failure',
+      attempts: 3,
+      lastAttempt: '2026-04-27T00:00:00.000Z',
+    }
+    progress.phase1.stats.testsFailed = 1
+
+    await extract.runPhase1(
+      {
+        testFiles: [parsedFile],
+        progress,
+        selectedTestKeys: new Set([selectedKey]),
+        manifest: createEmptyManifest(),
+      },
+      {
+        reporter,
+        extractWithRetry: () => Promise.reject(new Error('should not run')),
+      },
+    )
+
+    expect(events).toEqual([
+      {
+        kind: 'item-start',
+        phase: 'phase1',
+        itemId: selectedKey,
+        context: testFilePath,
+        title: 'selected case',
+        index: 1,
+        total: 1,
+      },
+      {
+        kind: 'item-finish',
+        phase: 'phase1',
+        itemId: selectedKey,
+        context: testFilePath,
+        title: 'selected case',
+        outcome: {
+          kind: 'skipped',
+          detail: 'max retries reached',
+        },
+      },
+    ])
+    expect(lines).toEqual([
+      '[Phase 1] [tests/tools/sample.test.ts] [1/1] "selected case" — max retries reached (skipped)',
+    ])
   })
 
   test('runPhase1 resets downstream phases before the first saved checkpoint when selected work exists', async () => {

@@ -13,7 +13,8 @@ import type { IncrementalManifest } from './incremental.js'
 import { loadManifest } from './incremental.js'
 import type { KeywordVocabularyEntry } from './keyword-vocabulary.js'
 import { loadKeywordVocabulary, saveKeywordVocabulary } from './keyword-vocabulary.js'
-import { emptyPhase1b, resetPhase2AndPhase3, type Progress } from './progress.js'
+import { resetPhase2AndPhase3 } from './progress-resets.js'
+import { emptyPhase1b, type Progress } from './progress.js'
 import { saveProgress } from './progress.js'
 
 export interface Phase1bDeps {

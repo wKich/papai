@@ -1,12 +1,17 @@
-import { describe, expect, mock, test } from 'bun:test'
+import { afterEach, describe, expect, mock, test } from 'bun:test'
 import assert from 'node:assert'
 
 import { runBehaviorAudit, type BehaviorAuditDeps } from '../../scripts/behavior-audit-entrypoint.js'
+import { reloadBehaviorAuditConfig } from '../../scripts/behavior-audit/config.js'
 import type {
   ConsolidatedManifest,
   IncrementalManifest,
   IncrementalSelection,
 } from '../../scripts/behavior-audit/incremental.js'
+import {
+  resolveProgressRenderer,
+  type BehaviorAuditProgressReporter,
+} from '../../scripts/behavior-audit/progress-reporter.js'
 import type { Progress } from '../../scripts/behavior-audit/progress.js'
 import { parseTestFile, type ParsedTestFile } from '../../scripts/behavior-audit/test-parser.js'
 import {
@@ -17,6 +22,27 @@ import {
 
 type SelectWorkInput = Parameters<BehaviorAuditDeps['selectIncrementalRunWork']>[0]
 type RebuildReportsInput = Parameters<BehaviorAuditDeps['rebuildReportsFromStoredResults']>[0]
+type CreateProgressReporterInput = Parameters<BehaviorAuditDeps['createProgressReporter']>[0]
+
+const originalProgressRendererEnv = process.env['BEHAVIOR_AUDIT_PROGRESS_RENDERER']
+
+afterEach(() => {
+  if (originalProgressRendererEnv === undefined) {
+    delete process.env['BEHAVIOR_AUDIT_PROGRESS_RENDERER']
+  } else {
+    process.env['BEHAVIOR_AUDIT_PROGRESS_RENDERER'] = originalProgressRendererEnv
+  }
+  reloadBehaviorAuditConfig()
+})
+
+function setProgressRendererEnv(value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env['BEHAVIOR_AUDIT_PROGRESS_RENDERER']
+  } else {
+    process.env['BEHAVIOR_AUDIT_PROGRESS_RENDERER'] = value
+  }
+  reloadBehaviorAuditConfig()
+}
 
 function createEmptyProgress(filesTotal: number): Progress {
   return createEmptyProgressFixture(filesTotal)
@@ -54,6 +80,18 @@ function createConsolidatedManifest(): ConsolidatedManifest {
   return { version: 1, entries: {} }
 }
 
+function expectReporterInput(
+  input: CreateProgressReporterInput | undefined,
+  expected: Omit<CreateProgressReporterInput, 'log'>,
+): CreateProgressReporterInput {
+  assert(input !== undefined)
+  expect(input.renderer).toBe(expected.renderer)
+  expect(input.isTTY).toBe(expected.isTTY)
+  expect(input.isTestEnvironment).toBe(expected.isTestEnvironment)
+  expect(typeof input.log).toBe('function')
+  return input
+}
+
 function createHarness(
   overrides: Partial<{
     parsedFiles: readonly ParsedTestFile[]
@@ -66,6 +104,9 @@ function createHarness(
     dirtyFromPhase2a: ReadonlySet<string>
     consolidatedManifest: ConsolidatedManifest
     requireOpenAiApiKeyError: Error | null
+    reporter: BehaviorAuditProgressReporter
+    stdoutIsTTY: boolean
+    isTestEnvironment: boolean
   }> = {},
 ): {
   readonly deps: BehaviorAuditDeps
@@ -80,17 +121,20 @@ function createHarness(
       readonly progress: Progress
       readonly selectedTestKeys: readonly string[]
       readonly manifest: IncrementalManifest
+      readonly reporter: BehaviorAuditProgressReporter
     }>
     readonly runPhase1bIfNeeded: { count: number }
     readonly runPhase2aIfNeeded: Array<{
       readonly progress: Progress
       readonly manifest: IncrementalManifest
       readonly selectedTestKeys: readonly string[]
+      readonly reporter: BehaviorAuditProgressReporter
     }>
     readonly runPhase2bIfNeeded: Array<{
       readonly progress: Progress
       readonly phase2Version: string
       readonly selectedFeatureKeys: readonly string[]
+      readonly reporter: BehaviorAuditProgressReporter
     }>
     readonly saveConsolidatedManifest: ConsolidatedManifest[]
     readonly runPhase3IfNeeded: Array<{
@@ -98,7 +142,9 @@ function createHarness(
       readonly selectedConsolidatedIds: readonly string[]
       readonly selectedFeatureKeys: readonly string[]
       readonly consolidatedManifest: ConsolidatedManifest | null
+      readonly reporter: BehaviorAuditProgressReporter
     }>
+    readonly createProgressReporter: CreateProgressReporterInput[]
     readonly logs: string[]
   }
 } {
@@ -128,6 +174,12 @@ function createHarness(
   const dirtyFromPhase2a = overrides.dirtyFromPhase2a ?? new Set<string>()
   const consolidatedManifest = overrides.consolidatedManifest ?? createConsolidatedManifest()
   const requireOpenAiApiKeyError = overrides.requireOpenAiApiKeyError ?? null
+  const reporter = overrides.reporter ?? {
+    emit: mock((_event) => undefined),
+    end: mock(() => undefined),
+  }
+  const stdoutIsTTY = overrides.stdoutIsTTY ?? false
+  const isTestEnvironment = overrides.isTestEnvironment ?? false
 
   const calls = {
     requireOpenAiApiKey: { count: 0 },
@@ -140,17 +192,20 @@ function createHarness(
       readonly progress: Progress
       readonly selectedTestKeys: readonly string[]
       readonly manifest: IncrementalManifest
+      readonly reporter: BehaviorAuditProgressReporter
     }>,
     runPhase1bIfNeeded: { count: 0 },
     runPhase2aIfNeeded: [] as Array<{
       readonly progress: Progress
       readonly manifest: IncrementalManifest
       readonly selectedTestKeys: readonly string[]
+      readonly reporter: BehaviorAuditProgressReporter
     }>,
     runPhase2bIfNeeded: [] as Array<{
       readonly progress: Progress
       readonly phase2Version: string
       readonly selectedFeatureKeys: readonly string[]
+      readonly reporter: BehaviorAuditProgressReporter
     }>,
     saveConsolidatedManifest: [] as ConsolidatedManifest[],
     runPhase3IfNeeded: [] as Array<{
@@ -158,7 +213,9 @@ function createHarness(
       readonly selectedConsolidatedIds: readonly string[]
       readonly selectedFeatureKeys: readonly string[]
       readonly consolidatedManifest: ConsolidatedManifest | null
+      readonly reporter: BehaviorAuditProgressReporter
     }>,
+    createProgressReporter: [] as CreateProgressReporterInput[],
     logs: [] as string[],
   }
 
@@ -181,16 +238,21 @@ function createHarness(
       calls.loadOrCreateProgress.push(testCount)
       return Promise.resolve(progress)
     },
+    createProgressReporter: (input) => {
+      calls.createProgressReporter.push(input)
+      return reporter
+    },
     rebuildReportsFromStoredResults: (input) => {
       calls.rebuildReportsFromStoredResults.push(input)
       return Promise.resolve()
     },
-    runPhase1IfNeeded: (phaseParsedFiles, phaseProgress, selectedTestKeys, manifest) => {
+    runPhase1IfNeeded: (phaseParsedFiles, phaseProgress, selectedTestKeys, manifest, phaseReporter) => {
       calls.runPhase1IfNeeded.push({
         parsedTestKeys: getParsedTestKeys(phaseParsedFiles),
         progress: phaseProgress,
         selectedTestKeys: [...selectedTestKeys].toSorted(),
         manifest,
+        reporter: phaseReporter,
       })
       return Promise.resolve()
     },
@@ -198,19 +260,21 @@ function createHarness(
       calls.runPhase1bIfNeeded.count += 1
       return Promise.resolve()
     },
-    runPhase2aIfNeeded: (phaseProgress, manifest, selectedTestKeys) => {
+    runPhase2aIfNeeded: (phaseProgress, manifest, selectedTestKeys, phaseReporter) => {
       calls.runPhase2aIfNeeded.push({
         progress: phaseProgress,
         manifest,
         selectedTestKeys: [...selectedTestKeys].toSorted(),
+        reporter: phaseReporter,
       })
       return Promise.resolve(dirtyFromPhase2a)
     },
-    runPhase2bIfNeeded: (phaseProgress, phase2Version, selectedFeatureKeys) => {
+    runPhase2bIfNeeded: (phaseProgress, phase2Version, selectedFeatureKeys, phaseReporter) => {
       calls.runPhase2bIfNeeded.push({
         progress: phaseProgress,
         phase2Version,
         selectedFeatureKeys: [...selectedFeatureKeys].toSorted(),
+        reporter: phaseReporter,
       })
       return Promise.resolve(consolidatedManifest)
     },
@@ -218,15 +282,24 @@ function createHarness(
       calls.saveConsolidatedManifest.push(manifest)
       return Promise.resolve()
     },
-    runPhase3IfNeeded: (phaseProgress, selectedConsolidatedIds, selectedFeatureKeys, phaseConsolidatedManifest) => {
+    runPhase3IfNeeded: (
+      phaseProgress,
+      selectedConsolidatedIds,
+      selectedFeatureKeys,
+      phaseConsolidatedManifest,
+      phaseReporter,
+    ) => {
       calls.runPhase3IfNeeded.push({
         progress: phaseProgress,
         selectedConsolidatedIds: [...selectedConsolidatedIds].toSorted(),
         selectedFeatureKeys: [...selectedFeatureKeys].toSorted(),
         consolidatedManifest: phaseConsolidatedManifest,
+        reporter: phaseReporter,
       })
       return Promise.resolve()
     },
+    stdout: { isTTY: stdoutIsTTY },
+    isTestEnvironment,
     log: {
       log: mock((message: string) => {
         calls.logs.push(message)
@@ -238,6 +311,108 @@ function createHarness(
 }
 
 describe('behavior-audit entrypoint incremental selection', () => {
+  test('uses auto renderer config and resolves to text in non-tty environments', async () => {
+    setProgressRendererEnv(undefined)
+    const { deps, calls } = createHarness({ stdoutIsTTY: false, isTestEnvironment: false })
+
+    await runBehaviorAudit(deps)
+
+    expect(calls.createProgressReporter).toHaveLength(1)
+    const reporterInput = expectReporterInput(calls.createProgressReporter[0], {
+      renderer: 'auto',
+      isTTY: false,
+      isTestEnvironment: false,
+    })
+    expect(resolveProgressRenderer(reporterInput)).toBe('text')
+  })
+
+  test('uses auto renderer config and resolves to text in test environments', async () => {
+    setProgressRendererEnv(undefined)
+    const { deps, calls } = createHarness({ stdoutIsTTY: true, isTestEnvironment: true })
+
+    await runBehaviorAudit(deps)
+
+    expect(calls.createProgressReporter).toHaveLength(1)
+    const reporterInput = expectReporterInput(calls.createProgressReporter[0], {
+      renderer: 'auto',
+      isTTY: true,
+      isTestEnvironment: true,
+    })
+    expect(resolveProgressRenderer(reporterInput)).toBe('text')
+  })
+
+  test('uses explicit text renderer config', async () => {
+    setProgressRendererEnv('text')
+    const { deps, calls } = createHarness({ stdoutIsTTY: true, isTestEnvironment: false })
+
+    await runBehaviorAudit(deps)
+
+    expect(calls.createProgressReporter).toHaveLength(1)
+    const reporterInput = expectReporterInput(calls.createProgressReporter[0], {
+      renderer: 'text',
+      isTTY: true,
+      isTestEnvironment: false,
+    })
+    expect(resolveProgressRenderer(reporterInput)).toBe('text')
+  })
+
+  test('uses explicit listr2 renderer config', async () => {
+    setProgressRendererEnv('listr2')
+    const { deps, calls } = createHarness({ stdoutIsTTY: false, isTestEnvironment: true })
+
+    await runBehaviorAudit(deps)
+
+    expect(calls.createProgressReporter).toHaveLength(1)
+    const reporterInput = expectReporterInput(calls.createProgressReporter[0], {
+      renderer: 'listr2',
+      isTTY: false,
+      isTestEnvironment: true,
+    })
+    expect(resolveProgressRenderer(reporterInput)).toBe('text')
+  })
+
+  test('uses explicit listr2 renderer config and only resolves to listr2 when supported', async () => {
+    setProgressRendererEnv('listr2')
+    const { deps, calls } = createHarness({ stdoutIsTTY: true, isTestEnvironment: false })
+
+    await runBehaviorAudit(deps)
+
+    expect(calls.createProgressReporter).toHaveLength(1)
+    const reporterInput = expectReporterInput(calls.createProgressReporter[0], {
+      renderer: 'listr2',
+      isTTY: true,
+      isTestEnvironment: false,
+    })
+    expect(resolveProgressRenderer(reporterInput)).toBe('listr2')
+  })
+
+  test('creates one reporter per run and injects it into all phases', async () => {
+    setProgressRendererEnv('text')
+    const reporter = {
+      emit: mock((_event) => undefined),
+      end: mock(() => undefined),
+    } satisfies BehaviorAuditProgressReporter
+    const parsedFiles = createParsedFiles()
+    const expectedKeys = getParsedTestKeys(parsedFiles)
+    const { deps, calls } = createHarness({
+      parsedFiles,
+      reporter,
+      selection: createSelection({
+        phase1SelectedTestKeys: expectedKeys,
+        phase2aSelectedTestKeys: expectedKeys,
+      }),
+    })
+
+    await runBehaviorAudit(deps)
+
+    expect(calls.createProgressReporter).toHaveLength(1)
+    expect(calls.runPhase1IfNeeded[0]?.reporter).toBe(reporter)
+    expect(calls.runPhase2aIfNeeded[0]?.reporter).toBe(reporter)
+    expect(calls.runPhase2bIfNeeded[0]?.reporter).toBe(reporter)
+    expect(calls.runPhase3IfNeeded[0]?.reporter).toBe(reporter)
+    expect(reporter.end).toHaveBeenCalledTimes(1)
+  })
+
   test('runs selected work and persists the consolidated manifest', async () => {
     const parsedFiles = createParsedFiles()
     const expectedKeys = getParsedTestKeys(parsedFiles)
@@ -267,6 +442,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
         progress: phase1Call.progress,
         selectedTestKeys: expectedKeys,
         manifest: phase1Call.manifest,
+        reporter: phase1Call.reporter,
       },
     ])
     expect(calls.runPhase2aIfNeeded).toEqual([
@@ -274,6 +450,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
         progress: phase2aCall.progress,
         manifest: phase2aCall.manifest,
         selectedTestKeys: expectedKeys,
+        reporter: phase2aCall.reporter,
       },
     ])
     expect(calls.runPhase2bIfNeeded).toEqual([
@@ -281,6 +458,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
         progress: phase2bCall.progress,
         phase2Version: 'phase2-new',
         selectedFeatureKeys: [],
+        reporter: phase2bCall.reporter,
       },
     ])
     expect(calls.runPhase3IfNeeded).toEqual([
@@ -289,6 +467,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
         selectedConsolidatedIds: [],
         selectedFeatureKeys: [],
         consolidatedManifest: createConsolidatedManifest(),
+        reporter: phase3Call.reporter,
       },
     ])
     expect(calls.saveConsolidatedManifest).toEqual([createConsolidatedManifest()])
@@ -396,6 +575,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
         progress: phase2bCall.progress,
         phase2Version: 'phase2-new',
         selectedFeatureKeys: ['candidate-from-phase2a', 'candidate-from-selection'],
+        reporter: phase2bCall.reporter,
       },
     ])
     expect(calls.runPhase3IfNeeded).toEqual([
@@ -404,6 +584,7 @@ describe('behavior-audit entrypoint incremental selection', () => {
         selectedConsolidatedIds: ['tools::selected-case'],
         selectedFeatureKeys: ['candidate-from-phase2a', 'candidate-from-selection'],
         consolidatedManifest,
+        reporter: phase3Call.reporter,
       },
     ])
   })

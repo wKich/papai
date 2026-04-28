@@ -178,6 +178,16 @@ function assertPhase2aBeforePhase2b<T>(value: T | undefined, message: string): a
   assert(value !== undefined, message)
 }
 
+function createNoopProgressReporter(): {
+  readonly emit: () => void
+  readonly end: () => void
+} {
+  return {
+    emit: (): void => undefined,
+    end: (): void => undefined,
+  }
+}
+
 function createManifestTestEntry(
   input: Omit<
     ManifestTestEntry,
@@ -1082,6 +1092,7 @@ describe('behavior-audit incremental manifest', () => {
             stats: { consolidatedIdsTotal: 0, consolidatedIdsDone: 0, consolidatedIdsFailed: 0 },
           },
         }),
+      createProgressReporter: () => createNoopProgressReporter(),
       rebuildReportsFromStoredResults: () => Promise.resolve(),
       runPhase1IfNeeded: () => Promise.resolve(),
       runPhase1bIfNeeded: () => Promise.resolve(),
@@ -1100,6 +1111,8 @@ describe('behavior-audit incremental manifest', () => {
       },
       saveConsolidatedManifest: () => Promise.resolve(),
       runPhase3IfNeeded: () => Promise.resolve(),
+      stdout: { isTTY: false },
+      isTestEnvironment: true,
       log: { log: mock(() => {}) },
     }
 

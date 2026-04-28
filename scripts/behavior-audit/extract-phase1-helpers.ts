@@ -77,7 +77,7 @@ export async function writeValidBehaviorsForFile(
   testFilePath: string,
   selectedTests: readonly TestCase[],
   results: readonly ({ readonly record: ExtractedBehaviorRecord } | null)[],
-): Promise<void> {
+): Promise<string | null> {
   const valid = collectValidBehaviors(results)
   const existing = (await readExtractedFile(testFilePath)) ?? []
   const selectedTestKeySet = getSelectedTestKeySet(testFilePath, selectedTests)
@@ -89,10 +89,10 @@ export async function writeValidBehaviorsForFile(
   ]
   if (merged.length === 0) {
     await deleteFileIfPresent(extractedArtifactPathForTestFile(testFilePath))
-    return
+    return null
   }
   await writeExtractedFile(testFilePath, merged)
-  console.log(`  → wrote ${valid.length} behaviors`)
+  return `wrote ${valid.length} behaviors`
 }
 
 export function reconcileSelectedTestsAfterPersist(

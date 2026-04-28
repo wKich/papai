@@ -61,6 +61,16 @@ function makeRunPhase2bIfNeeded(
   }
 }
 
+function createNoopProgressReporter(): {
+  readonly emit: () => void
+  readonly end: () => void
+} {
+  return {
+    emit: (): void => undefined,
+    end: (): void => undefined,
+  }
+}
+
 describe('behavior-audit interrupted-run baseline', () => {
   test('interrupted first run still seeds next incremental baseline from lastStartCommit', async () => {
     const selectedKey = 'tests/tools/sample.test.ts::suite > case'
@@ -124,6 +134,7 @@ describe('behavior-audit interrupted-run baseline', () => {
         })
       },
       loadOrCreateProgress: () => Promise.resolve(progress),
+      createProgressReporter: () => createNoopProgressReporter(),
       rebuildReportsFromStoredResults: () => Promise.resolve(),
       runPhase1IfNeeded: (_parsedFiles, _progress, selectedTestKeys) => {
         runPhase1SelectedKeys.push([...selectedTestKeys].toSorted())
@@ -138,6 +149,8 @@ describe('behavior-audit interrupted-run baseline', () => {
       ),
       saveConsolidatedManifest: () => Promise.resolve(),
       runPhase3IfNeeded: () => Promise.resolve(),
+      stdout: { isTTY: false },
+      isTestEnvironment: true,
       log: { log: mock(() => {}) },
     }
 

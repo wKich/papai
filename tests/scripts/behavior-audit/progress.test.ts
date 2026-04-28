@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test'
 
+import { resetPhase1bAndBelow } from '../../../scripts/behavior-audit/progress-resets.js'
 import {
   createEmptyProgress,
   emptyPhase1b,
   emptyPhase2a,
   emptyPhase2b,
   emptyPhase3,
-  resetPhase1bAndBelow,
 } from '../../../scripts/behavior-audit/progress.js'
 
 test('emptyPhase1b returns a fresh Phase1bProgress with all-zero stats', () => {
