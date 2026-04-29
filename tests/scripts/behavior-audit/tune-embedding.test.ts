@@ -214,11 +214,14 @@ describe('tune-embedding wiring', () => {
     mock.restore()
   })
 
-  test('limits clustering input to the last requested profile size', async () => {
+  test('profiles the requested sample size but keeps downstream clustering on the full input', async () => {
     const extractedDir = await makeExtractedDir()
-    let clusteredLength = 0
-    const buildSizedClustersStub = createProfiledClustersStub((normalized) => {
-      clusteredLength = normalized.length
+    const clusteredLengths: number[] = []
+    const receivedProfileFlags: boolean[] = []
+    const logSpy = spyOn(console, 'log').mockImplementation(() => {})
+    const buildSizedClustersStub = createProfiledClustersStub((normalized, options) => {
+      clusteredLengths.push(normalized.length)
+      receivedProfileFlags.push(JSON.stringify(options) === '{"profile":true}')
     })
 
     await runTuneEmbedding(['--profile-clustering', '--profile-sizes', '1,2,3'], {
@@ -258,7 +261,13 @@ describe('tune-embedding wiring', () => {
       ): readonly (readonly number[])[] => clusters,
     })
 
-    expect(clusteredLength).toBe(3)
+    const loggedOutput = logSpy.mock.calls.flat().join('\n')
+
+    expect(receivedProfileFlags).toEqual([true, false])
+    expect(clusteredLengths).toEqual([3, 4])
+    expect(loggedOutput).toContain('[profile] clustering linkage=single threshold=0.92 size=3')
+
+    mock.restore()
   })
 
   test('forwards gapThreshold into subdivideOversizedClusters', async () => {

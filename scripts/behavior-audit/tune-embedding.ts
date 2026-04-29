@@ -123,13 +123,36 @@ function buildTuneClusters(
     `[tune] Clustering at threshold=${params.threshold}, minClusterSize=${params.minClusterSize}, linkage=${params.linkage}, gap=${params.gapThreshold}, maxClusterSize=${params.maxClusterSize}...`,
   )
 
-  const clusteringInput = selectClusteringInput(normalized, params.profileSizes)
-  const clusterResult = buildTuneClusterResult(clusteringInput, params, deps)
-  const clusters = isProfiledClusters(clusterResult) ? clusterResult.clusters : clusterResult
-  if (isProfiledClusters(clusterResult)) {
-    console.log(formatClusteringProfile(clusterResult.profile))
+  if (!params.profileClustering) {
+    return finalizeTuneClusters(normalized, buildTuneClusterResult(normalized, params, deps), params, deps)
   }
 
+  const profilingInput = selectClusteringInput(normalized, params.profileSizes)
+  const profilingResult = buildTuneClusterResult(profilingInput, params, deps)
+  if (isProfiledClusters(profilingResult)) {
+    console.log(formatClusteringProfile(profilingResult.profile))
+  }
+  const fullResult =
+    params.profileSizes.length > 0
+      ? deps.buildClustersAdvanced(
+          normalized,
+          params.threshold,
+          params.minClusterSize,
+          params.linkage,
+          params.gapThreshold,
+        )
+      : profilingResult
+
+  return finalizeTuneClusters(normalized, fullResult, params, deps)
+}
+
+function finalizeTuneClusters(
+  normalized: readonly Float64Array[],
+  clusterResult: readonly (readonly number[])[] | ProfiledClusters,
+  params: TuneParams,
+  deps: TuneEmbeddingDeps,
+): readonly (readonly number[])[] {
+  const clusters = isProfiledClusters(clusterResult) ? clusterResult.clusters : clusterResult
   return params.maxClusterSize > 0
     ? deps.subdivideOversizedClusters(
         normalized,
