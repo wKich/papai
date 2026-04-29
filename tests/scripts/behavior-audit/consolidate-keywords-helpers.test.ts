@@ -1,6 +1,15 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
+  activeIndices,
+  buildCondensedDistanceMatrix,
+  condensedIndex,
+  createActiveState,
+  getDistance,
+  isActive,
+  setDistance,
+} from '../../../scripts/behavior-audit/consolidate-keywords-advanced-clustering.js'
+import {
   averageLinkageSimilarity,
   buildClustersAdvanced,
   buildClusters,
@@ -287,6 +296,50 @@ describe('buildClustersAdvanced gap threshold', () => {
       expect(normalizeClusters(withGap)).toEqual([[3, 4]])
     },
   )
+})
+
+describe('nearest-neighbor-chain distance helpers', () => {
+  test('condensedIndex maps unordered pairs into condensed matrix slots', () => {
+    expect(condensedIndex(0, 1, 4)).toBe(0)
+    expect(condensedIndex(0, 3, 4)).toBe(2)
+    expect(condensedIndex(1, 3, 4)).toBe(4)
+    expect(condensedIndex(3, 1, 4)).toBe(4)
+  })
+
+  test('buildCondensedDistanceMatrix stores cosine distances symmetrically', () => {
+    const embeddings = makeNormalized([
+      [1, 0],
+      [0, 1],
+      [1, 1],
+    ])
+
+    const matrix = buildCondensedDistanceMatrix(embeddings)
+
+    expect(matrix.n).toBe(3)
+    expect(matrix.values).toHaveLength(3)
+    expect(getDistance(matrix, 0, 0)).toBe(0)
+    expect(getDistance(matrix, 0, 1)).toBeCloseTo(1)
+    expect(getDistance(matrix, 1, 0)).toBeCloseTo(1)
+    expect(getDistance(matrix, 0, 2)).toBeCloseTo(1 - 1 / Math.sqrt(2))
+
+    setDistance(matrix, 2, 0, 0.25)
+    expect(getDistance(matrix, 0, 2)).toBeCloseTo(0.25)
+  })
+
+  test('active state tracks active indexes and cluster sizes', () => {
+    const state = createActiveState(3)
+
+    expect(activeIndices(state)).toEqual([0, 1, 2])
+    expect(isActive(state, 1)).toBe(true)
+
+    state.active[1] = 0
+    state.sizes[0] = 2
+    state.sizes[1] = 0
+
+    expect(activeIndices(state)).toEqual([0, 2])
+    expect(isActive(state, 1)).toBe(false)
+    expect(Array.from(state.sizes)).toEqual([2, 0, 1])
+  })
 })
 
 describe('subdivideOversizedClusters', () => {

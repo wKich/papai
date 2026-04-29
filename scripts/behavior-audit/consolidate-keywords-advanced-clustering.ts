@@ -1,7 +1,13 @@
 import {
-  averageLinkageSimilarity,
+  filterClusters,
+  findBestAgglomerativeMerge,
+  findBestAgglomerativeMergeWithGap,
+  getLinkageSimilarity,
+  mergeClusters,
+} from './consolidate-keywords-advanced-clustering-helpers.js'
+import type { AgglomerativeMerge, Cluster } from './consolidate-keywords-advanced-clustering-helpers.js'
+import {
   buildClustersNormalized,
-  completeLinkageSimilarity,
   dotProduct,
   findWeakestInternalSimilarity,
   mapToGlobalClusters,
@@ -9,109 +15,61 @@ import {
 } from './consolidate-keywords-clustering.js'
 import type { LinkageMode } from './consolidate-keywords-clustering.js'
 
-type Cluster = readonly number[]
-type LinkageSimilarity = (
-  embeddings: readonly Float64Array[],
-  clusterA: readonly number[],
-  clusterB: readonly number[],
-) => number
-type AgglomerativeMerge = { readonly pair: readonly [number, number]; readonly similarity: number } | undefined
-
-function mergeClusters(clusters: readonly Cluster[], mergePair: readonly [number, number]): readonly Cluster[] {
-  const [bestA, bestB] = mergePair
-  const clusterA = clusters[bestA]
-  const clusterB = clusters[bestB]
-  if (clusterA === undefined || clusterB === undefined) return clusters
-  return clusters.flatMap((cluster, index) => {
-    if (index === bestA) {
-      return [[...clusterA, ...clusterB]]
-    }
-    return index === bestB ? [] : [cluster]
-  })
+export type MutableDistanceMatrix = {
+  readonly n: number
+  readonly values: Float32Array
+}
+export type ActiveState = {
+  readonly active: Uint8Array
+  readonly sizes: Uint32Array
 }
 
-function filterClusters(clusters: readonly Cluster[], minClusterSize: number): readonly Cluster[] {
-  return clusters.filter((cluster) => cluster.length >= minClusterSize)
+export function condensedIndex(i: number, j: number, n: number): number {
+  const a = Math.min(i, j)
+  const b = Math.max(i, j)
+  return (a * (2 * n - a - 1)) / 2 + (b - a - 1)
 }
 
-function getLinkageSimilarity(linkage: Exclude<LinkageMode, 'single'>): LinkageSimilarity {
-  return linkage === 'average' ? averageLinkageSimilarity : completeLinkageSimilarity
+export function getDistance(matrix: MutableDistanceMatrix, i: number, j: number): number {
+  if (i === j) return 0
+  const value = matrix.values[condensedIndex(i, j, matrix.n)]
+  if (value === undefined) return Infinity
+  return value
 }
 
-function findBestAgglomerativeMerge(
-  clusters: readonly Cluster[],
-  threshold: number,
-  linkageSimilarity: LinkageSimilarity,
-  normalizedEmbeddings: readonly Float64Array[],
-): AgglomerativeMerge {
-  let bestSimilarity = Number.NEGATIVE_INFINITY
-  let bestPair: readonly [number, number] | undefined
-  for (let i = 0; i < clusters.length; i++) {
-    const clusterA = clusters[i]
-    if (clusterA === undefined) continue
-    for (let j = i + 1; j < clusters.length; j++) {
-      const clusterB = clusters[j]
-      if (clusterB === undefined) continue
-      const similarity = linkageSimilarity(normalizedEmbeddings, clusterA, clusterB)
-      if (similarity >= threshold && similarity > bestSimilarity) {
-        bestSimilarity = similarity
-        bestPair = [i, j]
-      }
+export function setDistance(matrix: MutableDistanceMatrix, i: number, j: number, distance: number): void {
+  if (i === j) return
+  matrix.values[condensedIndex(i, j, matrix.n)] = distance
+}
+
+export function buildCondensedDistanceMatrix(normalizedEmbeddings: readonly Float64Array[]): MutableDistanceMatrix {
+  const n = normalizedEmbeddings.length
+  const values = new Float32Array((n * (n - 1)) / 2)
+  for (let i = 0; i < n; i++) {
+    const embI = normalizedEmbeddings[i]
+    if (embI === undefined) continue
+    for (let j = i + 1; j < n; j++) {
+      const embJ = normalizedEmbeddings[j]
+      const similarity = embJ === undefined ? 0 : dotProduct(embI, embJ)
+      values[condensedIndex(i, j, n)] = 1 - similarity
     }
   }
-  return bestPair === undefined ? undefined : { pair: bestPair, similarity: bestSimilarity }
+  return { n, values }
 }
 
-function findBestAgglomerativeMergeWithGap(
-  clusters: readonly Cluster[],
-  threshold: number,
-  linkageSimilarity: LinkageSimilarity,
-  normalizedEmbeddings: readonly Float64Array[],
-  gapThreshold: number,
-): AgglomerativeMerge {
-  let bestSimilarity = Number.NEGATIVE_INFINITY
-  let bestPair: readonly [number, number] | undefined
-  for (let i = 0; i < clusters.length; i++) {
-    const clusterA = clusters[i]
-    if (clusterA === undefined) continue
-    for (let j = i + 1; j < clusters.length; j++) {
-      const clusterB = clusters[j]
-      if (clusterB === undefined) continue
-      const similarity = linkageSimilarity(normalizedEmbeddings, clusterA, clusterB)
-      if (similarity < threshold || similarity <= bestSimilarity) continue
-
-      const nextBestSimilarity = findBestAlternativeSimilarity(
-        clusters,
-        [i, j],
-        linkageSimilarity,
-        normalizedEmbeddings,
-      )
-      if (similarity - nextBestSimilarity < gapThreshold) continue
-
-      bestSimilarity = similarity
-      bestPair = [i, j]
-    }
+export function createActiveState(n: number): ActiveState {
+  return {
+    active: Uint8Array.from({ length: n }, () => 1),
+    sizes: Uint32Array.from({ length: n }, () => 1),
   }
-  return bestPair === undefined ? undefined : { pair: bestPair, similarity: bestSimilarity }
 }
 
-function findBestAlternativeSimilarity(
-  clusters: readonly Cluster[],
-  mergePair: readonly [number, number],
-  linkageSimilarity: LinkageSimilarity,
-  normalizedEmbeddings: readonly Float64Array[],
-): number {
-  const clusterA = clusters[mergePair[0]]
-  const clusterB = clusters[mergePair[1]]
-  if (clusterA === undefined || clusterB === undefined) return Number.NEGATIVE_INFINITY
-  return clusters.reduce((bestSimilarity, cluster, index) => {
-    if (index === mergePair[0] || index === mergePair[1]) return bestSimilarity
-    return Math.max(
-      bestSimilarity,
-      linkageSimilarity(normalizedEmbeddings, clusterA, cluster),
-      linkageSimilarity(normalizedEmbeddings, clusterB, cluster),
-    )
-  }, Number.NEGATIVE_INFINITY)
+export function activeIndices(state: ActiveState): readonly number[] {
+  return Array.from(state.active.entries()).flatMap(([index, marker]) => (marker === 1 ? [index] : []))
+}
+
+export function isActive(state: ActiveState, index: number): boolean {
+  return state.active[index] === 1
 }
 
 function buildCandidatePairs(
