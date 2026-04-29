@@ -51,7 +51,7 @@ function toolSearchText(tool: ToolMetadata): string {
 function splitTerms(query: string): readonly string[] {
   return query
     .trim()
-    .split(' ')
+    .split(/\s+/u)
     .map((term) => term.trim())
     .filter((term) => term.length > 0)
 }
@@ -108,11 +108,12 @@ export function executeProxyStatus(metadata: readonly ToolMetadata[]): ProxyText
 export function executeProxySearch(
   metadata: readonly ToolMetadata[],
   query: string,
-  regex: boolean,
+  regex: boolean | undefined,
   includeSchemas: boolean | undefined,
 ): ProxyTextResult {
+  const useRegex = regex === true
   const terms = splitTerms(query)
-  if (!regex && terms.length === 0) {
+  if (!useRegex && terms.length === 0) {
     return textResult('Search query cannot be empty. Provide one or more words from the tool name or purpose.', {
       mode: 'search',
       error: 'empty_query',
@@ -120,12 +121,16 @@ export function executeProxySearch(
     })
   }
 
-  const pattern = buildSearchPattern(query, regex)
+  const pattern = buildSearchPattern(query, useRegex)
   if (!pattern.ok) return pattern.result
 
   const includeSchema = includeSchemas !== false
   const matches = metadata.filter((toolMetadata) => pattern.matches(toolMetadata))
-  return textResult(matches.map((toolMetadata) => renderTool(toolMetadata, includeSchema)).join('\n\n'), {
+  const text =
+    matches.length === 0
+      ? `No tools found for search query "${query}". Try different words from the tool name or purpose.`
+      : matches.map((toolMetadata) => renderTool(toolMetadata, includeSchema)).join('\n\n')
+  return textResult(text, {
     mode: 'search',
     matches: matches.map((toolMetadata) => toolMetadata.name),
     count: matches.length,

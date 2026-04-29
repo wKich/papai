@@ -86,6 +86,37 @@ describe('tool-proxy-modes', () => {
     expect(expectFirstText(result)).not.toContain('query (string)')
   })
 
+  it('returns a readable no-match message when optional regex is omitted', () => {
+    const runtime = buildRuntime({
+      search_tasks: tool({
+        description: 'Search task titles',
+        inputSchema: z.object({ query: z.string().describe('Search text') }),
+        execute: () => [],
+      }),
+    })
+
+    const result = executeProxySearch(runtime.metadata, 'missing', undefined, false)
+
+    expect(result.details).toMatchObject({ mode: 'search', count: 0, matches: [], query: 'missing' })
+    expect(expectFirstText(result)).toContain('No tools found')
+    expect(expectFirstText(result)).toContain('missing')
+  })
+
+  it('splits plain search terms on whitespace when optional regex is omitted', () => {
+    const runtime = buildRuntime({
+      add_comment: tool({
+        description: 'Comment on a task',
+        inputSchema: z.object({ body: z.string() }),
+        execute: () => ({}),
+      }),
+    })
+
+    const result = executeProxySearch(runtime.metadata, 'comment	find', undefined, false)
+
+    expect(result.details).toMatchObject({ mode: 'search', count: 1, matches: ['add_comment'] })
+    expect(expectFirstText(result)).toContain('add_comment')
+  })
+
   it('returns a clear empty-query error', () => {
     const result = executeProxySearch([], '   ', false, true)
 
