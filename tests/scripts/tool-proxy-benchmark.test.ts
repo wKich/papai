@@ -58,6 +58,18 @@ describe('tool-proxy-benchmark utilities', () => {
     }
   })
 
+  it('rejects literal empty model list from environment defaults', () => {
+    const envName = 'TOOL_PROXY_BENCHMARK_MODELS'
+    const previousModels = process.env[envName]
+    process.env[envName] = ''
+
+    try {
+      expect(() => parseBenchmarkArgs([])).toThrow('Invalid non-empty model list for TOOL_PROXY_BENCHMARK_MODELS')
+    } finally {
+      restoreToolProxyBenchmarkModels(previousModels)
+    }
+  })
+
   it('rejects unknown flags and positional args', () => {
     expect(() => parseBenchmarkArgs(['--unknown', 'value'])).toThrow('Unknown flag: --unknown')
     expect(() => parseBenchmarkArgs(['model-a'])).toThrow('Unexpected positional argument: model-a')

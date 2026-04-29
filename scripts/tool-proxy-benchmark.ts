@@ -36,8 +36,9 @@ const DEFAULT_OUTPUT_PATH = 'docs/superpowers/plans/tool-proxy-benchmark-results
 const SUMMARY_HEADER = '| Model | Mode | Runs | Success Rate | Avg Tool Calls | Avg Steps | Failures |'
 
 const present = (value: string | undefined): value is string => value !== undefined && value.length > 0
+const configured = (value: string | undefined): value is string => value !== undefined
 const firstEnv = (names: readonly string[], fallback: string): string => {
-  const value = names.map((name) => process.env[name]).find((candidate) => present(candidate))
+  const value = names.map((name) => process.env[name]).find((candidate) => configured(candidate))
   if (value === undefined) return fallback
   return value
 }
