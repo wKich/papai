@@ -1,0 +1,48 @@
+import { describe, expect, test } from 'bun:test'
+
+import {
+  createClusteringProfile,
+  formatClusteringProfile,
+  incrementClusteringCounter,
+  recordClusteringTiming,
+} from '../../../scripts/behavior-audit/clustering-profile.js'
+
+describe('clustering profile helpers', () => {
+  test('recordClusteringTiming updates one phase immutably', () => {
+    const initial = createClusteringProfile({ enabled: true, linkage: 'average', threshold: 0.9, size: 3 })
+    const updated = recordClusteringTiming(initial, 'nearestNeighborMs', 12.5)
+
+    expect(initial.timings.nearestNeighborMs).toBe(0)
+    expect(updated.timings.nearestNeighborMs).toBe(12.5)
+    expect(updated.timings.matrixBuildMs).toBe(0)
+  })
+
+  test('incrementClusteringCounter updates one counter immutably', () => {
+    const initial = createClusteringProfile({ enabled: true, linkage: 'complete', threshold: 0.91, size: 4 })
+    const updated = incrementClusteringCounter(initial, 'nearestNeighborCalls', 7)
+
+    expect(initial.counters.nearestNeighborCalls).toBe(0)
+    expect(updated.counters.nearestNeighborCalls).toBe(7)
+    expect(updated.counters.merges).toBe(0)
+  })
+
+  test('formatClusteringProfile prints stable timing and counter lines', () => {
+    const profile = incrementClusteringCounter(
+      recordClusteringTiming(
+        createClusteringProfile({ enabled: true, linkage: 'average', threshold: 0.9, size: 10 }),
+        'matrixBuildMs',
+        3.25,
+      ),
+      'distanceReads',
+      42,
+    )
+
+    expect(formatClusteringProfile(profile)).toEqual(
+      [
+        '[profile] clustering linkage=average threshold=0.9 size=10',
+        '[profile] timings matrixBuildMs=3.25 nearestNeighborMs=0 mergeUpdateMs=0 gapCheckMs=0 candidateScanMs=0 subdivisionMs=0 totalMs=0',
+        '[profile] counters activeListBuilds=0 activeItemsVisited=0 nearestNeighborCalls=0 distanceReads=42 distanceWrites=0 gapChecks=0 blockedPairs=0 mergeCandidatesScanned=0 merges=0 subdivisions=0 maxActiveClusters=10 maxClusterSize=1',
+      ].join('\n'),
+    )
+  })
+})
