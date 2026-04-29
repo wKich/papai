@@ -126,6 +126,15 @@ describe('tool-proxy-modes', () => {
     )
   })
 
+  it('returns a clear empty-query error for empty regex searches', () => {
+    const result = executeProxySearch([], '   ', true, false)
+
+    expect(result.details).toMatchObject({ mode: 'search', error: 'empty_query' })
+    expect(expectFirstText(result)).toBe(
+      'Search query cannot be empty. Provide one or more words from the tool name or purpose.',
+    )
+  })
+
   it('supports regex search and reports invalid regex patterns', () => {
     const runtime = buildRuntime({
       list_tasks: tool({
@@ -173,6 +182,41 @@ describe('tool-proxy-modes', () => {
       get_task: tool({
         description: 'Get task',
         inputSchema: z.object({ taskId: z.string() }),
+        execute,
+      }),
+    })
+
+    const result = await executeProxyCall(runtime, 'get_task', '{"taskId":"task-1"}', toolOptions)
+
+    expect(result).toEqual({ ok: true, taskId: 'task-1' })
+    expect(execute).toHaveBeenCalledWith({ taskId: 'task-1' }, toolOptions)
+  })
+
+  it('validates proxied args against the selected tool schema before execution', async () => {
+    const execute = mock(({ taskId }: { readonly taskId: string }) => ({ ok: true, taskId }))
+    const runtime = buildRuntime({
+      get_task: tool({
+        description: 'Get task',
+        inputSchema: z.object({ taskId: z.string().describe('Task identifier') }),
+        execute,
+      }),
+    })
+
+    const result = await executeProxyCall(runtime, 'get_task', '{}', toolOptions)
+
+    expect(execute).not.toHaveBeenCalled()
+    expectProxyTextResult(result)
+    expect(result.details).toMatchObject({ mode: 'call', error: 'invalid_tool_args', tool: 'get_task' })
+    expect(expectFirstText(result)).toContain('Invalid arguments for tool get_task')
+    expect(expectFirstText(result)).toContain('taskId (string) *required* - Task identifier')
+  })
+
+  it('executes proxied tools when args satisfy the selected tool schema', async () => {
+    const execute = mock(({ taskId }: { readonly taskId: string }) => ({ ok: true, taskId }))
+    const runtime = buildRuntime({
+      get_task: tool({
+        description: 'Get task',
+        inputSchema: z.object({ taskId: z.string().describe('Task identifier') }),
         execute,
       }),
     })

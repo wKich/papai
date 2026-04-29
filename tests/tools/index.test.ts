@@ -225,7 +225,7 @@ describe('makeTools', () => {
         args: JSON.stringify({
           prompt: 'Ping me later',
           schedule: { fire_at: { date, time } },
-          delivery: { audience: 'personal' },
+          delivery: { audience: 'personal', mention_user_ids: ['user-1'] },
           execution: { mode: 'context', delivery_brief: 'Personal reminder in thread' },
         }),
       },

@@ -26,6 +26,10 @@ type ParsedArgsResult =
   | { readonly ok: true; readonly value: Readonly<Record<string, unknown>> }
   | { readonly ok: false; readonly error: 'invalid_args_json' | 'invalid_args_type'; readonly message: string }
 
+type SafeParsableSchema = {
+  readonly safeParse: (value: unknown) => { readonly success: boolean }
+}
+
 function textResult(text: string, details: Readonly<Record<string, unknown>>): ProxyTextResult {
   return { content: [{ type: 'text', text }], details }
 }
@@ -36,6 +40,10 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 
 function isExecutableTool(value: unknown): value is ExecutableTool {
   return isRecord(value) && typeof value['execute'] === 'function'
+}
+
+function isSafeParsableSchema(value: unknown): value is SafeParsableSchema {
+  return isRecord(value) && typeof value['safeParse'] === 'function'
 }
 
 function renderTool(metadata: ToolMetadata, includeSchema: boolean): string {
@@ -113,7 +121,7 @@ export function executeProxySearch(
 ): ProxyTextResult {
   const useRegex = regex === true
   const terms = splitTerms(query)
-  if (!useRegex && terms.length === 0) {
+  if (terms.length === 0) {
     return textResult('Search query cannot be empty. Provide one or more words from the tool name or purpose.', {
       mode: 'search',
       error: 'empty_query',
@@ -165,6 +173,35 @@ function buildSearchPattern(
   }
 }
 
+function validateArgsAgainstSchema(
+  schema: unknown,
+  args: Readonly<Record<string, unknown>>,
+): { readonly ok: true } | { readonly ok: false } {
+  if (!isSafeParsableSchema(schema)) return { ok: true }
+
+  try {
+    const result = schema.safeParse(args)
+    return result.success ? { ok: true } : { ok: false }
+  } catch {
+    return { ok: true }
+  }
+}
+
+function invalidToolArgsResult(requestedToolName: string, resolvedToolName: string, schema: unknown): ProxyTextResult {
+  const expectedSchema = formatToolSchema(schema)
+  return textResult(
+    [`Invalid arguments for tool ${resolvedToolName}. Expected parameters:`, expectedSchema].join('\n'),
+    {
+      mode: 'call',
+      error: 'invalid_tool_args',
+      tool: requestedToolName,
+      requestedTool: requestedToolName,
+      resolvedTool: resolvedToolName,
+      expectedSchema,
+    },
+  )
+}
+
 export function executeProxyDescribe(metadata: readonly ToolMetadata[], toolName: string): ProxyTextResult {
   const toolMetadata = findToolMetadata(metadata, toolName)
   if (toolMetadata === undefined) return missingToolResult('describe', toolName)
@@ -202,6 +239,9 @@ export function executeProxyCall(
       },
     )
   }
+
+  const validation = validateArgsAgainstSchema(toolMetadata.inputSchema, parsedArgs.value)
+  if (!validation.ok) return invalidToolArgsResult(toolName, toolMetadata.name, toolMetadata.inputSchema)
 
   return selectedTool.execute(parsedArgs.value, options)
 }
