@@ -45,6 +45,7 @@
     "changelog:preview": "git-cliff --dry-run",
     "changelog:generate": "git-cliff -o CHANGELOG.md",
     "audit:behavior": "bun scripts/behavior-audit/index.ts",
+    "audit:behavior:profile-clustering": "bun scripts/behavior-audit/profile-clustering.ts",
     "plan-adr-workflow": "bun scripts/plan-adr-workflow.ts",
     "codeindex:index": "bun run codeindex/src/cli.ts index",
     "codeindex:reindex": "bun run codeindex/src/cli.ts reindex",
