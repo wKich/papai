@@ -1,10 +1,47 @@
 import { describe, expect, it } from 'bun:test'
 
+import type { ToolExecutionOptions, ToolSet } from 'ai'
+
+import { createBenchmarkStore, toolsForMode } from '../../scripts/tool-proxy-benchmark-scenarios.js'
 import {
   evaluateBenchmarkScenario,
   parseBenchmarkArgs,
   summarizeBenchmarkResults,
 } from '../../scripts/tool-proxy-benchmark.js'
+import { getToolExecutor } from '../utils/test-helpers.js'
+
+type ProxyTextResult = {
+  readonly content: readonly { readonly type: 'text'; readonly text: string }[]
+  readonly details: Readonly<Record<string, unknown>>
+}
+
+const toolOptions: ToolExecutionOptions = { toolCallId: 'benchmark-proxy-call-1', messages: [] }
+
+const isProxyTextResult = (value: unknown): value is ProxyTextResult => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  return 'content' in value && 'details' in value
+}
+
+const proxyTool = (tools: ToolSet): ToolSet[string] => {
+  const proxy = tools['papai_tool']
+  expect(proxy).toBeDefined()
+  if (proxy === undefined) throw new Error('Expected papai_tool to be available')
+  return proxy
+}
+
+const expectProxyTextResult = (value: unknown): ProxyTextResult => {
+  expect(value).toBeObject()
+  expect(value).toHaveProperty('content')
+  expect(value).toHaveProperty('details')
+  if (!isProxyTextResult(value)) throw new Error('Expected proxy text result')
+  return value
+}
+
+const firstProxyText = (value: ProxyTextResult): string => {
+  const first = value.content[0]
+  if (first === undefined) throw new Error('Expected proxy result text content')
+  return first.text
+}
 
 const restoreToolProxyBenchmarkModels = (value: string | undefined): void => {
   if (value === undefined) {
@@ -253,5 +290,40 @@ describe('tool-proxy-benchmark utilities', () => {
         toolCalls: [],
       }),
     ).toEqual({ success: false, failureCategory: 'confirmation_error' })
+  })
+
+  it('exposes meaningful benchmark fake tool fields through proxy metadata', async () => {
+    const store = createBenchmarkStore()
+    const tools = toolsForMode('proxy', store)
+    const proxy = proxyTool(tools)
+    const execute = getToolExecutor(proxy)
+
+    const createTask = expectProxyTextResult(await execute({ describe: 'create_task' }, toolOptions))
+    expect(firstProxyText(createTask)).toContain('title (string) *required*')
+
+    const addCommentDescription = expectProxyTextResult(await execute({ describe: 'add_comment' }, toolOptions))
+    expect(firstProxyText(addCommentDescription)).toContain('taskId (string) *required*')
+    expect(firstProxyText(addCommentDescription)).toContain('comment (string) *required*')
+
+    const addCommentSearch = expectProxyTextResult(
+      await execute({ search: 'comment', includeSchemas: true }, toolOptions),
+    )
+    expect(firstProxyText(addCommentSearch)).toContain('add_comment')
+    expect(firstProxyText(addCommentSearch)).toContain('taskId (string) *required*')
+    expect(firstProxyText(addCommentSearch)).toContain('comment (string) *required*')
+  })
+
+  it('rejects invalid fake tool proxy args without mutating comments', async () => {
+    const store = createBenchmarkStore()
+    const tools = toolsForMode('proxy', store)
+    const proxy = proxyTool(tools)
+
+    const result = expectProxyTextResult(await getToolExecutor(proxy)({ tool: 'add_comment', args: '{}' }, toolOptions))
+
+    expect(result.details).toMatchObject({ mode: 'call', error: 'invalid_tool_args', tool: 'add_comment' })
+    const task = store.tasks.get('task-1')
+    expect(task).toBeDefined()
+    expect(task!['comments']).toEqual([])
+    expect(store.toolCalls).toEqual([])
   })
 })

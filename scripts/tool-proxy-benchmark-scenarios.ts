@@ -11,7 +11,6 @@ export type BenchmarkScenarioSnapshot = Readonly<{ tasks: readonly TaskRecord[];
 export type BenchmarkStore = { readonly tasks: Map<string, TaskRecord>; readonly toolCalls: string[]; nextId: number }
 export type BenchmarkScenario = Readonly<{ id: string; prompt: string }>
 
-const toolSchema = z.record(z.string(), z.unknown())
 const toolNames = [
   'create_task',
   'search_tasks',
@@ -22,6 +21,37 @@ const toolNames = [
   'web_lookup',
   'delete_task',
 ] as const
+type BenchmarkToolName = (typeof toolNames)[number]
+const toolSchemas: Readonly<Record<BenchmarkToolName, z.ZodType<Readonly<Record<string, unknown>>>>> = {
+  create_task: z.object({
+    title: z.string().describe('Task title to create.'),
+    description: z.string().optional().describe('Optional task description.'),
+  }),
+  search_tasks: z.object({
+    query: z.string().describe('Search query for task titles.'),
+  }),
+  update_task: z.object({
+    taskId: z.string().describe('Task identifier to update.'),
+    status: z.string().optional().describe('Optional status to apply.'),
+    title: z.string().optional().describe('Optional replacement task title.'),
+  }),
+  add_comment: z.object({
+    taskId: z.string().describe('Task identifier receiving the comment.'),
+    comment: z.string().describe('Comment text to append.'),
+  }),
+  assign_user: z.object({
+    taskId: z.string().describe('Task identifier to assign.'),
+    username: z.string().describe('Username to assign to the task.'),
+  }),
+  get_current_time: z.object({}),
+  web_lookup: z.object({
+    topic: z.string().describe('Topic to look up.'),
+  }),
+  delete_task: z.object({
+    taskId: z.string().describe('Task identifier to delete.'),
+    confirm: z.boolean().optional().describe('Whether deletion has explicit confirmation.'),
+  }),
+}
 
 const evaluation = (
   success: boolean,
@@ -123,10 +153,10 @@ const patchTask = (
   return updated
 }
 
-const fakeTool = (store: BenchmarkStore, name: (typeof toolNames)[number]): ToolSet[string] =>
+const fakeTool = (store: BenchmarkStore, name: BenchmarkToolName): ToolSet[string] =>
   tool({
     description: `Benchmark ${name} tool.`,
-    inputSchema: toolSchema,
+    inputSchema: toolSchemas[name],
     execute: (input) => executeFakeTool(store, name, input),
   })
 
