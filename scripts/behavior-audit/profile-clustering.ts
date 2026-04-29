@@ -98,7 +98,7 @@ function parseArgsRecursive(args: readonly string[], index: number, params: Benc
     return parseArgsRecursive(args, index + 2, { ...params, outputPath: flagValue })
   }
   if (flag.startsWith('--')) {
-    throw new TypeError(value === undefined ? `Missing value for ${flag}` : `Unknown flag: ${flag}`)
+    throw new TypeError(`Unknown flag: ${flag}`)
   }
   throw new TypeError(`Unexpected positional argument: ${flag}`)
 }
