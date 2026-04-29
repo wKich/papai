@@ -342,6 +342,35 @@ describe('buildClustersAdvanced gap threshold', () => {
     expect(withGap).toEqual([])
   })
 
+  test('single linkage gap considers alternatives already inside current clusters', () => {
+    const embeddings = [
+      [1, 0, 0],
+      [0.99, 0.14106735979665894, 0],
+      [0.92, 0.13610519136160038, 0.3675260220507143],
+      [0, 1, 0],
+    ].map((vector) => new Float64Array(vector))
+
+    const withoutGap = buildClustersAdvanced(embeddings, 0.9, 2, 'single', 0)
+    const withGap = buildClustersAdvanced(embeddings, 0.9, 2, 'single', 0.05)
+
+    expect(normalizeClusters(withoutGap)).toEqual([[0, 1, 2]])
+    expect(normalizeClusters(withGap)).toEqual([[0, 1]])
+  })
+
+  test('single linkage gap rejection does not stop later unambiguous pairs', () => {
+    const embeddings = makeNormalized([
+      [1, 0, 0],
+      [0.96, 0.28, 0],
+      [0.95, 0.31, 0],
+      [0, 1, 0],
+      [0, 0.99, 0.1],
+    ])
+
+    const clusters = buildClustersAdvanced(embeddings, 0.9, 2, 'single', 0.05)
+
+    expect(normalizeClusters(clusters)).toEqual([[3, 4]])
+  })
+
   test.each<LinkageMode>(['average', 'complete'])(
     '%s linkage gap threshold blocks ambiguous first merge',
     (linkage) => {

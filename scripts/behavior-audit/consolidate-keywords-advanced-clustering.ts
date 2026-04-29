@@ -65,15 +65,16 @@ function findClusterIndex(clusters: readonly Cluster[], item: number): number {
   return clusters.findIndex((cluster) => cluster.includes(item))
 }
 
-function findNextBestSimilarity(
+function findNextBestPairwiseSimilarity(
   normalizedEmbeddings: readonly Float64Array[],
   item: number,
-  clusterI: readonly number[],
-  clusterJ: readonly number[],
+  pairedItem: number,
 ): number {
-  return normalizedEmbeddings.reduce((bestSimilarity, _, otherIndex) => {
-    if (clusterI.includes(otherIndex) || clusterJ.includes(otherIndex)) return bestSimilarity
-    return Math.max(bestSimilarity, dotProduct(normalizedEmbeddings[item]!, normalizedEmbeddings[otherIndex]!))
+  return normalizedEmbeddings.reduce((bestSimilarity, embedding, otherIndex) => {
+    if (otherIndex === item || otherIndex === pairedItem) return bestSimilarity
+    const itemEmbedding = normalizedEmbeddings[item]
+    if (itemEmbedding === undefined) return bestSimilarity
+    return Math.max(bestSimilarity, dotProduct(itemEmbedding, embedding))
   }, Number.NEGATIVE_INFINITY)
 }
 
@@ -94,8 +95,8 @@ function buildClustersSingleWithGap(
     const clusterJ = clusters[clusterIndexJ]
     if (clusterI === undefined || clusterJ === undefined) continue
 
-    const gapI = similarity - findNextBestSimilarity(normalizedEmbeddings, itemI, clusterI, clusterJ)
-    const gapJ = similarity - findNextBestSimilarity(normalizedEmbeddings, itemJ, clusterI, clusterJ)
+    const gapI = similarity - findNextBestPairwiseSimilarity(normalizedEmbeddings, itemI, itemJ)
+    const gapJ = similarity - findNextBestPairwiseSimilarity(normalizedEmbeddings, itemJ, itemI)
     if (gapI < gapThreshold || gapJ < gapThreshold) continue
 
     clusters = mergeClusters(clusters, [clusterIndexI, clusterIndexJ])
