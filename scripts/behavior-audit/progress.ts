@@ -24,6 +24,8 @@ export interface Phase1bProgress {
   linkage: LinkageMode
   maxClusterSize: number
   gapThreshold: number
+  embeddingModel: string
+  embeddingCachePath: string | null
   stats: {
     slugsBefore: number
     slugsAfter: number
@@ -90,6 +92,8 @@ export function emptyPhase1b(): Phase1bProgress {
     linkage: 'single',
     maxClusterSize: 0,
     gapThreshold: 0,
+    embeddingModel: '',
+    embeddingCachePath: null,
     stats: { slugsBefore: 0, slugsAfter: 0, mergesApplied: 0, behaviorsUpdated: 0, keywordsRemapped: 0 },
   }
 }

@@ -56,7 +56,7 @@ async function markDoneAndSave(
   threshold: number,
   slugsBefore: number,
   now: string,
-  deps: Pick<Phase1bDeps, 'saveProgress'>,
+  deps: Pick<Phase1bDeps, 'saveProgress' | 'embeddingModel' | 'embeddingCachePath'>,
 ): Promise<void> {
   progress.phase1b = {
     status: 'done',
@@ -66,6 +66,8 @@ async function markDoneAndSave(
     linkage: CONSOLIDATION_LINKAGE,
     maxClusterSize: CONSOLIDATION_MAX_CLUSTER_SIZE,
     gapThreshold: CONSOLIDATION_GAP_THRESHOLD,
+    embeddingModel: deps.embeddingModel,
+    embeddingCachePath: deps.embeddingCachePath,
     stats: { slugsBefore, slugsAfter: slugsBefore, mergesApplied: 0, behaviorsUpdated: 0, keywordsRemapped: 0 },
   }
   await deps.saveProgress(progress)
@@ -111,7 +113,7 @@ function logDryRunMerges(mergeMap: ReadonlyMap<string, string>, deps: Pick<Phase
   deps.log.log(`No files were modified.`)
 }
 
-function shouldSkipCompletedPhase1b(progress: Progress, slugsBefore: number): boolean {
+function shouldSkipCompletedPhase1b(progress: Progress, slugsBefore: number, deps: Phase1bDeps): boolean {
   return (
     progress.phase1b.status === 'done' &&
     slugsBefore === progress.phase1b.stats.slugsBefore &&
@@ -119,7 +121,9 @@ function shouldSkipCompletedPhase1b(progress: Progress, slugsBefore: number): bo
     CONSOLIDATION_MIN_CLUSTER_SIZE === progress.phase1b.minClusterSize &&
     CONSOLIDATION_LINKAGE === progress.phase1b.linkage &&
     CONSOLIDATION_MAX_CLUSTER_SIZE === progress.phase1b.maxClusterSize &&
-    CONSOLIDATION_GAP_THRESHOLD === progress.phase1b.gapThreshold
+    CONSOLIDATION_GAP_THRESHOLD === progress.phase1b.gapThreshold &&
+    deps.embeddingModel === progress.phase1b.embeddingModel &&
+    deps.embeddingCachePath === progress.phase1b.embeddingCachePath
   )
 }
 
@@ -156,6 +160,8 @@ async function applyMergesAndSave(
     linkage: CONSOLIDATION_LINKAGE,
     maxClusterSize: CONSOLIDATION_MAX_CLUSTER_SIZE,
     gapThreshold: CONSOLIDATION_GAP_THRESHOLD,
+    embeddingModel: deps.embeddingModel,
+    embeddingCachePath: deps.embeddingCachePath,
     stats: {
       slugsBefore: vocabulary.length,
       slugsAfter,
@@ -188,7 +194,7 @@ export async function runPhase1b(progress: Progress, deps: Phase1bDeps = default
     return
   }
 
-  if (!CONSOLIDATION_DRY_RUN && shouldSkipCompletedPhase1b(progress, vocabulary.length)) {
+  if (!CONSOLIDATION_DRY_RUN && shouldSkipCompletedPhase1b(progress, vocabulary.length, deps)) {
     deps.log.log('[Phase 1b] Already complete, skipping.\n')
     return
   }

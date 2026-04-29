@@ -1070,6 +1070,8 @@ describe('behavior-audit incremental manifest', () => {
             linkage: 'single',
             maxClusterSize: 0,
             gapThreshold: 0,
+            embeddingModel: '',
+            embeddingCachePath: null,
             stats: { slugsBefore: 0, slugsAfter: 0, mergesApplied: 0, behaviorsUpdated: 0, keywordsRemapped: 0 },
           },
           phase2a: {

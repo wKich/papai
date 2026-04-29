@@ -239,6 +239,8 @@ test('runPhase1b skips when already done and vocabulary size unchanged', async (
   progress.phase1b.linkage = 'single'
   progress.phase1b.maxClusterSize = 0
   progress.phase1b.gapThreshold = 0
+  progress.phase1b.embeddingModel = 'test-embed-model'
+  progress.phase1b.embeddingCachePath = null
   progress.phase1b.stats.slugsBefore = 2
 
   let embedCalled = false
@@ -365,6 +367,92 @@ test('runPhase1b re-runs when min cluster size changed despite unchanged vocabul
       })
     },
     embeddingCachePath: null,
+    embeddingModel: 'test-embed-model',
+    loadManifest: () => Promise.resolve(null),
+    remapKeywordsInExtractedFile: () => Promise.resolve({ updated: false, remappedCount: 0 }),
+    saveProgress: () => Promise.resolve(),
+    log: { log: () => {} },
+  })
+
+  expect(embedCalled).toBe(true)
+})
+
+test('runPhase1b re-runs when embedding model changed despite unchanged vocabulary size', async () => {
+  const { runPhase1b } = await loadConsolidateKeywordsModule(`${tag}-embedding-model-changed`)
+  const progress = makeProgress(true)
+  progress.phase1b.status = 'done'
+  progress.phase1b.threshold = 0.95
+  progress.phase1b.minClusterSize = 2
+  progress.phase1b.linkage = 'single'
+  progress.phase1b.maxClusterSize = 0
+  progress.phase1b.gapThreshold = 0
+  progress.phase1b.embeddingModel = 'old-embedding-model'
+  progress.phase1b.embeddingCachePath = null
+  progress.phase1b.stats.slugsBefore = 2
+
+  let embedCalled = false
+
+  await runPhase1b(progress, {
+    loadKeywordVocabulary: () => Promise.resolve([makeVocabEntry('alpha'), makeVocabEntry('beta')]),
+    saveKeywordVocabulary: () => Promise.resolve(),
+    getOrEmbed: (_cachePath, model) => {
+      embedCalled = true
+      expect(model).toBe('test-embed-model')
+      return Promise.resolve({
+        raw: [
+          [1, 0],
+          [0, 1],
+        ],
+        normalized: [
+          [1, 0],
+          [0, 1],
+        ],
+      })
+    },
+    embeddingCachePath: null,
+    embeddingModel: 'test-embed-model',
+    loadManifest: () => Promise.resolve(null),
+    remapKeywordsInExtractedFile: () => Promise.resolve({ updated: false, remappedCount: 0 }),
+    saveProgress: () => Promise.resolve(),
+    log: { log: () => {} },
+  })
+
+  expect(embedCalled).toBe(true)
+})
+
+test('runPhase1b re-runs when embedding cache path changed despite unchanged vocabulary size', async () => {
+  const { runPhase1b } = await loadConsolidateKeywordsModule(`${tag}-embedding-cache-changed`)
+  const progress = makeProgress(true)
+  progress.phase1b.status = 'done'
+  progress.phase1b.threshold = 0.95
+  progress.phase1b.minClusterSize = 2
+  progress.phase1b.linkage = 'single'
+  progress.phase1b.maxClusterSize = 0
+  progress.phase1b.gapThreshold = 0
+  progress.phase1b.embeddingModel = 'test-embed-model'
+  progress.phase1b.embeddingCachePath = '/old/cache.json'
+  progress.phase1b.stats.slugsBefore = 2
+
+  let embedCalled = false
+
+  await runPhase1b(progress, {
+    loadKeywordVocabulary: () => Promise.resolve([makeVocabEntry('alpha'), makeVocabEntry('beta')]),
+    saveKeywordVocabulary: () => Promise.resolve(),
+    getOrEmbed: (cachePath) => {
+      embedCalled = true
+      expect(cachePath).toBe('/new/cache.json')
+      return Promise.resolve({
+        raw: [
+          [1, 0],
+          [0, 1],
+        ],
+        normalized: [
+          [1, 0],
+          [0, 1],
+        ],
+      })
+    },
+    embeddingCachePath: '/new/cache.json',
     embeddingModel: 'test-embed-model',
     loadManifest: () => Promise.resolve(null),
     remapKeywordsInExtractedFile: () => Promise.resolve({ updated: false, remappedCount: 0 }),

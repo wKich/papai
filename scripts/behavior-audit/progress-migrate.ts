@@ -30,6 +30,8 @@ const Phase1bCheckpointSchema = z.strictObject({
   linkage: z.enum(['single', 'average', 'complete']),
   maxClusterSize: z.number(),
   gapThreshold: z.number(),
+  embeddingModel: z.string(),
+  embeddingCachePath: z.string().nullable(),
   stats: z.object({
     slugsBefore: z.number(),
     slugsAfter: z.number(),
@@ -43,6 +45,12 @@ const LegacyPhase1bCheckpointSchema = z.strictObject({
   status: z.enum(['not-started', 'in-progress', 'done']),
   lastRunAt: z.string().nullable(),
   threshold: z.number(),
+  minClusterSize: z.number().optional(),
+  linkage: z.enum(['single', 'average', 'complete']).optional(),
+  maxClusterSize: z.number().optional(),
+  gapThreshold: z.number().optional(),
+  embeddingModel: z.string().optional(),
+  embeddingCachePath: z.string().nullable().optional(),
   stats: z.object({
     slugsBefore: z.number(),
     slugsAfter: z.number(),
