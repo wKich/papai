@@ -12,7 +12,7 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 }
 
 function normalizeToolName(value: string): string {
-  return value.replace(/-/g, '_')
+  return value.replaceAll('-', '_')
 }
 
 export function buildToolMetadata(tools: ToolSet): readonly ToolMetadata[] {

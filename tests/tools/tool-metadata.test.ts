@@ -23,7 +23,7 @@ describe('tool-metadata', () => {
       description: 'Search tasks by text',
       executable: true,
     })
-    expect(metadata[0]?.inputSchema).toBeDefined()
+    expect(metadata[0]).toHaveProperty('inputSchema')
   })
 
   it('keeps non-executable tools visible for describe errors', () => {
@@ -50,7 +50,7 @@ describe('tool-metadata', () => {
       }),
     })
 
-    expect(findToolMetadata(metadata, 'add_task_relation')?.name).toBe('add_task_relation')
-    expect(findToolMetadata(metadata, 'add-task-relation')?.name).toBe('add_task_relation')
+    expect(findToolMetadata(metadata, 'add_task_relation')).toMatchObject({ name: 'add_task_relation' })
+    expect(findToolMetadata(metadata, 'add-task-relation')).toMatchObject({ name: 'add_task_relation' })
   })
 })
