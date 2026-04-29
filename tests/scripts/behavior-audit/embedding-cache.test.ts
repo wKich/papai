@@ -26,6 +26,33 @@ async function makeCachePath(): Promise<string> {
 }
 
 describe('embedding cache identity', () => {
+  test('reuses cached embeddings when provider identity and slug fingerprint match', async () => {
+    const cachePath = await makeCachePath()
+    let embedCalls = 0
+
+    const first = await getOrEmbed(cachePath, 'embedding-model', vocabulary, {
+      providerIdentity: 'http://provider-a/v1',
+      embedSlugBatch: () => {
+        embedCalls++
+        return Promise.resolve([[1, 0]])
+      },
+      log: console,
+    })
+
+    const second = await getOrEmbed(cachePath, 'embedding-model', vocabulary, {
+      providerIdentity: 'http://provider-a/v1',
+      embedSlugBatch: () => {
+        embedCalls++
+        return Promise.resolve([[0, 1]])
+      },
+      log: console,
+    })
+
+    expect(embedCalls).toBe(1)
+    expect(first.raw).toEqual([[1, 0]])
+    expect(second.raw).toEqual([[1, 0]])
+  })
+
   test('does not reuse cached embeddings when provider identity changes', async () => {
     const cachePath = await makeCachePath()
     let embedCalls = 0
