@@ -133,7 +133,7 @@ function buildTuneClusters(
     console.log(formatClusteringProfile(profilingResult.profile))
   }
   const fullResult =
-    params.profileSizes.length > 0
+    params.profileSizes.length > 0 && profilingInput.length < normalized.length
       ? deps.buildClustersAdvanced(
           normalized,
           params.threshold,

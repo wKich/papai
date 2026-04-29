@@ -156,6 +156,10 @@ function createProfiledClustersStub(
   return profiledStub
 }
 
+function isProfileOptionEnabled(options: ClusteringProfileOptions | undefined): boolean {
+  return options !== undefined && options.profile === true
+}
+
 describe('tune-embedding wiring', () => {
   test('parseArgs enables clustering profile output', () => {
     expect(parseArgs(['--profile-clustering']).profileClustering).toBe(true)
@@ -170,7 +174,7 @@ describe('tune-embedding wiring', () => {
     let receivedProfileOption = false
     const logSpy = spyOn(console, 'log').mockImplementation(() => {})
     const buildProfiledClustersStub = createProfiledClustersStub((_normalized, options) => {
-      receivedProfileOption = JSON.stringify(options) === '{"profile":true}'
+      receivedProfileOption = isProfileOptionEnabled(options)
     })
 
     await runTuneEmbedding(['--profile-clustering'], {
@@ -221,7 +225,7 @@ describe('tune-embedding wiring', () => {
     const logSpy = spyOn(console, 'log').mockImplementation(() => {})
     const buildSizedClustersStub = createProfiledClustersStub((normalized, options) => {
       clusteredLengths.push(normalized.length)
-      receivedProfileFlags.push(JSON.stringify(options) === '{"profile":true}')
+      receivedProfileFlags.push(isProfileOptionEnabled(options))
     })
 
     await runTuneEmbedding(['--profile-clustering', '--profile-sizes', '1,2,3'], {
@@ -268,6 +272,56 @@ describe('tune-embedding wiring', () => {
     expect(loggedOutput).toContain('[profile] clustering linkage=single threshold=0.92 size=3')
 
     mock.restore()
+  })
+
+  test('does not rerun full clustering when the profile sample already covers the full input', async () => {
+    const extractedDir = await makeExtractedDir()
+    const clusteredLengths: number[] = []
+    const receivedProfileFlags: boolean[] = []
+    const buildSizedClustersStub = createProfiledClustersStub((normalized, options) => {
+      clusteredLengths.push(normalized.length)
+      receivedProfileFlags.push(isProfileOptionEnabled(options))
+    })
+
+    await runTuneEmbedding(['--profile-clustering', '--profile-sizes', '1,2,4'], {
+      extractedDir,
+      embeddingModel: 'test-embedding-model',
+      embeddingBaseUrl: 'http://embedding-provider/v1',
+      reloadBehaviorAuditConfig: (): void => {},
+      embedSlugBatch: (): Promise<readonly number[][]> => Promise.resolve([]),
+      getOrEmbed: (): Promise<{
+        readonly raw: readonly (readonly number[])[]
+        readonly normalized: readonly (readonly number[])[]
+      }> =>
+        Promise.resolve({
+          raw: [
+            [1, 0],
+            [0, 1],
+            [1, 1],
+            [0, 0],
+          ],
+          normalized: [
+            [1, 0],
+            [0, 1],
+            [1, 1],
+            [0, 0],
+          ],
+        }),
+      normalizeKeywordSlug: (keyword: string): string => keyword.toLowerCase(),
+      buildClustersAdvanced: buildSizedClustersStub,
+      buildMergeMap: (): ReadonlyMap<string, string> => new Map<string, string>(),
+      buildConsolidatedVocabulary: (vocabulary: readonly MockVocabularyEntry[]): readonly MockVocabularyEntry[] =>
+        vocabulary,
+      toNormalizedFloat64Arrays: (vectors: readonly (readonly number[])[]): readonly Float64Array[] =>
+        vectors.map((vector) => new Float64Array(vector)),
+      subdivideOversizedClusters: (
+        _normalized: readonly Float64Array[],
+        clusters: readonly (readonly number[])[],
+      ): readonly (readonly number[])[] => clusters,
+    })
+
+    expect(receivedProfileFlags).toEqual([true])
+    expect(clusteredLengths).toEqual([4])
   })
 
   test('forwards gapThreshold into subdivideOversizedClusters', async () => {
