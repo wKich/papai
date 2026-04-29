@@ -174,6 +174,53 @@ export function dotProduct(a: Float64Array, b: Float64Array): number {
   return sum
 }
 
+export function averageLinkageSimilarity(
+  embeddings: readonly Float64Array[],
+  clusterA: readonly number[],
+  clusterB: readonly number[],
+): number {
+  if (clusterA.length === 0 || clusterB.length === 0) return 0
+
+  let total = 0
+  let count = 0
+  for (const i of clusterA) {
+    const embI = embeddings[i]
+    if (embI === undefined) continue
+    for (const j of clusterB) {
+      const embJ = embeddings[j]
+      if (embJ === undefined) continue
+      total += dotProduct(embI, embJ)
+      count++
+    }
+  }
+
+  return count === 0 ? 0 : total / count
+}
+
+export function completeLinkageSimilarity(
+  embeddings: readonly Float64Array[],
+  clusterA: readonly number[],
+  clusterB: readonly number[],
+): number {
+  if (clusterA.length === 0 || clusterB.length === 0) return 0
+
+  let minSimilarity = Infinity
+  for (const i of clusterA) {
+    const embI = embeddings[i]
+    if (embI === undefined) continue
+    for (const j of clusterB) {
+      const embJ = embeddings[j]
+      if (embJ === undefined) continue
+      const similarity = dotProduct(embI, embJ)
+      if (similarity < minSimilarity) {
+        minSimilarity = similarity
+      }
+    }
+  }
+
+  return minSimilarity === Infinity ? 0 : minSimilarity
+}
+
 export function buildClustersNormalized(
   normalizedEmbeddings: readonly Float64Array[],
   threshold: number,

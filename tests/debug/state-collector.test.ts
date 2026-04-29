@@ -187,6 +187,12 @@ describe('state-collector', () => {
         finishReason: 'stop',
         messageCount: 5,
         toolCount: 10,
+        exposedToolCount: 6,
+        fullToolCount: 10,
+        toolSchemaBytes: 1234,
+        routingIntent: 'task_read',
+        routingConfidence: 0.75,
+        routingReason: 'read-keyword',
         generatedText: 'Task created successfully.',
       })
 
@@ -206,6 +212,10 @@ describe('state-collector', () => {
       expect(eventData['finishReason']).toBe('stop')
       expect(eventData['messageCount']).toBe(5)
       expect(eventData['toolCount']).toBe(10)
+      expect(eventData['exposedToolCount']).toBe(6)
+      expect(eventData['fullToolCount']).toBe(10)
+      expect(eventData['toolSchemaBytes']).toBe(1234)
+      expect(eventData['routingIntent']).toBe('task_read')
       expect(eventData['generatedText']).toBe('Task created successfully.')
 
       const toolCalls: unknown = eventData['toolCalls']

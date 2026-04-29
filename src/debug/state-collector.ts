@@ -43,6 +43,12 @@ type LlmTrace = {
   finishReason?: string
   messageCount?: number
   toolCount?: number
+  exposedToolCount?: number
+  fullToolCount?: number
+  toolSchemaBytes?: number
+  routingIntent?: string
+  routingConfidence?: number
+  routingReason?: string
   generatedText?: string
   stepsDetail?: Array<{
     stepNumber: number
@@ -183,6 +189,12 @@ function handleLlmEnd(event: DebugEvent, userId: string): void {
     finishReason: str(event.data['finishReason']),
     messageCount: num(event.data['messageCount']),
     toolCount: num(event.data['toolCount']),
+    exposedToolCount: num(event.data['exposedToolCount']),
+    fullToolCount: num(event.data['fullToolCount']),
+    toolSchemaBytes: num(event.data['toolSchemaBytes']),
+    routingIntent: str(event.data['routingIntent']),
+    routingConfidence: num(event.data['routingConfidence']),
+    routingReason: str(event.data['routingReason']),
     generatedText: str(event.data['generatedText']),
     stepsDetail: parseStepsDetail(event.data['stepsDetail']),
   }
