@@ -40,6 +40,42 @@ function normalizeClusters(clusters: readonly (readonly number[])[]): readonly (
   return clusters.map((cluster) => cluster.toSorted((a, b) => a - b)).toSorted((a, b) => a[0]! - b[0]!)
 }
 
+function naiveAverageOrCompleteCandidates(
+  embeddings: readonly Float64Array[],
+  clusters: readonly (readonly number[])[],
+  threshold: number,
+  linkageFn: typeof averageLinkageSimilarity,
+): readonly { readonly i: number; readonly j: number; readonly similarity: number }[] {
+  return clusters.flatMap((clusterA, i) =>
+    clusters.slice(i + 1).flatMap((clusterB, offset) => {
+      const j = i + offset + 1
+      const similarity = linkageFn(embeddings, clusterA, clusterB)
+      return similarity >= threshold ? [{ i, j, similarity }] : []
+    }),
+  )
+}
+
+function naiveAverageOrCompleteClusters(
+  embeddings: readonly Float64Array[],
+  threshold: number,
+  minClusterSize: number,
+  linkage: 'average' | 'complete',
+): readonly (readonly number[])[] {
+  const linkageFn = linkage === 'average' ? averageLinkageSimilarity : completeLinkageSimilarity
+  let clusters: readonly (readonly number[])[] = embeddings.map((_, index) => [index])
+  for (;;) {
+    const candidates = naiveAverageOrCompleteCandidates(embeddings, clusters, threshold, linkageFn)
+    const best = candidates.toSorted((a, b) => b.similarity - a.similarity)[0]
+    if (best === undefined) return clusters.filter((cluster) => cluster.length >= minClusterSize)
+    const clusterA = clusters[best.i]!
+    const clusterB = clusters[best.j]!
+    clusters = clusters.flatMap((cluster, index) => {
+      if (index === best.i) return [[...clusterA, ...clusterB]]
+      return index === best.j ? [] : [cluster]
+    })
+  }
+}
+
 // ── cosineSimilarity ──────────────────────────────────────────────────────────
 
 test('cosineSimilarity of identical vectors is 1', () => {
@@ -166,6 +202,36 @@ describe('completeLinkageSimilarity', () => {
 })
 
 describe('buildClustersAdvanced', () => {
+  test('average linkage matches naive reference on a deterministic small fixture', () => {
+    const embeddings = makeNormalized([
+      [1, 0, 0],
+      [0.96, 0.28, 0],
+      [0.88, 0.47, 0],
+      [0, 1, 0],
+      [0, 0.95, 0.31],
+    ])
+
+    const actual = buildClustersAdvanced(embeddings, 0.78, 2, 'average', 0)
+    const expected = naiveAverageOrCompleteClusters(embeddings, 0.78, 2, 'average')
+
+    expect(normalizeClusters(actual)).toEqual(normalizeClusters(expected))
+  })
+
+  test('complete linkage matches naive reference on a deterministic small fixture', () => {
+    const embeddings = makeNormalized([
+      [1, 0, 0],
+      [0.96, 0.28, 0],
+      [0.88, 0.47, 0],
+      [0, 1, 0],
+      [0, 0.95, 0.31],
+    ])
+
+    const actual = buildClustersAdvanced(embeddings, 0.78, 2, 'complete', 0)
+    const expected = naiveAverageOrCompleteClusters(embeddings, 0.78, 2, 'complete')
+
+    expect(normalizeClusters(actual)).toEqual(normalizeClusters(expected))
+  })
+
   test.each<LinkageMode>(['average', 'complete'])('%s linkage prevents transitive chaining', (linkage) => {
     const s = 1 / Math.sqrt(2)
     const embeddings = makeNormalized([
@@ -242,6 +308,22 @@ describe('buildClustersAdvanced', () => {
 
     expect(clusters).toHaveLength(1)
     expect(clusters[0]).toHaveLength(3)
+  })
+
+  test('average linkage handles hundreds of vectors without timing out', () => {
+    const vectors = Array.from({ length: 600 }, (_, i) => {
+      const group = Math.floor(i / 20)
+      const angle = group * 0.1 + (i % 20) * 0.001
+      return [Math.cos(angle), Math.sin(angle), (i % 7) / 100]
+    })
+    const embeddings = makeNormalized(vectors)
+    const start = performance.now()
+
+    const clusters = buildClustersAdvanced(embeddings, 0.99, 2, 'average', 0)
+    const elapsed = performance.now() - start
+
+    expect(clusters.length).toBeGreaterThan(0)
+    expect(elapsed).toBeLessThan(5000)
   })
 })
 

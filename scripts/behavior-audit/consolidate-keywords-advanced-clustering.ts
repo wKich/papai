@@ -1,4 +1,13 @@
-import { buildAgglomerativeClusters } from './consolidate-keywords-agglomerative-clustering.js'
+import {
+  activeIndices,
+  buildAgglomerativeClusters,
+  buildCondensedDistanceMatrix,
+  condensedIndex,
+  createActiveState,
+  getDistance,
+  isActive,
+  setDistance,
+} from './consolidate-keywords-agglomerative-clustering.js'
 import {
   buildClustersNormalized,
   dotProduct,
@@ -7,65 +16,18 @@ import {
   toIndexedSubEmbeddings,
 } from './consolidate-keywords-clustering.js'
 import type { LinkageMode } from './consolidate-keywords-clustering.js'
+export {
+  activeIndices,
+  buildCondensedDistanceMatrix,
+  condensedIndex,
+  createActiveState,
+  getDistance,
+  isActive,
+  setDistance,
+}
+export type { ActiveState, MutableDistanceMatrix } from './consolidate-keywords-agglomerative-clustering.js'
 
 type Cluster = readonly number[]
-
-export type MutableDistanceMatrix = {
-  readonly n: number
-  readonly values: Float32Array
-}
-export type ActiveState = {
-  readonly active: Uint8Array
-  readonly sizes: Uint32Array
-}
-
-export function condensedIndex(i: number, j: number, n: number): number {
-  const a = Math.min(i, j)
-  const b = Math.max(i, j)
-  return (a * (2 * n - a - 1)) / 2 + (b - a - 1)
-}
-
-export function getDistance(matrix: MutableDistanceMatrix, i: number, j: number): number {
-  if (i === j) return 0
-  const value = matrix.values[condensedIndex(i, j, matrix.n)]
-  if (value === undefined) return Infinity
-  return value
-}
-
-export function setDistance(matrix: MutableDistanceMatrix, i: number, j: number, distance: number): void {
-  if (i === j) return
-  matrix.values[condensedIndex(i, j, matrix.n)] = distance
-}
-
-export function buildCondensedDistanceMatrix(normalizedEmbeddings: readonly Float64Array[]): MutableDistanceMatrix {
-  const n = normalizedEmbeddings.length
-  const values = new Float32Array((n * (n - 1)) / 2)
-  for (let i = 0; i < n; i++) {
-    const embI = normalizedEmbeddings[i]
-    if (embI === undefined) continue
-    for (let j = i + 1; j < n; j++) {
-      const embJ = normalizedEmbeddings[j]
-      const similarity = embJ === undefined ? 0 : dotProduct(embI, embJ)
-      values[condensedIndex(i, j, n)] = 1 - similarity
-    }
-  }
-  return { n, values }
-}
-
-export function createActiveState(n: number): ActiveState {
-  return {
-    active: Uint8Array.from({ length: n }, () => 1),
-    sizes: Uint32Array.from({ length: n }, () => 1),
-  }
-}
-
-export function activeIndices(state: ActiveState): readonly number[] {
-  return Array.from(state.active.entries()).flatMap(([index, marker]) => (marker === 1 ? [index] : []))
-}
-
-export function isActive(state: ActiveState, index: number): boolean {
-  return state.active[index] === 1
-}
 
 function mergeClusters(clusters: readonly Cluster[], mergePair: readonly [number, number]): readonly Cluster[] {
   const [bestA, bestB] = mergePair
