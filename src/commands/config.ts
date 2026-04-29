@@ -4,6 +4,8 @@ import { serializeCallbackData } from '../config-editor/index.js'
 import { getAllConfig, maskValue } from '../config.js'
 import { startGroupSettingsSelection } from '../group-settings/selector.js'
 import { logger } from '../logger.js'
+import { pluginRegistry, isPluginActiveForContext } from '../plugins/registry.js'
+import { getPluginContextState } from '../plugins/store.js'
 import { CONFIG_KEYS, type ConfigKey } from '../types/config.js'
 
 const log = logger.child({ scope: 'commands:config' })
@@ -64,6 +66,41 @@ function buildConfigButtons(config: Partial<Record<ConfigKey, string>>, targetCo
   return buttons
 }
 
+function encodePluginContextId(contextId: string): string {
+  return Buffer.from(contextId).toString('base64url')
+}
+
+function appendPluginConfigLines(lines: string[], targetContextId: string): void {
+  const pluginEntries = pluginRegistry.getAllEntries().filter((entry) => entry.state === 'active')
+  if (pluginEntries.length === 0) return
+
+  lines.push('\n🧩 **Plugins**')
+  for (const entry of pluginEntries) {
+    const state = getPluginContextState(entry.discoveredPlugin.manifest.id, targetContextId)
+    const enabled = isPluginActiveForContext(entry.discoveredPlugin.manifest.id, targetContextId)
+    const source = state === undefined && entry.discoveredPlugin.manifest.defaultEnabled ? ' (default)' : ''
+    lines.push(
+      `${enabled ? '🟢' : '⭕'} ${entry.discoveredPlugin.manifest.name}: ${enabled ? 'enabled' : 'disabled'}${source}`,
+    )
+  }
+}
+
+function buildPluginButtons(targetContextId: string): ChatButton[] {
+  const encodedContextId = encodePluginContextId(targetContextId)
+  return pluginRegistry
+    .getAllEntries()
+    .filter((entry) => entry.state === 'active')
+    .map((entry) => {
+      const pluginId = entry.discoveredPlugin.manifest.id
+      const enabled = isPluginActiveForContext(pluginId, targetContextId)
+      return {
+        text: `${enabled ? 'Disable' : 'Enable'} ${entry.discoveredPlugin.manifest.name}`,
+        callbackData: `plg:${enabled ? 'disable' : 'enable'}:${pluginId}:${encodedContextId}`,
+        style: enabled ? 'danger' : 'primary',
+      }
+    })
+}
+
 export async function renderConfigForTarget(
   reply: ReplyFn,
   targetContextId: string,
@@ -75,6 +112,7 @@ export async function renderConfigForTarget(
   CONFIG_KEYS.forEach((key) => {
     lines.push(formatConfigLine(key, config[key]))
   })
+  appendPluginConfigLines(lines, targetContextId)
 
   if (!interactiveButtons) {
     lines.push('\n⚠️ Interactive editing is not available in this chat. Use `/setup` to configure everything.')
@@ -83,7 +121,9 @@ export async function renderConfigForTarget(
   }
 
   lines.push('\n💡 Click a field below to edit it, or use `/setup` to configure everything.')
-  await reply.buttons(lines.join('\n'), { buttons: buildConfigButtons(config, targetContextId) })
+  await reply.buttons(lines.join('\n'), {
+    buttons: [...buildConfigButtons(config, targetContextId), ...buildPluginButtons(targetContextId)],
+  })
 }
 
 async function replyWithConfigSelection(reply: ReplyFn, userId: string, interactiveButtons: boolean): Promise<void> {

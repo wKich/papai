@@ -1,0 +1,12 @@
+{
+  "id": "hello-world",
+  "name": "Hello World",
+  "version": "1.0.0",
+  "description": "A minimal example plugin that greets the user.",
+  "apiVersion": 1,
+  "main": "index.ts",
+  "contributes": {
+    "tools": ["greet"],
+    "promptFragments": ["hello-world-hint"]
+  }
+}
