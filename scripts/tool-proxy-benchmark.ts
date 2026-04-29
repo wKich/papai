@@ -28,6 +28,7 @@ export type BenchmarkArgs = Readonly<
 >
 type SummaryGroup = Record<'model' | 'mode', string> &
   Record<'runs' | 'successes' | 'toolCalls' | 'steps', number> & { failures: Record<string, number> }
+type RawBenchmarkArgs = Omit<BenchmarkArgs, 'models'> & { models: string | readonly string[] }
 
 const DEFAULT_BASE_URL = 'https://api.openai.com/v1'
 const DEFAULT_API_KEY_ENV = 'TOOL_PROXY_BENCHMARK_API_KEY'
@@ -68,14 +69,14 @@ const isFlagValue = (args: readonly string[], index: number): boolean => {
 }
 
 export function parseBenchmarkArgs(args: readonly string[]): BenchmarkArgs {
-  const defaults: BenchmarkArgs = {
+  const defaults: RawBenchmarkArgs = {
     baseUrl: firstEnv(['TOOL_PROXY_BENCHMARK_BASE_URL', 'LLM_BASE_URL'], DEFAULT_BASE_URL),
     apiKeyEnv: firstEnv(['TOOL_PROXY_BENCHMARK_API_KEY_ENV'], DEFAULT_API_KEY_ENV),
-    models: parseModelFlag('TOOL_PROXY_BENCHMARK_MODELS', firstEnv(['TOOL_PROXY_BENCHMARK_MODELS'], DEFAULT_MODEL)),
+    models: firstEnv(['TOOL_PROXY_BENCHMARK_MODELS'], DEFAULT_MODEL),
     outputPath: DEFAULT_OUTPUT_PATH,
     repetitions: 1,
   }
-  return args.reduce<BenchmarkArgs>((current, arg, index) => {
+  const parsed = args.reduce<RawBenchmarkArgs>((current, arg, index) => {
     if (isFlagValue(args, index)) return current
     if (!arg.startsWith('--')) throw new Error(`Unexpected positional argument: ${arg}`)
     const value = flagValue(args, index, arg)
@@ -86,6 +87,11 @@ export function parseBenchmarkArgs(args: readonly string[]): BenchmarkArgs {
     if (arg === '--repetitions') return { ...current, repetitions: positiveInt(arg, value) }
     throw new Error(`Unknown flag: ${arg}`)
   }, defaults)
+  return {
+    ...parsed,
+    models:
+      typeof parsed.models === 'string' ? parseModelFlag('TOOL_PROXY_BENCHMARK_MODELS', parsed.models) : parsed.models,
+  }
 }
 
 const average = (total: number, runs: number): string => (runs === 0 ? '0.0' : (total / runs).toFixed(1))

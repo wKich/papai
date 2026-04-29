@@ -13,6 +13,16 @@ const restoreToolProxyBenchmarkModels = (value: string | undefined): void => {
   }
   process.env['TOOL_PROXY_BENCHMARK_MODELS'] = value
 }
+const withToolProxyBenchmarkModels = <T>(value: string, run: () => T): T => {
+  const previousModels = process.env['TOOL_PROXY_BENCHMARK_MODELS']
+  process.env['TOOL_PROXY_BENCHMARK_MODELS'] = value
+
+  try {
+    return run()
+  } finally {
+    restoreToolProxyBenchmarkModels(previousModels)
+  }
+}
 
 describe('tool-proxy-benchmark utilities', () => {
   it('parses explicit benchmark flags', () => {
@@ -38,6 +48,43 @@ describe('tool-proxy-benchmark utilities', () => {
     })
   })
 
+  it('parses explicit benchmark flags independently of inherited model env', () => {
+    const args = withToolProxyBenchmarkModels('', () =>
+      parseBenchmarkArgs([
+        '--base-url',
+        'https://llm.example/v1',
+        '--api-key-env',
+        'TEST_KEY',
+        '--models',
+        'model-a,model-b',
+        '--output',
+        'docs/superpowers/plans/result.md',
+        '--repetitions',
+        '2',
+      ]),
+    )
+
+    expect(args).toEqual({
+      baseUrl: 'https://llm.example/v1',
+      apiKeyEnv: 'TEST_KEY',
+      models: ['model-a', 'model-b'],
+      outputPath: 'docs/superpowers/plans/result.md',
+      repetitions: 2,
+    })
+  })
+
+  it('lets explicit models override literal empty model env', () => {
+    const args = withToolProxyBenchmarkModels('', () => parseBenchmarkArgs(['--models', 'model-a']))
+
+    expect(args.models).toEqual(['model-a'])
+  })
+
+  it('lets explicit models override comma-only model env', () => {
+    const args = withToolProxyBenchmarkModels(',', () => parseBenchmarkArgs(['--models', 'model-a']))
+
+    expect(args.models).toEqual(['model-a'])
+  })
+
   it('rejects missing flag values and invalid repetitions', () => {
     expect(() => parseBenchmarkArgs(['--models'])).toThrow('Missing value for --models')
     expect(() => parseBenchmarkArgs(['--repetitions', '0'])).toThrow(
@@ -47,27 +94,15 @@ describe('tool-proxy-benchmark utilities', () => {
   })
 
   it('rejects empty model list from environment defaults', () => {
-    const envName = 'TOOL_PROXY_BENCHMARK_MODELS'
-    const previousModels = process.env[envName]
-    process.env[envName] = ','
-
-    try {
+    withToolProxyBenchmarkModels(',', () => {
       expect(() => parseBenchmarkArgs([])).toThrow('Invalid non-empty model list for TOOL_PROXY_BENCHMARK_MODELS')
-    } finally {
-      restoreToolProxyBenchmarkModels(previousModels)
-    }
+    })
   })
 
   it('rejects literal empty model list from environment defaults', () => {
-    const envName = 'TOOL_PROXY_BENCHMARK_MODELS'
-    const previousModels = process.env[envName]
-    process.env[envName] = ''
-
-    try {
+    withToolProxyBenchmarkModels('', () => {
       expect(() => parseBenchmarkArgs([])).toThrow('Invalid non-empty model list for TOOL_PROXY_BENCHMARK_MODELS')
-    } finally {
-      restoreToolProxyBenchmarkModels(previousModels)
-    }
+    })
   })
 
   it('rejects unknown flags and positional args', () => {
