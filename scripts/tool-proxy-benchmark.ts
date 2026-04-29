@@ -3,6 +3,7 @@ import { dirname } from 'node:path'
 
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { generateText, stepCountIs } from 'ai'
+import pLimit from 'p-limit'
 
 import {
   createBenchmarkStore,
@@ -45,6 +46,11 @@ const parseModels = (value: string): readonly string[] =>
     .split(',')
     .map((model) => model.trim())
     .filter((model) => present(model))
+const parseModelFlag = (flag: string, value: string): readonly string[] => {
+  const models = parseModels(value)
+  if (models.length === 0) throw new Error(`Invalid non-empty model list for ${flag}`)
+  return models
+}
 const positiveInt = (flag: string, value: string): number => {
   const parsed = Number(value)
   if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`Invalid positive integer value for ${flag}: ${value}`)
@@ -74,7 +80,7 @@ export function parseBenchmarkArgs(args: readonly string[]): BenchmarkArgs {
     const value = flagValue(args, index, arg)
     if (arg === '--base-url') return { ...current, baseUrl: value }
     if (arg === '--api-key-env') return { ...current, apiKeyEnv: value }
-    if (arg === '--models') return { ...current, models: parseModels(value) }
+    if (arg === '--models') return { ...current, models: parseModelFlag(arg, value) }
     if (arg === '--output') return { ...current, outputPath: value }
     if (arg === '--repetitions') return { ...current, repetitions: positiveInt(arg, value) }
     throw new Error(`Unknown flag: ${arg}`)
@@ -175,13 +181,16 @@ const runScenario = async (
   }
 }
 const runBenchmark = (args: BenchmarkArgs, apiKey: string): Promise<readonly BenchmarkResult[]> => {
+  const limit = pLimit(3)
   const reps = Array.from({ length: args.repetitions }, (_, index) => index)
   const runs = args.models.flatMap((model) =>
     reps.flatMap(() =>
       scenarios.flatMap((scenario) => (['direct', 'proxy'] as const).map((mode) => ({ model, scenario, mode }))),
     ),
   )
-  return Promise.all(runs.map(({ model, scenario, mode }) => runScenario(model, mode, scenario, args, apiKey)))
+  return Promise.all(
+    runs.map(({ model, scenario, mode }) => limit(() => runScenario(model, mode, scenario, args, apiKey))),
+  )
 }
 const main = async (): Promise<void> => {
   const args = parseBenchmarkArgs(Bun.argv.slice(2))

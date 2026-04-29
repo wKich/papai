@@ -30,6 +30,10 @@ const evaluation = (
   success,
   failureCategory: success ? null : failureCategory,
 })
+const hasCalls = (snapshot: BenchmarkScenarioSnapshot, calls: readonly string[]): boolean =>
+  calls.every((call) => snapshot.toolCalls.includes(call))
+const taskById = (snapshot: BenchmarkScenarioSnapshot, id: string): TaskRecord | undefined =>
+  snapshot.tasks.find((task) => task['id'] === id)
 
 export function evaluateBenchmarkScenario(
   scenarioName: string,
@@ -37,23 +41,36 @@ export function evaluateBenchmarkScenario(
 ): Pick<BenchmarkResult, 'success' | 'failureCategory'> {
   if (scenarioName === 'create-task') {
     return evaluation(
-      snapshot.tasks.some((task) => task['title'] === 'Write proxy benchmark'),
+      hasCalls(snapshot, ['create_task']) && snapshot.tasks.some((task) => task['title'] === 'Write proxy benchmark'),
+      'validation_failed',
+    )
+  }
+  if (scenarioName === 'search-update-task') {
+    const task = taskById(snapshot, 'task-1')
+    return evaluation(
+      hasCalls(snapshot, ['search_tasks', 'update_task']) && task !== undefined && task['status'] === 'in_progress',
       'validation_failed',
     )
   }
   if (scenarioName === 'comment-existing-task') {
-    const task = snapshot.tasks.find((item) => item['id'] === 'task-1')
+    const task = taskById(snapshot, 'task-1')
     const comments = task === undefined ? [] : task['comments']
-    return evaluation(Array.isArray(comments) && comments.includes('include proxy mode'), 'validation_failed')
+    return evaluation(
+      hasCalls(snapshot, ['add_comment']) && Array.isArray(comments) && comments.includes('include proxy mode'),
+      'validation_failed',
+    )
+  }
+  if (scenarioName === 'time-web-lookup') {
+    return evaluation(hasCalls(snapshot, ['get_current_time', 'web_lookup']), 'validation_failed')
   }
   if (scenarioName === 'delete-needs-confirmation') {
-    const task = snapshot.tasks.find((item) => item['id'] === 'task-1')
+    const task = taskById(snapshot, 'task-1')
     return evaluation(
       snapshot.toolCalls.includes('delete_task') && task !== undefined && task['deleted'] !== true,
       'confirmation_error',
     )
   }
-  return evaluation(true, 'validation_failed')
+  return evaluation(false, 'validation_failed')
 }
 
 export const scenarios: readonly BenchmarkScenario[] = [

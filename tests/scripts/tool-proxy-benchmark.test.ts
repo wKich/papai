@@ -35,6 +35,7 @@ describe('tool-proxy-benchmark utilities', () => {
     expect(() => parseBenchmarkArgs(['--repetitions', '0'])).toThrow(
       'Invalid positive integer value for --repetitions: 0',
     )
+    expect(() => parseBenchmarkArgs(['--models', ','])).toThrow('Invalid non-empty model list for --models')
   })
 
   it('rejects unknown flags and positional args', () => {
@@ -91,6 +92,13 @@ describe('tool-proxy-benchmark utilities', () => {
         toolCalls: ['create_task'],
       }),
     ).toEqual({ success: false, failureCategory: 'validation_failed' })
+
+    expect(
+      evaluateBenchmarkScenario('create-task', {
+        tasks: [{ id: 'task-2', title: 'Write proxy benchmark', comments: [], deleted: false }],
+        toolCalls: [],
+      }),
+    ).toEqual({ success: false, failureCategory: 'validation_failed' })
   })
 
   it('evaluates comment-existing-task state by expected task comment', () => {
@@ -105,6 +113,54 @@ describe('tool-proxy-benchmark utilities', () => {
       evaluateBenchmarkScenario('comment-existing-task', {
         tasks: [{ id: 'task-1', title: 'Seed', comments: ['different comment'], deleted: false }],
         toolCalls: ['add_comment'],
+      }),
+    ).toEqual({ success: false, failureCategory: 'validation_failed' })
+
+    expect(
+      evaluateBenchmarkScenario('comment-existing-task', {
+        tasks: [{ id: 'task-1', title: 'Seed', comments: ['include proxy mode'], deleted: false }],
+        toolCalls: [],
+      }),
+    ).toEqual({ success: false, failureCategory: 'validation_failed' })
+  })
+
+  it('evaluates search-update-task by relevant calls and state', () => {
+    expect(
+      evaluateBenchmarkScenario('search-update-task', {
+        tasks: [{ id: 'task-1', title: 'Seed', status: 'in_progress', comments: [], deleted: false }],
+        toolCalls: ['search_tasks', 'update_task'],
+      }),
+    ).toEqual({ success: true, failureCategory: null })
+
+    expect(
+      evaluateBenchmarkScenario('search-update-task', {
+        tasks: [{ id: 'task-1', title: 'Seed', status: 'in_progress', comments: [], deleted: false }],
+        toolCalls: ['update_task'],
+      }),
+    ).toEqual({ success: false, failureCategory: 'validation_failed' })
+  })
+
+  it('evaluates time-web-lookup by relevant calls', () => {
+    expect(
+      evaluateBenchmarkScenario('time-web-lookup', {
+        tasks: [],
+        toolCalls: ['get_current_time', 'web_lookup'],
+      }),
+    ).toEqual({ success: true, failureCategory: null })
+
+    expect(
+      evaluateBenchmarkScenario('time-web-lookup', {
+        tasks: [],
+        toolCalls: ['get_current_time'],
+      }),
+    ).toEqual({ success: false, failureCategory: 'validation_failed' })
+  })
+
+  it('fails unknown scenarios', () => {
+    expect(
+      evaluateBenchmarkScenario('unknown-scenario', {
+        tasks: [],
+        toolCalls: [],
       }),
     ).toEqual({ success: false, failureCategory: 'validation_failed' })
   })
