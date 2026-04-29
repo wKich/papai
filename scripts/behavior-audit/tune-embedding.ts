@@ -2,7 +2,7 @@ import { mkdtemp, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { reloadBehaviorAuditConfig, EXTRACTED_DIR, EMBEDDING_MODEL } from './config.js'
+import { reloadBehaviorAuditConfig, EXTRACTED_DIR, EMBEDDING_BASE_URL, EMBEDDING_MODEL } from './config.js'
 import { embedSlugBatch } from './consolidate-keywords-agent.js'
 import {
   buildClustersAdvanced,
@@ -22,6 +22,7 @@ const VALID_LINKAGES: readonly LinkageMode[] = ['single', 'average', 'complete']
 interface TuneEmbeddingDeps {
   readonly extractedDir: string
   readonly embeddingModel: string
+  readonly embeddingBaseUrl: string
   readonly reloadBehaviorAuditConfig: () => void
   readonly embedSlugBatch: typeof embedSlugBatch
   readonly buildClustersAdvanced: typeof buildClustersAdvanced
@@ -36,6 +37,7 @@ interface TuneEmbeddingDeps {
 const defaultTuneEmbeddingDeps: TuneEmbeddingDeps = {
   extractedDir: EXTRACTED_DIR,
   embeddingModel: EMBEDDING_MODEL,
+  embeddingBaseUrl: EMBEDDING_BASE_URL,
   reloadBehaviorAuditConfig,
   embedSlugBatch,
   buildClustersAdvanced,
@@ -225,7 +227,7 @@ async function runTune(params: TuneParams, deps: TuneEmbeddingDeps): Promise<Tun
     cachePath,
     deps.embeddingModel,
     vocabulary,
-    { embedSlugBatch: deps.embedSlugBatch, log: console },
+    { embedSlugBatch: deps.embedSlugBatch, providerIdentity: deps.embeddingBaseUrl, log: console },
     params.reembed,
   )
 

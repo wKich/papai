@@ -34,6 +34,7 @@ describe('tune-embedding wiring', () => {
     await runTuneEmbedding(['--max-cluster-size', '2', '--gap-threshold', '0.17', '--linkage', 'complete'], {
       extractedDir,
       embeddingModel: 'test-embedding-model',
+      embeddingBaseUrl: 'http://embedding-provider/v1',
       reloadBehaviorAuditConfig: (): void => {},
       embedSlugBatch: (): Promise<readonly number[][]> => Promise.resolve([]),
       getOrEmbed: (): Promise<{

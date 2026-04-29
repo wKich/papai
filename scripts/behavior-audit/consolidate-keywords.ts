@@ -79,10 +79,11 @@ async function markDoneAndSave(
 
 async function computeMergeMap(
   vocabulary: readonly KeywordVocabularyEntry[],
-  deps: Pick<Phase1bDeps, 'getOrEmbed' | 'embeddingCachePath' | 'embeddingModel' | 'log'>,
+  deps: Pick<Phase1bDeps, 'getOrEmbed' | 'embeddingCachePath' | 'embeddingModel' | 'embeddingBaseUrl' | 'log'>,
 ): Promise<ReadonlyMap<string, string>> {
   const embeddingData = await deps.getOrEmbed(deps.embeddingCachePath, deps.embeddingModel, vocabulary, {
     embedSlugBatch,
+    providerIdentity: deps.embeddingBaseUrl,
     log: deps.log,
   })
   const normalized = toNormalizedFloat64Arrays(embeddingData.normalized)
