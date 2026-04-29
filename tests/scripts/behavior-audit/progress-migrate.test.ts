@@ -82,6 +82,7 @@ test('validateOrMigrateProgress backfills missing phase1b clustering fields for 
   expect(result?.phase1b.linkage).toBe('single')
   expect(result?.phase1b.maxClusterSize).toBe(0)
   expect(result?.phase1b.gapThreshold).toBe(0)
+  expect(result?.phase1b.embeddingBaseUrl).toBe('')
   expect(result?.phase1b.stats.mergesApplied).toBe(6)
   expect(result?.phase2a.status).toBe('in-progress')
   expect(result?.phase2a.stats.behaviorsDone).toBe(10)

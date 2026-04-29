@@ -19,6 +19,7 @@ test('emptyPhase1b returns a fresh Phase1bProgress with all-zero stats', () => {
   expect(p.maxClusterSize).toBe(0)
   expect(p.gapThreshold).toBe(0)
   expect(p.embeddingModel).toBe('')
+  expect(p.embeddingBaseUrl).toBe('')
   expect(p.embeddingCachePath).toBeNull()
   expect(p.stats.slugsBefore).toBe(0)
   expect(p.stats.slugsAfter).toBe(0)

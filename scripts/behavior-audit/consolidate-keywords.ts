@@ -6,6 +6,7 @@ import {
   CONSOLIDATION_MIN_CLUSTER_SIZE,
   CONSOLIDATION_THRESHOLD,
   EMBEDDING_CACHE_PATH,
+  EMBEDDING_BASE_URL,
   EMBEDDING_MODEL,
 } from './config.js'
 import { embedSlugBatch } from './consolidate-keywords-agent.js'
@@ -32,6 +33,7 @@ export interface Phase1bDeps {
   readonly saveKeywordVocabulary: typeof saveKeywordVocabulary
   readonly getOrEmbed: typeof getOrEmbed
   readonly embeddingCachePath: string | null
+  readonly embeddingBaseUrl: string
   readonly embeddingModel: string
   readonly loadManifest: () => Promise<IncrementalManifest | null>
   readonly remapKeywordsInExtractedFile: typeof RemapFn
@@ -44,6 +46,7 @@ const defaultPhase1bDeps: Phase1bDeps = {
   saveKeywordVocabulary,
   getOrEmbed,
   embeddingCachePath: EMBEDDING_CACHE_PATH,
+  embeddingBaseUrl: EMBEDDING_BASE_URL,
   embeddingModel: EMBEDDING_MODEL,
   loadManifest,
   remapKeywordsInExtractedFile,
@@ -56,7 +59,7 @@ async function markDoneAndSave(
   threshold: number,
   slugsBefore: number,
   now: string,
-  deps: Pick<Phase1bDeps, 'saveProgress' | 'embeddingModel' | 'embeddingCachePath'>,
+  deps: Pick<Phase1bDeps, 'saveProgress' | 'embeddingModel' | 'embeddingBaseUrl' | 'embeddingCachePath'>,
 ): Promise<void> {
   progress.phase1b = {
     status: 'done',
@@ -67,6 +70,7 @@ async function markDoneAndSave(
     maxClusterSize: CONSOLIDATION_MAX_CLUSTER_SIZE,
     gapThreshold: CONSOLIDATION_GAP_THRESHOLD,
     embeddingModel: deps.embeddingModel,
+    embeddingBaseUrl: deps.embeddingBaseUrl,
     embeddingCachePath: deps.embeddingCachePath,
     stats: { slugsBefore, slugsAfter: slugsBefore, mergesApplied: 0, behaviorsUpdated: 0, keywordsRemapped: 0 },
   }
@@ -123,6 +127,7 @@ function shouldSkipCompletedPhase1b(progress: Progress, slugsBefore: number, dep
     CONSOLIDATION_MAX_CLUSTER_SIZE === progress.phase1b.maxClusterSize &&
     CONSOLIDATION_GAP_THRESHOLD === progress.phase1b.gapThreshold &&
     deps.embeddingModel === progress.phase1b.embeddingModel &&
+    deps.embeddingBaseUrl === progress.phase1b.embeddingBaseUrl &&
     deps.embeddingCachePath === progress.phase1b.embeddingCachePath
   )
 }
@@ -161,6 +166,7 @@ async function applyMergesAndSave(
     maxClusterSize: CONSOLIDATION_MAX_CLUSTER_SIZE,
     gapThreshold: CONSOLIDATION_GAP_THRESHOLD,
     embeddingModel: deps.embeddingModel,
+    embeddingBaseUrl: deps.embeddingBaseUrl,
     embeddingCachePath: deps.embeddingCachePath,
     stats: {
       slugsBefore: vocabulary.length,

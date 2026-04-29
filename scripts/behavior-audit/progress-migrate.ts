@@ -31,6 +31,7 @@ const Phase1bCheckpointSchema = z.strictObject({
   maxClusterSize: z.number(),
   gapThreshold: z.number(),
   embeddingModel: z.string(),
+  embeddingBaseUrl: z.string(),
   embeddingCachePath: z.string().nullable(),
   stats: z.object({
     slugsBefore: z.number(),
@@ -50,6 +51,7 @@ const LegacyPhase1bCheckpointSchema = z.strictObject({
   maxClusterSize: z.number().optional(),
   gapThreshold: z.number().optional(),
   embeddingModel: z.string().optional(),
+  embeddingBaseUrl: z.string().optional(),
   embeddingCachePath: z.string().nullable().optional(),
   stats: z.object({
     slugsBefore: z.number(),

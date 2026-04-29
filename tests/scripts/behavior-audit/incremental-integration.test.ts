@@ -1071,6 +1071,7 @@ describe('behavior-audit incremental manifest', () => {
             maxClusterSize: 0,
             gapThreshold: 0,
             embeddingModel: '',
+            embeddingBaseUrl: '',
             embeddingCachePath: null,
             stats: { slugsBefore: 0, slugsAfter: 0, mergesApplied: 0, behaviorsUpdated: 0, keywordsRemapped: 0 },
           },
