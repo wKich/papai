@@ -1,4 +1,4 @@
-import { mkdir, readdir } from 'node:fs/promises'
+import { appendFile, mkdir, readdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 import { formatClusteringProfile } from './clustering-profile.js'
@@ -82,7 +82,10 @@ function parseArgsRecursive(args: readonly string[], index: number, params: Benc
   if ((flag === '--output' || flag === '--output-path') && value !== undefined) {
     return parseArgsRecursive(args, index + 2, { ...params, outputPath: value })
   }
-  return parseArgsRecursive(args, index + 1, params)
+  if (flag.startsWith('--')) {
+    throw new TypeError(value === undefined ? `Missing value for ${flag}` : `Unknown flag: ${flag}`)
+  }
+  throw new TypeError(`Unexpected positional argument: ${flag}`)
 }
 
 function parseArgs(args: readonly string[]): BenchmarkParams {
@@ -132,8 +135,71 @@ function buildVocabulary(slugs: readonly string[], now: string): readonly Keywor
   }))
 }
 
+function buildRunHeader(params: BenchmarkParams, datasetSize: number, generatedAt: string): string {
+  return [
+    `## Run ${generatedAt}`,
+    '',
+    `linkage=${params.linkage}`,
+    `threshold=${params.threshold}`,
+    `gapThreshold=${params.gapThreshold}`,
+    `datasetSize=${datasetSize}`,
+  ].join('\n')
+}
+
 function buildMarkdownSection(size: number, clusterCount: number, profileText: string): string {
-  return [`## Size ${size}`, '', '```text', profileText, `clusters=${clusterCount}`, '```'].join('\n')
+  return [`### Size ${size}`, '', '```text', profileText, `clusters=${clusterCount}`, '```'].join('\n')
+}
+
+function buildSkippedSizeNote(size: number, datasetSize: number): string {
+  return `- skipped size=${size} datasetSize=${datasetSize}`
+}
+
+async function ensureResultsFile(outputPath: string): Promise<void> {
+  await mkdir(dirname(outputPath), { recursive: true })
+  const file = Bun.file(outputPath)
+  if (!(await file.exists())) {
+    await Bun.write(outputPath, '# Embedding Clustering Profile Results\n')
+  }
+}
+
+async function appendSection(outputPath: string, content: string): Promise<void> {
+  await appendFile(outputPath, `\n${content}\n`)
+}
+
+async function appendSizes(
+  outputPath: string,
+  sizes: readonly number[],
+  datasetSize: number,
+  normalizedEmbeddings: readonly Float64Array[],
+  params: BenchmarkParams,
+): Promise<void> {
+  const [currentSize, ...remainingSizes] = sizes
+  if (currentSize === undefined) {
+    return
+  }
+
+  if (currentSize > datasetSize) {
+    const skippedNote = buildSkippedSizeNote(currentSize, datasetSize)
+    console.log(skippedNote)
+    await appendSection(outputPath, skippedNote)
+    await appendSizes(outputPath, remainingSizes, datasetSize, normalizedEmbeddings, params)
+    return
+  }
+
+  const result = buildClustersAdvanced(
+    normalizedEmbeddings.slice(0, currentSize),
+    params.threshold,
+    2,
+    params.linkage,
+    params.gapThreshold,
+    { profile: true },
+  )
+
+  await appendSection(
+    outputPath,
+    buildMarkdownSection(currentSize, result.clusters.length, formatClusteringProfile(result.profile)),
+  )
+  await appendSizes(outputPath, remainingSizes, datasetSize, normalizedEmbeddings, params)
 }
 
 async function run(): Promise<void> {
@@ -150,37 +216,10 @@ async function run(): Promise<void> {
   })
   const normalizedEmbeddings = toNormalizedFloat64Arrays(embeddingData.normalized)
 
-  const sections = params.sizes.flatMap((size) => {
-    if (size > vocabulary.length) {
-      return []
-    }
+  await ensureResultsFile(params.outputPath)
+  await appendSection(params.outputPath, buildRunHeader(params, vocabulary.length, now))
+  await appendSizes(params.outputPath, params.sizes, vocabulary.length, normalizedEmbeddings, params)
 
-    const result = buildClustersAdvanced(
-      normalizedEmbeddings.slice(0, size),
-      params.threshold,
-      2,
-      params.linkage,
-      params.gapThreshold,
-      { profile: true },
-    )
-
-    return [buildMarkdownSection(size, result.clusters.length, formatClusteringProfile(result.profile))]
-  })
-
-  const markdown = [
-    '# Embedding Clustering Profile Results',
-    '',
-    `threshold=${params.threshold}`,
-    `linkage=${params.linkage}`,
-    `gapThreshold=${params.gapThreshold}`,
-    `datasetSize=${vocabulary.length}`,
-    '',
-    ...sections,
-    '',
-  ].join('\n')
-
-  await mkdir(dirname(params.outputPath), { recursive: true })
-  await Bun.write(params.outputPath, markdown)
   console.log(`Wrote ${params.outputPath}`)
 }
 
