@@ -49,7 +49,8 @@ const toolSchemas: Readonly<Record<BenchmarkToolName, z.ZodType<Readonly<Record<
   }),
   delete_task: z.object({
     taskId: z.string().describe('Task identifier to delete.'),
-    confirm: z.boolean().optional().describe('Whether deletion has explicit confirmation.'),
+    label: z.string().optional().describe('Human-readable task title for the confirmation message.'),
+    confidence: z.number().min(0).max(1).describe('Confidence from 0 to 1 that the user explicitly wants deletion.'),
   }),
 }
 
@@ -174,8 +175,7 @@ const executeFakeTool = (store: BenchmarkStore, name: string, input: Record<stri
   if (name === 'get_current_time') return { iso: '2026-04-30T12:00:00.000Z', timezone: 'UTC' }
   if (name === 'web_lookup')
     return { topic: readString(input['topic'], 'topic'), summary: 'Reference summary', source: 'benchmark://web' }
-  if (input['confirm'] === true) return patchTask(store, readString(input['taskId'], 'taskId'), { deleted: true })
-  return { status: 'confirmation_required', message: 'Please confirm deletion before removing the task.' }
+  return deleteTask(store, input)
 }
 
 const createTask = (store: BenchmarkStore, input: Record<string, unknown>): TaskRecord => {
@@ -206,6 +206,20 @@ const addComment = (store: BenchmarkStore, input: Record<string, unknown>): Task
   return patchTask(store, id, {
     comments: [...taskComments(store.tasks.get(id)), readString(input['comment'], 'comment')],
   })
+}
+
+const deleteTask = (
+  store: BenchmarkStore,
+  input: Record<string, unknown>,
+): TaskRecord | Readonly<Record<string, string>> => {
+  const taskId = readString(input['taskId'], 'taskId')
+  const confidence = input['confidence']
+  if (typeof confidence === 'number' && confidence >= 0.85) return patchTask(store, taskId, { deleted: true })
+  const label = typeof input['label'] === 'string' && input['label'].length > 0 ? input['label'] : taskId
+  return {
+    status: 'confirmation_required',
+    message: `Delete "${label}"? This action is irreversible - please confirm.`,
+  }
 }
 
 const makeFakeTools = (store: BenchmarkStore): ToolSet =>

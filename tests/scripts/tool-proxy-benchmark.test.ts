@@ -301,6 +301,11 @@ describe('tool-proxy-benchmark utilities', () => {
     const createTask = expectProxyTextResult(await execute({ describe: 'create_task' }, toolOptions))
     expect(firstProxyText(createTask)).toContain('title (string) *required*')
 
+    const deleteTask = expectProxyTextResult(await execute({ describe: 'delete_task' }, toolOptions))
+    expect(firstProxyText(deleteTask)).toContain('taskId (string) *required*')
+    expect(firstProxyText(deleteTask)).toContain('confidence (number) *required*')
+    expect(firstProxyText(deleteTask)).not.toContain('confirm (boolean)')
+
     const addCommentDescription = expectProxyTextResult(await execute({ describe: 'add_comment' }, toolOptions))
     expect(firstProxyText(addCommentDescription)).toContain('taskId (string) *required*')
     expect(firstProxyText(addCommentDescription)).toContain('comment (string) *required*')
