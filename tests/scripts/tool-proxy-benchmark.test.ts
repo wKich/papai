@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'bun:test'
 
-import { parseBenchmarkArgs, summarizeBenchmarkResults } from '../../scripts/tool-proxy-benchmark.js'
+import {
+  evaluateBenchmarkScenario,
+  parseBenchmarkArgs,
+  summarizeBenchmarkResults,
+} from '../../scripts/tool-proxy-benchmark.js'
 
 describe('tool-proxy-benchmark utilities', () => {
   it('parses explicit benchmark flags', () => {
@@ -71,5 +75,60 @@ describe('tool-proxy-benchmark utilities', () => {
 
     expect(markdown).toContain('| model-a | direct | 2 | 50.0% | 1.0 | 1.0 | confirmation_error: 1 |')
     expect(markdown).toContain('| model-a | proxy | 1 | 100.0% | 2.0 | 2.0 | none |')
+  })
+
+  it('evaluates create-task state by expected title', () => {
+    expect(
+      evaluateBenchmarkScenario('create-task', {
+        tasks: [{ id: 'task-2', title: 'Write proxy benchmark', comments: [], deleted: false }],
+        toolCalls: ['create_task'],
+      }),
+    ).toEqual({ success: true, failureCategory: null })
+
+    expect(
+      evaluateBenchmarkScenario('create-task', {
+        tasks: [{ id: 'task-2', title: 'Wrong task', comments: [], deleted: false }],
+        toolCalls: ['create_task'],
+      }),
+    ).toEqual({ success: false, failureCategory: 'validation_failed' })
+  })
+
+  it('evaluates comment-existing-task state by expected task comment', () => {
+    expect(
+      evaluateBenchmarkScenario('comment-existing-task', {
+        tasks: [{ id: 'task-1', title: 'Seed', comments: ['include proxy mode'], deleted: false }],
+        toolCalls: ['add_comment'],
+      }),
+    ).toEqual({ success: true, failureCategory: null })
+
+    expect(
+      evaluateBenchmarkScenario('comment-existing-task', {
+        tasks: [{ id: 'task-1', title: 'Seed', comments: ['different comment'], deleted: false }],
+        toolCalls: ['add_comment'],
+      }),
+    ).toEqual({ success: false, failureCategory: 'validation_failed' })
+  })
+
+  it('evaluates delete-needs-confirmation by call and retained task', () => {
+    expect(
+      evaluateBenchmarkScenario('delete-needs-confirmation', {
+        tasks: [{ id: 'task-1', title: 'Seed', comments: [], deleted: false }],
+        toolCalls: ['delete_task'],
+      }),
+    ).toEqual({ success: true, failureCategory: null })
+
+    expect(
+      evaluateBenchmarkScenario('delete-needs-confirmation', {
+        tasks: [{ id: 'task-1', title: 'Seed', comments: [], deleted: true }],
+        toolCalls: ['delete_task'],
+      }),
+    ).toEqual({ success: false, failureCategory: 'confirmation_error' })
+
+    expect(
+      evaluateBenchmarkScenario('delete-needs-confirmation', {
+        tasks: [{ id: 'task-1', title: 'Seed', comments: [], deleted: false }],
+        toolCalls: [],
+      }),
+    ).toEqual({ success: false, failureCategory: 'confirmation_error' })
   })
 })

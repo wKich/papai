@@ -2,10 +2,19 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { generateText, stepCountIs, tool, type ToolSet } from 'ai'
-import { z } from 'zod'
+import { generateText, stepCountIs } from 'ai'
 
-import { makeToolProxy } from '../src/tools/tool-proxy.js'
+import {
+  createBenchmarkStore,
+  evaluateBenchmarkScenario,
+  resultForRun,
+  scenarios,
+  toolsForMode,
+  type BenchmarkScenario,
+  type BenchmarkScenarioSnapshot,
+} from './tool-proxy-benchmark-scenarios.js'
+
+export { evaluateBenchmarkScenario, type BenchmarkScenarioSnapshot }
 
 export type BenchmarkMode = 'direct' | 'proxy'
 type BenchmarkCounts = Record<'toolCallCount' | 'stepCount', number>
@@ -16,9 +25,6 @@ export type BenchmarkResult = Readonly<
 export type BenchmarkArgs = Readonly<
   Record<'baseUrl' | 'apiKeyEnv' | 'outputPath', string> & { models: readonly string[]; repetitions: number }
 >
-type TaskRecord = Readonly<Record<string, unknown>>
-type Store = { readonly tasks: Map<string, TaskRecord>; nextId: number }
-type Scenario = Readonly<{ id: string; prompt: string; validate: (store: Store) => boolean }>
 type SummaryGroup = Record<'model' | 'mode', string> &
   Record<'runs' | 'successes' | 'toolCalls' | 'steps', number> & { failures: Record<string, number> }
 
@@ -120,99 +126,6 @@ export function summarizeBenchmarkResults(results: readonly BenchmarkResult[]): 
   ].join('\n')
 }
 
-const createStore = (): Store => ({
-  tasks: new Map<string, TaskRecord>().set('task-1', {
-    id: 'task-1',
-    title: 'Write release notes',
-    status: 'open',
-    comments: [] as readonly string[],
-    deleted: false,
-  }),
-  nextId: 2,
-})
-const readString = (value: unknown, name: string): string => {
-  if (typeof value !== 'string' || value.length === 0) throw new Error(`Missing required tool input: ${name}`)
-  return value
-}
-const patchTask = (
-  store: Store,
-  id: string,
-  patch: Readonly<Record<string, unknown>>,
-): Readonly<Record<string, unknown>> => {
-  const task = store.tasks.get(id)
-  if (task === undefined) throw new Error(`Task not found: ${id}`)
-  const updated = { ...task, ...patch }
-  store.tasks.set(id, updated)
-  return updated
-}
-const toolSchema = z.record(z.string(), z.unknown())
-const fakeTool = (store: Store, name: string, description: string): ToolSet[string] =>
-  tool({ description, inputSchema: toolSchema, execute: (input) => executeFakeTool(store, name, input) })
-const executeFakeTool = (store: Store, name: string, input: Record<string, unknown>): unknown => {
-  if (name === 'create_task') {
-    const id = `task-${store.nextId}`
-    store.nextId += 1
-    const task = {
-      id,
-      title: readString(input['title'], 'title'),
-      description: input['description'],
-      status: 'open',
-      comments: [],
-      deleted: false,
-    }
-    store.tasks.set(id, task)
-    return task
-  }
-  if (name === 'search_tasks') return searchTasks(store, readString(input['query'], 'query'))
-  if (name === 'update_task')
-    return patchTask(store, readString(input['taskId'], 'taskId'), { status: 'in_progress', title: input['title'] })
-  if (name === 'add_comment') return addComment(store, input)
-  if (name === 'assign_user')
-    return patchTask(store, readString(input['taskId'], 'taskId'), {
-      assignee: readString(input['username'], 'username'),
-    })
-  if (name === 'get_current_time') return { iso: '2026-04-30T12:00:00.000Z', timezone: 'UTC' }
-  if (name === 'web_lookup')
-    return { topic: readString(input['topic'], 'topic'), summary: 'Reference summary', source: 'benchmark://web' }
-  if (input['confirm'] === true) return patchTask(store, readString(input['taskId'], 'taskId'), { deleted: true })
-  return { status: 'confirmation_required', message: 'Please confirm deletion before removing the task.' }
-}
-const searchTasks = (store: Store, query: string): readonly TaskRecord[] =>
-  [...store.tasks.values()].filter((task) => String(task['title']).toLowerCase().includes(query.toLowerCase()))
-const taskComments = (task: TaskRecord | undefined): readonly unknown[] => {
-  const raw = task === undefined ? [] : task['comments']
-  return Array.isArray(raw) ? raw : []
-}
-const addComment = (store: Store, input: Record<string, unknown>): TaskRecord => {
-  const id = readString(input['taskId'], 'taskId')
-  return patchTask(store, id, {
-    comments: [...taskComments(store.tasks.get(id)), readString(input['comment'], 'comment')],
-  })
-}
-const makeFakeTools = (store: Store): ToolSet => ({
-  create_task: fakeTool(store, 'create_task', 'Create task.'),
-  search_tasks: fakeTool(store, 'search_tasks', 'Search tasks.'),
-  update_task: fakeTool(store, 'update_task', 'Update task.'),
-  add_comment: fakeTool(store, 'add_comment', 'Add comment.'),
-  assign_user: fakeTool(store, 'assign_user', 'Assign user.'),
-  get_current_time: fakeTool(store, 'get_current_time', 'Get current time.'),
-  web_lookup: fakeTool(store, 'web_lookup', 'Web lookup.'),
-  delete_task: fakeTool(store, 'delete_task', 'Delete task with confirmation.'),
-})
-
-const scenarioIsSuccessful = (): boolean => true
-const makeScenario = (id: string, prompt: string): Scenario => ({ id, prompt, validate: scenarioIsSuccessful })
-const scenarios: readonly Scenario[] = [
-  makeScenario('create-task', 'Create a task titled "Prepare launch checklist".'),
-  makeScenario('search-update-task', 'Find the release notes task and mark it in progress.'),
-  makeScenario('comment-assign-task', 'Assign task-1 to alice and comment "Needs final review".'),
-  makeScenario('time-web-lookup', 'Check current time and look up release notes context.'),
-  makeScenario('delete-task-confirmed', 'Delete task-1. The user explicitly confirms deletion.'),
-]
-const toolsForMode = (mode: BenchmarkMode, store: Store): ToolSet => {
-  const direct = makeFakeTools(store)
-  return mode === 'direct' ? direct : { papai_tool: makeToolProxy(direct) }
-}
 const systemForMode = (mode: BenchmarkMode): string =>
   mode === 'direct'
     ? 'Use the direct tools.'
@@ -225,15 +138,14 @@ const failure = (error: unknown): string =>
     .includes('confirmation')
     ? 'confirmation_error'
     : 'model_error'
-
 const runScenario = async (
   model: string,
   mode: BenchmarkMode,
-  scenario: Scenario,
+  scenario: BenchmarkScenario,
   args: BenchmarkArgs,
   apiKey: string,
 ): Promise<BenchmarkResult> => {
-  const store = createStore()
+  const store = createBenchmarkStore()
   const provider = createOpenAICompatible({ name: 'tool-proxy-benchmark', apiKey, baseURL: args.baseUrl })(model)
   try {
     const result = await generateText({
@@ -244,26 +156,22 @@ const runScenario = async (
       stopWhen: stepCountIs(8),
       maxOutputTokens: 1024,
     })
-    const success = scenario.validate(store)
-    return {
-      model,
-      mode,
-      scenario: scenario.id,
-      success,
+    const evaluated = evaluateBenchmarkScenario(scenario.id, {
+      tasks: [...store.tasks.values()],
+      toolCalls: store.toolCalls,
+    })
+    return resultForRun(model, mode, scenario, evaluated, {
       toolCallCount: countToolCalls(result.steps),
       stepCount: result.steps.length,
-      failureCategory: success ? null : 'validation_failed',
-    }
+    })
   } catch (error) {
-    return {
+    return resultForRun(
       model,
       mode,
-      scenario: scenario.id,
-      success: false,
-      toolCallCount: 0,
-      stepCount: 0,
-      failureCategory: failure(error),
-    }
+      scenario,
+      { success: false, failureCategory: failure(error) },
+      { toolCallCount: 0, stepCount: 0 },
+    )
   }
 }
 const runBenchmark = (args: BenchmarkArgs, apiKey: string): Promise<readonly BenchmarkResult[]> => {
