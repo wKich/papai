@@ -10,9 +10,11 @@ import { createOpencode } from '@opencode-ai/sdk/v2'
 
 import {
   IMPLEMENTATION_CHECK_SCHEMA,
+  REMAINING_WORK_ASSESSMENT_SCHEMA,
   REMAINING_WORK_SCHEMA,
   type ImplementationCheck,
   type RemainingWork,
+  type RemainingWorkAssessment,
 } from './plan-adr-workflow-helpers.js'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,7 +41,7 @@ export async function deleteSession(client: OpencodeClient, sessionID: string): 
 
 // ─── Retry Utility ────────────────────────────────────────────────────────────
 
-const MAX_RETRY_ATTEMPTS = 3
+const MAX_RETRY_ATTEMPTS = 5
 
 async function withRetry<T>(
   fn: () => Promise<T>,
@@ -98,7 +100,8 @@ async function checkImplementationStatusOnce(
           '2. Check whether the key source files listed in the plan exist with the expected content',
           '3. If the plan has checkbox tasks (- [x] done / - [ ] todo), note the completion ratio',
           '4. Look for a "Spec:" or "Design:" reference in the plan frontmatter or body',
-          '5. Return structured JSON with your findings',
+          '5. If the plan is explicitly marked superseded, return status "superseded" and mention the replacement in evidence',
+          '6. Return structured JSON with your findings',
         ].join('\n'),
       },
     ],
@@ -204,4 +207,88 @@ export function generateRemainingWork(
   planFile: string,
 ): Promise<RemainingWork> {
   return withRetry(() => generateRemainingWorkOnce(client, sessionID, planFile), isNoRemainingWorkOutputError)
+}
+
+// ─── Remaining Work Value Assessment ─────────────────────────────────────────
+
+function isRemainingWorkAssessment(value: unknown): value is RemainingWorkAssessment {
+  if (typeof value !== 'object' || value === null) return false
+  return (
+    'effort' in value &&
+    typeof value.effort === 'string' &&
+    'worthiness' in value &&
+    typeof value.worthiness === 'string' &&
+    'practical_value' in value &&
+    typeof value.practical_value === 'string' &&
+    'should_write_adr' in value &&
+    typeof value.should_write_adr === 'boolean' &&
+    'rationale' in value &&
+    typeof value.rationale === 'string'
+  )
+}
+
+const isNoRemainingWorkAssessmentOutputError = (error: unknown): boolean =>
+  error instanceof Error && error.message === 'remaining work assessment returned no structured output'
+
+const formatItems = (items: readonly string[]): string =>
+  items.length === 0 ? '- None identified' : items.map((item) => `- ${item}`).join('\n')
+
+async function assessRemainingWorkValueOnce(
+  client: OpencodeClient,
+  sessionID: string,
+  planFile: string,
+  check: ImplementationCheck,
+  work: RemainingWork,
+): Promise<RemainingWorkAssessment> {
+  const result = await client.session.prompt({
+    sessionID,
+    parts: [
+      {
+        type: 'text',
+        text: [
+          `Evaluate whether the remaining work for docs/superpowers/plans/${planFile} is worth implementing before archiving the plan.`,
+          '',
+          `Implementation status: ${check.status}`,
+          `Evidence: ${check.evidence}`,
+          '',
+          'Completed items:',
+          formatItems(work.completed_items),
+          '',
+          'Remaining items:',
+          formatItems(work.remaining_items),
+          '',
+          'Suggested next steps:',
+          formatItems(work.suggested_next_steps),
+          '',
+          'Assess effort, worthiness, and practical value. Return should_write_adr=true only when the remaining changes are not worth implementing and the workflow should document the current decision with an ADR instead.',
+        ].join('\n'),
+      },
+    ],
+    format: {
+      type: 'json_schema',
+      schema: REMAINING_WORK_ASSESSMENT_SCHEMA,
+    },
+  })
+
+  const responseData = result.data
+  if (responseData === undefined) throw new Error('session.prompt returned no data')
+  const responseInfo = responseData.info
+  const structured: unknown = responseInfo === undefined ? undefined : responseInfo.structured
+  if (!isRemainingWorkAssessment(structured)) {
+    throw new Error('remaining work assessment returned no structured output')
+  }
+  return structured
+}
+
+export function assessRemainingWorkValue(
+  client: OpencodeClient,
+  sessionID: string,
+  planFile: string,
+  check: ImplementationCheck,
+  work: RemainingWork,
+): Promise<RemainingWorkAssessment> {
+  return withRetry(
+    () => assessRemainingWorkValueOnce(client, sessionID, planFile, check, work),
+    isNoRemainingWorkAssessmentOutputError,
+  )
 }

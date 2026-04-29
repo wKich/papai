@@ -7,9 +7,15 @@
 import { access, constants as fsConstants, mkdir, rename, writeFile } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
 
+export {
+  IMPLEMENTATION_CHECK_SCHEMA,
+  REMAINING_WORK_ASSESSMENT_SCHEMA,
+  REMAINING_WORK_SCHEMA,
+} from './plan-adr-workflow-schemas.js'
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type PlanStatus = 'fully_implemented' | 'partially_implemented' | 'not_implemented' | 'unclear'
+export type PlanStatus = 'fully_implemented' | 'partially_implemented' | 'not_implemented' | 'superseded' | 'unclear'
 
 export type WorkflowResult =
   | { readonly kind: 'adr_written'; readonly planFile: string; readonly specFile: string | null }
@@ -42,6 +48,14 @@ export interface RemainingWork {
   readonly suggested_next_steps: readonly string[]
 }
 
+export interface RemainingWorkAssessment {
+  readonly effort: 'low' | 'medium' | 'high'
+  readonly worthiness: 'low' | 'medium' | 'high'
+  readonly practical_value: 'low' | 'medium' | 'high'
+  readonly should_write_adr: boolean
+  readonly rationale: string
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 export const PROJECT_ROOT = resolve(join(import.meta.dirname, '..'))
@@ -49,55 +63,6 @@ export const PLANS_DIR = join(PROJECT_ROOT, 'docs/superpowers/plans')
 export const SPECS_DIR = join(PROJECT_ROOT, 'docs/superpowers/specs')
 export const REMAINING_DIR = join(PROJECT_ROOT, 'docs/superpowers/remaining')
 export const ARCHIVE_DIR = join(PROJECT_ROOT, 'docs/archive')
-
-export const IMPLEMENTATION_CHECK_SCHEMA = {
-  type: 'object',
-  properties: {
-    status: {
-      type: 'string',
-      enum: ['fully_implemented', 'partially_implemented', 'not_implemented', 'unclear'],
-      description: 'Overall implementation status of the plan',
-    },
-    is_fully_implemented: {
-      type: 'boolean',
-      description:
-        'True only when ALL key features, tasks, and file changes described in the plan exist in the codebase',
-    },
-    evidence: {
-      type: 'string',
-      description:
-        'Concise evidence: list which key files are present or absent, mention checkbox completion ratio if applicable',
-    },
-    spec_path: {
-      type: 'string',
-      description:
-        'Relative path to the design/spec document explicitly referenced in the plan (e.g. docs/superpowers/specs/...). Empty string if none found.',
-    },
-  },
-  required: ['status', 'is_fully_implemented', 'evidence'],
-} as const
-
-export const REMAINING_WORK_SCHEMA = {
-  type: 'object',
-  properties: {
-    completed_items: {
-      type: 'array',
-      items: { type: 'string' },
-      description: 'Concise list of plan tasks or features that are already fully implemented in the codebase',
-    },
-    remaining_items: {
-      type: 'array',
-      items: { type: 'string' },
-      description: 'Concise list of plan tasks or features that are not yet implemented or are incomplete',
-    },
-    suggested_next_steps: {
-      type: 'array',
-      items: { type: 'string' },
-      description: 'Prioritised list of actionable next steps to fully implement the plan',
-    },
-  },
-  required: ['completed_items', 'remaining_items', 'suggested_next_steps'],
-} as const
 
 // ─── CLI Parsing ──────────────────────────────────────────────────────────────
 
@@ -190,6 +155,11 @@ export async function archiveFile(absolutePath: string, dryRun: boolean): Promis
   const dest = join(ARCHIVE_DIR, basename(absolutePath))
   if (dryRun) {
     console.log(`    [dry-run] would move: ${basename(absolutePath)} -> docs/archive/`)
+    return
+  }
+  const sourceExists = await fileExists(absolutePath)
+  if (!sourceExists && (await fileExists(dest))) {
+    console.log(`    already archived: ${basename(absolutePath)}`)
     return
   }
   await rename(absolutePath, dest)

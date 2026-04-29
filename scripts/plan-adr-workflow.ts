@@ -2,9 +2,9 @@
  * plan-adr-workflow.ts
  *
  * Walks through docs/superpowers/plans/, checks each plan's implementation
- * status via opencode, writes ADR documents for fully-implemented plans
- * using the architecture-decision-records skill, and archives both the plan
- * and its spec file.
+ * status via opencode, writes ADR documents for completed, superseded, or
+ * low-value remaining-work plans using the architecture-decision-records skill,
+ * and archives both the plan and its spec file.
  *
  * Prerequisites:
  *   - opencode installed and in PATH
@@ -25,6 +25,7 @@ import { createOpencode } from '@opencode-ai/sdk/v2'
 
 import {
   type OpencodeClient,
+  assessRemainingWorkValue,
   checkImplementationStatus,
   createSession,
   deleteSession,
@@ -36,6 +37,7 @@ import {
   SPECS_DIR,
   PROJECT_ROOT,
   type ImplementationCheck,
+  type RemainingWorkAssessment,
   type WorkflowResult,
   archiveFile,
   discoverPlanFiles,
@@ -47,16 +49,63 @@ import {
 
 // ─── Per-Plan Processing ──────────────────────────────────────────────────────
 
-async function getSkippedResult(
+export function shouldRunAdrWorkflow(check: ImplementationCheck, assessment?: RemainingWorkAssessment): boolean {
+  return check.is_fully_implemented || check.status === 'superseded' || assessment?.should_write_adr === true
+}
+
+function printCheckSummary(check: ImplementationCheck): void {
+  console.log(`  status:   ${check.status}`)
+  const evidencePreview = check.evidence.length > 120 ? `${check.evidence.slice(0, 120)}...` : check.evidence
+  console.log(`  evidence: ${evidencePreview}`)
+}
+
+async function maybeCreateRemainingWorkDoc(
   client: OpencodeClient,
   sessionID: string,
   planFile: string,
   check: ImplementationCheck,
   dryRun: boolean,
-): Promise<WorkflowResult> {
+): Promise<WorkflowResult | null> {
+  if (shouldRunAdrWorkflow(check)) {
+    return null
+  }
+
   const work = await generateRemainingWork(client, sessionID, planFile)
+  const assessment = await assessRemainingWorkValue(client, sessionID, planFile, check, work)
+  console.log(`  value:    ${assessment.rationale}`)
+
+  if (shouldRunAdrWorkflow(check, assessment)) {
+    return null
+  }
+
   const remainingDocFile = await writeRemainingWorkDoc(planFile, check.status, work, dryRun)
   return { kind: 'skipped', planFile, status: check.status, reason: check.evidence, remainingDocFile }
+}
+
+async function runAdrAndArchiveFiles(
+  client: OpencodeClient,
+  sessionID: string,
+  planFile: string,
+  check: ImplementationCheck,
+  specRefFromContent: string | null,
+  dryRun: boolean,
+): Promise<WorkflowResult> {
+  if (dryRun) {
+    console.log('  [dry-run] would run architecture-decision-records skill')
+  } else {
+    await runAdrCommand(client, sessionID, planFile)
+    console.log('  ADR skill completed')
+  }
+
+  const specPath = await resolveSpecFile(check.spec_path, specRefFromContent, SPECS_DIR, PROJECT_ROOT)
+
+  await archiveFile(join(PLANS_DIR, planFile), dryRun)
+
+  if (specPath !== null) {
+    await archiveFile(specPath, dryRun)
+  }
+
+  return { kind: 'adr_written', planFile, specFile: specPath === null ? null : basename(specPath) }
 }
 
 async function processPlan(
@@ -72,30 +121,14 @@ async function processPlan(
     sessionID = await createSession(client, `adr-workflow: ${planFile}`)
 
     const check = await checkImplementationStatus(client, sessionID, planFile)
-    console.log(`  status:   ${check.status}`)
-    const evidencePreview = check.evidence.length > 120 ? `${check.evidence.slice(0, 120)}...` : check.evidence
-    console.log(`  evidence: ${evidencePreview}`)
+    printCheckSummary(check)
 
-    if (!check.is_fully_implemented) {
-      return await getSkippedResult(client, sessionID, planFile, check, dryRun)
+    const remainingWorkResult = await maybeCreateRemainingWorkDoc(client, sessionID, planFile, check, dryRun)
+    if (remainingWorkResult !== null) {
+      return remainingWorkResult
     }
 
-    if (dryRun) {
-      console.log('  [dry-run] would run architecture-decision-records skill')
-    } else {
-      await runAdrCommand(client, sessionID, planFile)
-      console.log('  ADR skill completed')
-    }
-
-    const specPath = await resolveSpecFile(check.spec_path, specRefFromContent, SPECS_DIR, PROJECT_ROOT)
-
-    await archiveFile(join(PLANS_DIR, planFile), dryRun)
-
-    if (specPath !== null) {
-      await archiveFile(specPath, dryRun)
-    }
-
-    return { kind: 'adr_written', planFile, specFile: specPath === null ? null : basename(specPath) }
+    return await runAdrAndArchiveFiles(client, sessionID, planFile, check, specRefFromContent, dryRun)
   } catch (error) {
     return {
       kind: 'error',

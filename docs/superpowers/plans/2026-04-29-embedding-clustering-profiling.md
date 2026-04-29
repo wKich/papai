@@ -34,17 +34,20 @@
 
 ## File Structure
 
-| File                                                                        | Responsibility                                                                             |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `scripts/behavior-audit/clustering-profile.ts`                              | New opt-in profiling types, timer helpers, counter helpers, and report formatting          |
-| `scripts/behavior-audit/consolidate-keywords-agglomerative-clustering.ts`   | Emit profiling counters/timings from average/complete HAC without changing merge semantics |
-| `scripts/behavior-audit/consolidate-keywords-advanced-clustering.ts`        | Thread optional profiling options through advanced clustering and oversized subdivision    |
-| `scripts/behavior-audit/tune-embedding.ts`                                  | Add `--profile-clustering` and `--profile-sizes` CLI flags; print profile summaries        |
-| `scripts/behavior-audit/profile-clustering.ts`                              | New focused benchmark/profiling runner for cached embeddings and scale sweeps              |
-| `tests/scripts/behavior-audit/clustering-profile.test.ts`                   | Unit tests for profile summary formatting and immutable stat updates                       |
-| `tests/scripts/behavior-audit/consolidate-keywords-helpers.test.ts`         | Regression tests proving profiling does not change cluster output                          |
-| `tests/scripts/behavior-audit/tune-embedding.test.ts`                       | CLI parsing/wiring tests for new profiling flags                                           |
-| `docs/superpowers/plans/2026-04-29-embedding-clustering-profile-results.md` | Measurement log created after profiling runs complete                                      |
+| File                                                                        | Responsibility                                                                              |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `scripts/behavior-audit/clustering-profile.ts`                              | New opt-in profiling types, timer helpers, counter helpers, and report formatting           |
+| `scripts/behavior-audit/consolidate-keywords-agglomerative-clustering.ts`   | Orchestrate profiled average/complete HAC without changing merge semantics                  |
+| `scripts/behavior-audit/consolidate-keywords-agglomerative-helpers.ts`      | Shared profiled HAC distance helpers, gap checks, counters, and matrix utilities            |
+| `scripts/behavior-audit/consolidate-keywords-agglomerative-chain.ts`        | Shared profiled nearest-neighbor chain step transitions                                     |
+| `scripts/behavior-audit/consolidate-keywords-advanced-clustering.ts`        | Thread optional profiling options through advanced clustering and oversized subdivision     |
+| `scripts/behavior-audit/tune-embedding.ts`                                  | Add `--profile-clustering` and `--profile-sizes` CLI flags; print profile summaries         |
+| `scripts/behavior-audit/tune-embedding-args.ts`                             | Shared `tune-embedding` CLI argument parsing kept separate when repo size limits require it |
+| `scripts/behavior-audit/profile-clustering.ts`                              | New focused benchmark/profiling runner for cached embeddings and scale sweeps               |
+| `tests/scripts/behavior-audit/clustering-profile.test.ts`                   | Unit tests for profile summary formatting and immutable stat updates                        |
+| `tests/scripts/behavior-audit/consolidate-keywords-helpers.test.ts`         | Regression tests proving profiling does not change cluster output                           |
+| `tests/scripts/behavior-audit/tune-embedding.test.ts`                       | CLI parsing/wiring tests for new profiling flags                                            |
+| `docs/superpowers/plans/2026-04-29-embedding-clustering-profile-results.md` | Measurement log created after profiling runs complete                                       |
 
 ---
 
@@ -285,8 +288,13 @@ Expected: commit succeeds. If the user has requested no commits in this session,
 **Files:**
 
 - Modify: `scripts/behavior-audit/consolidate-keywords-agglomerative-clustering.ts`
+- Create: `scripts/behavior-audit/consolidate-keywords-agglomerative-helpers.ts` if repo `max-lines` / `max-lines-per-function` constraints require helper extraction
+- Create: `scripts/behavior-audit/consolidate-keywords-agglomerative-chain.ts` if repo `max-lines` / `max-lines-per-function` constraints require helper extraction
 - Modify: `scripts/behavior-audit/consolidate-keywords-advanced-clustering.ts`
 - Modify: `tests/scripts/behavior-audit/consolidate-keywords-helpers.test.ts`
+- Modify: `tests/scripts/behavior-audit/tune-embedding.test.ts` only if needed to keep `typeof buildClustersAdvanced` dependency stubs assignable after the profiling overloads are added
+
+Note: this repository's agent-strict lint policy forbids optional type syntax in implementation code, so represent the plan's profiling option using a repo-compliant equivalent such as `Readonly<{ profile: boolean | undefined }>` while preserving the same call-site behavior.
 
 - [ ] **Step 1: Add a regression test proving profiling preserves output**
 
@@ -330,7 +338,7 @@ Add these exported types near `type Cluster = readonly number[]`:
 
 ```typescript
 export type ClusteringProfileOptions = Readonly<{
-  profile?: boolean
+  profile: boolean | undefined
 }>
 
 export type ProfiledClusters = Readonly<{
@@ -600,7 +608,7 @@ git add scripts/behavior-audit/consolidate-keywords-agglomerative-clustering.ts 
 git commit -m "feat: instrument embedding clustering profiles"
 ```
 
-Expected: commit succeeds unless commits are intentionally deferred.
+Expected: commit succeeds unless commits are intentionally deferred. If helper extraction or the overload-compatible `tune-embedding` test stub change was required to satisfy repo constraints, include those files in the same commit.
 
 ---
 
@@ -609,6 +617,7 @@ Expected: commit succeeds unless commits are intentionally deferred.
 **Files:**
 
 - Modify: `scripts/behavior-audit/tune-embedding.ts`
+- Create: `scripts/behavior-audit/tune-embedding-args.ts` if repo `max-lines` / `max-lines-per-function` constraints require extracting CLI parsing while preserving the exported `parseArgs(...)` surface from `tune-embedding.ts`
 - Modify: `tests/scripts/behavior-audit/tune-embedding.test.ts`
 
 - [ ] **Step 1: Add failing CLI parse and wiring tests**
@@ -746,7 +755,7 @@ git add scripts/behavior-audit/tune-embedding.ts tests/scripts/behavior-audit/tu
 git commit -m "feat: expose clustering profile output"
 ```
 
-Expected: commit succeeds unless commits are intentionally deferred.
+Expected: commit succeeds unless commits are intentionally deferred. If arg parsing was extracted to satisfy repo constraints, include `scripts/behavior-audit/tune-embedding-args.ts` in the same commit.
 
 ---
 
@@ -853,12 +862,21 @@ async function run(): Promise<void> {
   reloadBehaviorAuditConfig()
   const params = parseArgs(Bun.argv.slice(2))
   const keywords = await collectKeywords()
+  const vocabulary = keywords.map((slug) => ({
+    slug,
+    description: slug,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  }))
   const embeddings = await getOrEmbed(
-    join('/tmp', 'tune-embed-cache'),
+    join('/tmp', 'tune-embed-cache', 'embedding-cache.json'),
     EMBEDDING_MODEL,
-    EMBEDDING_BASE_URL,
-    keywords,
-    embedSlugBatch,
+    vocabulary,
+    {
+      embedSlugBatch,
+      providerIdentity: EMBEDDING_BASE_URL,
+      log: console,
+    },
   )
   const normalized = toNormalizedFloat64Arrays(embeddings.normalized)
   const sections = params.sizes
@@ -879,7 +897,7 @@ async function run(): Promise<void> {
         `${formatClusteringProfile(result.profile)}\nclusters=${result.clusters.length}`,
       )
     })
-  await mkdir(join(params.outputPath, '..'), { recursive: true })
+  await mkdir(dirname(params.outputPath), { recursive: true })
   await writeFile(
     params.outputPath,
     ['# Embedding Clustering Profile Results', '', `Generated: ${new Date().toISOString()}`, '', ...sections].join(

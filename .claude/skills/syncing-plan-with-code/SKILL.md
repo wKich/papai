@@ -32,6 +32,7 @@ Skipping the table = guessing. Folding off-goal work into the plan = laundering 
 - Code review surfaced changes that don't belong with the plan's goal
 
 **Do NOT use when:**
+
 - The plan was never started — revise it with `superpowers:writing-plans` instead
 - Continuing execution as-is — that's `superpowers:executing-plans`
 - The user wants to redesign the feature — use `brainstorming` then `writing-plans`
@@ -63,15 +64,15 @@ Read the plan end to end. Pull out, in writing:
 
 Coverage check is mandatory: every changed file in the diff **and** every plan task lands in exactly one row.
 
-| Category | Definition | Default disposition |
-| --- | --- | --- |
-| **In-plan, accurate** | Code matches a task; anchors still correct | Flip task to `[x]` |
-| **In-plan, stale anchors** | Code matches a task but line numbers/snippets/paths are wrong | Refresh anchors from current file |
-| **In-plan, partial** | Task is half-done | Rewrite task to describe **what's left**, with current anchors. Stay `[ ]` |
-| **In-plan, divergent** | Task done in a different shape than the plan said | **Ask user:** plan wins (revert and redo) or code wins (rewrite task to match) |
-| **Out-of-plan, on-goal** | Diff change not in plan but required by Goal | **Ask user**, then add a new task. Never absorb silently |
-| **Out-of-plan, off-goal** | Diff change has no link to Goal — drive-by refactor, formatting, unrelated fix | **Ask user per item:** revert, or split into sidecar follow-up plan. Never fold into this plan |
-| **Missing** | Plan task has no corresponding code change | Stay `[ ]`; refresh anchors if surrounding code moved |
+| Category                   | Definition                                                                     | Default disposition                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| **In-plan, accurate**      | Code matches a task; anchors still correct                                     | Flip task to `[x]`                                                                             |
+| **In-plan, stale anchors** | Code matches a task but line numbers/snippets/paths are wrong                  | Refresh anchors from current file                                                              |
+| **In-plan, partial**       | Task is half-done                                                              | Rewrite task to describe **what's left**, with current anchors. Stay `[ ]`                     |
+| **In-plan, divergent**     | Task done in a different shape than the plan said                              | **Ask user:** plan wins (revert and redo) or code wins (rewrite task to match)                 |
+| **Out-of-plan, on-goal**   | Diff change not in plan but required by Goal                                   | **Ask user**, then add a new task. Never absorb silently                                       |
+| **Out-of-plan, off-goal**  | Diff change has no link to Goal — drive-by refactor, formatting, unrelated fix | **Ask user per item:** revert, or split into sidecar follow-up plan. Never fold into this plan |
+| **Missing**                | Plan task has no corresponding code change                                     | Stay `[ ]`; refresh anchors if surrounding code moved                                          |
 
 ### Step 4: Get decisions, one at a time
 
@@ -93,10 +94,10 @@ At the bottom of the plan, append (never overwrite) a section like:
 ```markdown
 ## Drift Log
 
-| Date | Category | Item | Decision |
-| --- | --- | --- | --- |
-| 2026-04-29 | In-plan, stale anchors | Task 4 line numbers in `loop-controller.ts` | Updated 67 → 81, 89 → 103 |
-| 2026-04-29 | Out-of-plan, off-goal | `src/utils/format-date.ts` timezone helper | Split to `2026-04-29-...-followup.md`, pending revert |
+| Date       | Category               | Item                                        | Decision                                              |
+| ---------- | ---------------------- | ------------------------------------------- | ----------------------------------------------------- |
+| 2026-04-29 | In-plan, stale anchors | Task 4 line numbers in `loop-controller.ts` | Updated 67 → 81, 89 → 103                             |
+| 2026-04-29 | Out-of-plan, off-goal  | `src/utils/format-date.ts` timezone helper  | Split to `2026-04-29-...-followup.md`, pending revert |
 ```
 
 Every decision from Step 4 has a row. Append-only.
@@ -116,18 +117,18 @@ End your turn. Do not start executing the cleaned plan. Do not start reverting f
 
 ## Common Rationalizations
 
-| Excuse | Reality |
-| --- | --- |
-| "The off-goal change is small, I'll fold it into an existing task" | That's the failure mode the user is fixing. Split it. |
-| "The line numbers are off by two — readers will figure it out" | A plan with wrong anchors is worse than no plan. Refresh them. |
-| "The new shape is better, I'll silently rewrite the task" | "Better" is a user decision. Surface the divergence. |
+| Excuse                                                                     | Reality                                                                                              |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| "The off-goal change is small, I'll fold it into an existing task"         | That's the failure mode the user is fixing. Split it.                                                |
+| "The line numbers are off by two — readers will figure it out"             | A plan with wrong anchors is worse than no plan. Refresh them.                                       |
+| "The new shape is better, I'll silently rewrite the task"                  | "Better" is a user decision. Surface the divergence.                                                 |
 | "I'll just `git revert` the unrelated commit, it obviously doesn't belong" | Reverts are destructive and visible. Get explicit per-commit approval; revert in a separate session. |
-| "The Goal sentence is fuzzy, I'll tighten it while I'm here" | Goal edits change scope. Ask. |
-| "The drive-by lint fix was needed for the test, so it's on-goal" | Only on-goal if the plan said so. Otherwise it's a follow-up. |
-| "I'll mark it `[x]`, the last bit is trivial" | `[x]` means the code in the branch satisfies the task. If it doesn't, it isn't done. |
-| "I'll delete the original task body since the new shape differs" | Update the body to describe **remaining** work. Preserve history in the Drift Log. |
-| "The verification command is flaky, I'll drop it" | Drop = silently weakens the contract. Repair or replace; don't delete. |
-| "Anchors-only is fine, I'll skip the off-goal audit" | Then the plan keeps lying about what shipped. |
+| "The Goal sentence is fuzzy, I'll tighten it while I'm here"               | Goal edits change scope. Ask.                                                                        |
+| "The drive-by lint fix was needed for the test, so it's on-goal"           | Only on-goal if the plan said so. Otherwise it's a follow-up.                                        |
+| "I'll mark it `[x]`, the last bit is trivial"                              | `[x]` means the code in the branch satisfies the task. If it doesn't, it isn't done.                 |
+| "I'll delete the original task body since the new shape differs"           | Update the body to describe **remaining** work. Preserve history in the Drift Log.                   |
+| "The verification command is flaky, I'll drop it"                          | Drop = silently weakens the contract. Repair or replace; don't delete.                               |
+| "Anchors-only is fine, I'll skip the off-goal audit"                       | Then the plan keeps lying about what shipped.                                                        |
 
 ## Red Flags — STOP
 
@@ -144,23 +145,25 @@ End your turn. Do not start executing the cleaned plan. Do not start reverting f
 
 ## Quick Reference
 
-| Step | Output |
-| --- | --- |
-| 1. Pin plan + base | plan path, merge base, file/commit list |
-| 2. Extract contract | Goal, tasks, expected files, anchors, verification commands |
-| 3. Discrepancy table | every diff entry + every task in exactly one row |
-| 4. Decisions | per-row choice from user, one question at a time |
-| 5. Plan edits | refreshed tasks, statuses, anchors; sidecar plan if needed |
-| 6. Drift Log | append-only table at bottom of plan |
-| 7. Verify | every anchor and command checked against current code |
-| 8. Hand off | stop; do not execute, do not revert |
+| Step                 | Output                                                      |
+| -------------------- | ----------------------------------------------------------- |
+| 1. Pin plan + base   | plan path, merge base, file/commit list                     |
+| 2. Extract contract  | Goal, tasks, expected files, anchors, verification commands |
+| 3. Discrepancy table | every diff entry + every task in exactly one row            |
+| 4. Decisions         | per-row choice from user, one question at a time            |
+| 5. Plan edits        | refreshed tasks, statuses, anchors; sidecar plan if needed  |
+| 6. Drift Log         | append-only table at bottom of plan                         |
+| 7. Verify            | every anchor and command checked against current code       |
+| 8. Hand off          | stop; do not execute, do not revert                         |
 
 ## Integration
 
 **Called when:**
+
 - An execution session (`superpowers:executing-plans`, `superpowers:subagent-driven-development`) has produced a branch whose plan no longer matches the diff
 
 **Pairs with:**
+
 - `superpowers:writing-plans` — style conventions for any new tasks added to the synced plan or the sidecar follow-up plan
 - `superpowers:verification-before-completion` — Step 7 must use it before claiming the resync is done
 - `superpowers:executing-plans` — the next session, against the cleaned plan
