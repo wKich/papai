@@ -123,7 +123,8 @@ function buildTuneClusters(
     `[tune] Clustering at threshold=${params.threshold}, minClusterSize=${params.minClusterSize}, linkage=${params.linkage}, gap=${params.gapThreshold}, maxClusterSize=${params.maxClusterSize}...`,
   )
 
-  const clusterResult = buildTuneClusterResult(normalized, params, deps)
+  const clusteringInput = selectClusteringInput(normalized, params.profileSizes)
+  const clusterResult = buildTuneClusterResult(clusteringInput, params, deps)
   const clusters = isProfiledClusters(clusterResult) ? clusterResult.clusters : clusterResult
   if (isProfiledClusters(clusterResult)) {
     console.log(formatClusteringProfile(clusterResult.profile))
@@ -139,6 +140,17 @@ function buildTuneClusters(
         params.gapThreshold,
       )
     : clusters
+}
+
+function selectClusteringInput(
+  normalized: readonly Float64Array[],
+  profileSizes: readonly number[],
+): readonly Float64Array[] {
+  const requestedSize = profileSizes.at(-1)
+  if (requestedSize === undefined || normalized.length <= requestedSize) {
+    return normalized
+  }
+  return normalized.slice(0, requestedSize)
 }
 
 function isProfiledClusters(result: readonly (readonly number[])[] | ProfiledClusters): result is ProfiledClusters {
