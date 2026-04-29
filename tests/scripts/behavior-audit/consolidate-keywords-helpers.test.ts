@@ -23,6 +23,7 @@ import {
   find,
   remapKeywords,
   subdivideOversizedClusters,
+  toNormalizedFloat64Arrays,
   union,
 } from '../../../scripts/behavior-audit/consolidate-keywords-helpers.js'
 import type { LinkageMode } from '../../../scripts/behavior-audit/consolidate-keywords-helpers.js'
@@ -324,6 +325,23 @@ describe('buildClustersAdvanced', () => {
 
     expect(clusters.length).toBeGreaterThan(0)
     expect(elapsed).toBeLessThan(5000)
+  })
+
+  test('buildClustersAdvanced returns identical clusters when profiling is enabled', () => {
+    const normalized = toNormalizedFloat64Arrays([
+      [1, 0, 0],
+      [0.99, 0.01, 0],
+      [0.98, 0.02, 0],
+      [0, 1, 0],
+      [0, 0.99, 0.01],
+    ])
+
+    const plain = buildClustersAdvanced(normalized, 0.95, 2, 'average', 0)
+    const profiled = buildClustersAdvanced(normalized, 0.95, 2, 'average', 0, { profile: true })
+
+    expect(profiled.clusters).toEqual(plain)
+    expect(profiled.profile.counters.merges).toBe(3)
+    expect(profiled.profile.counters.nearestNeighborCalls).toBeGreaterThan(0)
   })
 })
 

@@ -3,6 +3,11 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
+import type {
+  ClusteringProfileOptions,
+  ProfiledClusters,
+} from '../../../scripts/behavior-audit/consolidate-keywords-advanced-clustering.js'
+import type { LinkageMode } from '../../../scripts/behavior-audit/consolidate-keywords-helpers.js'
 import { runTuneEmbedding } from '../../../scripts/behavior-audit/tune-embedding.js'
 
 type RecordedSubdivideCall = {
@@ -24,6 +29,66 @@ async function makeExtractedDir(): Promise<string> {
   await mkdir(path.join(dir, 'nested'), { recursive: true })
   await writeFile(path.join(dir, 'nested', 'records.json'), JSON.stringify([{ keywords: ['Alpha', 'Beta'] }]), 'utf-8')
   return dir
+}
+
+function buildClustersAdvancedStub(
+  _normalized: readonly Float64Array[],
+  _threshold: number,
+  _minClusterSize: number,
+  _linkage: LinkageMode,
+  _gapThreshold: number,
+): readonly (readonly number[])[]
+function buildClustersAdvancedStub(
+  _normalized: readonly Float64Array[],
+  _threshold: number,
+  _minClusterSize: number,
+  _linkage: LinkageMode,
+  _gapThreshold: number,
+  _options: ClusteringProfileOptions & Readonly<{ profile: true }>,
+): ProfiledClusters
+function buildClustersAdvancedStub(
+  _normalized: readonly Float64Array[],
+  _threshold: number,
+  _minClusterSize: number,
+  _linkage: LinkageMode,
+  _gapThreshold: number,
+  ...rest: readonly [] | readonly [ClusteringProfileOptions | undefined]
+): readonly (readonly number[])[] | ProfiledClusters {
+  const options = rest[0]
+  const clusters = [[0, 1]] as const
+  if (options === undefined || options.profile !== true) return clusters
+  return {
+    clusters,
+    profile: {
+      enabled: true,
+      linkage: 'complete',
+      threshold: 0,
+      size: 0,
+      timings: {
+        matrixBuildMs: 0,
+        nearestNeighborMs: 0,
+        mergeUpdateMs: 0,
+        gapCheckMs: 0,
+        candidateScanMs: 0,
+        subdivisionMs: 0,
+        totalMs: 0,
+      },
+      counters: {
+        activeListBuilds: 0,
+        activeItemsVisited: 0,
+        nearestNeighborCalls: 0,
+        distanceReads: 0,
+        distanceWrites: 0,
+        gapChecks: 0,
+        blockedPairs: 0,
+        mergeCandidatesScanned: 0,
+        merges: 0,
+        subdivisions: 0,
+        maxActiveClusters: 0,
+        maxClusterSize: 1,
+      },
+    },
+  }
 }
 
 describe('tune-embedding wiring', () => {
@@ -52,7 +117,7 @@ describe('tune-embedding wiring', () => {
           ],
         }),
       normalizeKeywordSlug: (keyword: string): string => keyword.toLowerCase(),
-      buildClustersAdvanced: (): readonly (readonly number[])[] => [[0, 1]],
+      buildClustersAdvanced: buildClustersAdvancedStub,
       buildMergeMap: (): ReadonlyMap<string, string> => new Map<string, string>(),
       buildConsolidatedVocabulary: (vocabulary: readonly MockVocabularyEntry[]): readonly MockVocabularyEntry[] =>
         vocabulary,

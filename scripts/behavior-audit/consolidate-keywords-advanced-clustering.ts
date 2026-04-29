@@ -1,3 +1,5 @@
+import { createClusteringProfile, recordClusteringTiming } from './clustering-profile.js'
+import type { ClusteringProfile } from './clustering-profile.js'
 import {
   activeIndices,
   buildAgglomerativeClusters,
@@ -28,6 +30,15 @@ export {
 export type { ActiveState, MutableDistanceMatrix } from './consolidate-keywords-agglomerative-clustering.js'
 
 type Cluster = readonly number[]
+
+export type ClusteringProfileOptions = Readonly<{
+  profile: boolean | undefined
+}>
+
+export type ProfiledClusters = Readonly<{
+  clusters: readonly Cluster[]
+  profile: ClusteringProfile
+}>
 
 function mergeClusters(clusters: readonly Cluster[], mergePair: readonly [number, number]): readonly Cluster[] {
   const [bestA, bestB] = mergePair
@@ -111,8 +122,9 @@ function buildClustersNonSingle(
   minClusterSize: number,
   linkage: Exclude<LinkageMode, 'single'>,
   gapThreshold: number,
-): readonly Cluster[] {
-  return buildAgglomerativeClusters(normalizedEmbeddings, threshold, minClusterSize, linkage, gapThreshold)
+  profile: ClusteringProfile,
+): ProfiledClusters {
+  return buildAgglomerativeClusters(normalizedEmbeddings, threshold, minClusterSize, linkage, gapThreshold, profile)
 }
 
 export function buildClustersAdvanced(
@@ -121,17 +133,64 @@ export function buildClustersAdvanced(
   minClusterSize: number,
   linkage: LinkageMode,
   gapThreshold: number,
-): readonly Cluster[] {
+): readonly Cluster[]
+export function buildClustersAdvanced(
+  normalizedEmbeddings: readonly Float64Array[],
+  threshold: number,
+  minClusterSize: number,
+  linkage: LinkageMode,
+  gapThreshold: number,
+  options: ClusteringProfileOptions & Readonly<{ profile: true }>,
+): ProfiledClusters
+export function buildClustersAdvanced(
+  normalizedEmbeddings: readonly Float64Array[],
+  threshold: number,
+  minClusterSize: number,
+  linkage: LinkageMode,
+  gapThreshold: number,
+  ...rest: readonly [] | readonly [ClusteringProfileOptions | undefined]
+): readonly Cluster[] | ProfiledClusters {
+  const options = rest[0]
+  const startedAt = performance.now()
+  const shouldProfile = options === undefined ? false : options.profile === true
+  const initialProfile = createClusteringProfile({
+    enabled: shouldProfile,
+    linkage,
+    threshold,
+    size: normalizedEmbeddings.length,
+  })
+
+  const complete = (
+    clusters: readonly Cluster[],
+    profile: ClusteringProfile,
+  ): readonly Cluster[] | ProfiledClusters => {
+    const completedProfile = recordClusteringTiming(profile, 'totalMs', performance.now() - startedAt)
+    return shouldProfile ? { clusters, profile: completedProfile } : clusters
+  }
+
   if (gapThreshold <= 0) {
-    return linkage === 'single'
-      ? buildClustersNormalized(normalizedEmbeddings, threshold, minClusterSize)
-      : buildClustersNonSingle(normalizedEmbeddings, threshold, minClusterSize, linkage, 0)
+    if (linkage === 'single') {
+      return complete(buildClustersNormalized(normalizedEmbeddings, threshold, minClusterSize), initialProfile)
+    }
+    const result = buildClustersNonSingle(normalizedEmbeddings, threshold, minClusterSize, linkage, 0, initialProfile)
+    return complete(result.clusters, result.profile)
   }
-  if (normalizedEmbeddings.length === 0) return []
+  if (normalizedEmbeddings.length === 0) return complete([], initialProfile)
   if (linkage === 'single') {
-    return buildClustersSingleWithGap(normalizedEmbeddings, threshold, minClusterSize, gapThreshold)
+    return complete(
+      buildClustersSingleWithGap(normalizedEmbeddings, threshold, minClusterSize, gapThreshold),
+      initialProfile,
+    )
   }
-  return buildClustersNonSingle(normalizedEmbeddings, threshold, minClusterSize, linkage, gapThreshold)
+  const result = buildClustersNonSingle(
+    normalizedEmbeddings,
+    threshold,
+    minClusterSize,
+    linkage,
+    gapThreshold,
+    initialProfile,
+  )
+  return complete(result.clusters, result.profile)
 }
 
 function splitGlobalClusters(
