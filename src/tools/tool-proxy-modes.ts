@@ -19,15 +19,19 @@ export type ProxyRuntime = {
 }
 
 type ExecutableTool = {
-  readonly execute: (args: Readonly<Record<string, unknown>>, options: ToolExecutionOptions) => unknown
+  readonly execute: (args: unknown, options: ToolExecutionOptions) => unknown
 }
 
 type ParsedArgsResult =
   | { readonly ok: true; readonly value: Readonly<Record<string, unknown>> }
   | { readonly ok: false; readonly error: 'invalid_args_json' | 'invalid_args_type'; readonly message: string }
 
+type SchemaArgsResult = { readonly ok: true; readonly value: unknown } | { readonly ok: false }
+
+type SafeParseResult = { readonly success: true; readonly data: unknown } | { readonly success: false }
+
 type SafeParsableSchema = {
-  readonly safeParse: (value: unknown) => { readonly success: boolean }
+  readonly safeParse: (value: unknown) => unknown
 }
 
 function textResult(text: string, details: Readonly<Record<string, unknown>>): ProxyTextResult {
@@ -44,6 +48,15 @@ function isExecutableTool(value: unknown): value is ExecutableTool {
 
 function isSafeParsableSchema(value: unknown): value is SafeParsableSchema {
   return isRecord(value) && typeof value['safeParse'] === 'function'
+}
+
+function isSafeParseResult(value: unknown): value is SafeParseResult {
+  if (!isRecord(value)) return false
+
+  const success = value['success']
+  if (typeof success !== 'boolean') return false
+  if (success) return Object.hasOwn(value, 'data')
+  return true
 }
 
 function renderTool(metadata: ToolMetadata, includeSchema: boolean): string {
@@ -173,17 +186,15 @@ function buildSearchPattern(
   }
 }
 
-function validateArgsAgainstSchema(
-  schema: unknown,
-  args: Readonly<Record<string, unknown>>,
-): { readonly ok: true } | { readonly ok: false } {
-  if (!isSafeParsableSchema(schema)) return { ok: true }
+function validateArgsAgainstSchema(schema: unknown, args: Readonly<Record<string, unknown>>): SchemaArgsResult {
+  if (!isSafeParsableSchema(schema)) return { ok: true, value: args }
 
   try {
     const result = schema.safeParse(args)
-    return result.success ? { ok: true } : { ok: false }
+    if (!isSafeParseResult(result)) return { ok: true, value: args }
+    return result.success ? { ok: true, value: result.data } : { ok: false }
   } catch {
-    return { ok: true }
+    return { ok: true, value: args }
   }
 }
 
@@ -243,5 +254,5 @@ export function executeProxyCall(
   const validation = validateArgsAgainstSchema(toolMetadata.inputSchema, parsedArgs.value)
   if (!validation.ok) return invalidToolArgsResult(toolName, toolMetadata.name, toolMetadata.inputSchema)
 
-  return selectedTool.execute(parsedArgs.value, options)
+  return selectedTool.execute(validation.value, options)
 }

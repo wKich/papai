@@ -211,6 +211,22 @@ describe('tool-proxy-modes', () => {
     expect(expectFirstText(result)).toContain('taskId (string) *required* - Task identifier')
   })
 
+  it('executes proxied tools with parsed schema output', async () => {
+    const execute = mock((input: { readonly limit: number }) => input)
+    const runtime = buildRuntime({
+      list_items: tool({
+        description: 'List items',
+        inputSchema: z.object({ limit: z.number().default(10) }),
+        execute,
+      }),
+    })
+
+    const result = await executeProxyCall(runtime, 'list_items', '{}', toolOptions)
+
+    expect(execute).toHaveBeenCalledWith({ limit: 10 }, toolOptions)
+    expect(result).toEqual({ limit: 10 })
+  })
+
   it('executes proxied tools when args satisfy the selected tool schema', async () => {
     const execute = mock(({ taskId }: { readonly taskId: string }) => ({ ok: true, taskId }))
     const runtime = buildRuntime({
