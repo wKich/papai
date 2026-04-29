@@ -4,10 +4,18 @@ import {
   createClusteringProfile,
   formatClusteringProfile,
   incrementClusteringCounter,
+  recordClusteringCounterMax,
   recordClusteringTiming,
 } from '../../../scripts/behavior-audit/clustering-profile.js'
 
 describe('clustering profile helpers', () => {
+  test('createClusteringProfile initializes max counters from input size', () => {
+    const profile = createClusteringProfile({ enabled: true, linkage: 'average', threshold: 0.9, size: 3 })
+
+    expect(profile.counters.maxActiveClusters).toBe(3)
+    expect(profile.counters.maxClusterSize).toBe(1)
+  })
+
   test('recordClusteringTiming updates one phase immutably', () => {
     const initial = createClusteringProfile({ enabled: true, linkage: 'average', threshold: 0.9, size: 3 })
     const updated = recordClusteringTiming(initial, 'nearestNeighborMs', 12.5)
@@ -24,6 +32,14 @@ describe('clustering profile helpers', () => {
     expect(initial.counters.nearestNeighborCalls).toBe(0)
     expect(updated.counters.nearestNeighborCalls).toBe(7)
     expect(updated.counters.merges).toBe(0)
+  })
+
+  test('profiling updates are no-ops when disabled', () => {
+    const profile = createClusteringProfile({ enabled: false, linkage: 'average', threshold: 0.9, size: 3 })
+
+    expect(recordClusteringTiming(profile, 'nearestNeighborMs', 12.5)).toBe(profile)
+    expect(incrementClusteringCounter(profile, 'nearestNeighborCalls', 7)).toBe(profile)
+    expect(recordClusteringCounterMax(profile, 'maxClusterSize', 9)).toBe(profile)
   })
 
   test('formatClusteringProfile prints stable timing and counter lines', () => {
