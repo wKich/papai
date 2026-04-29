@@ -9,6 +9,10 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 function isJsonSchemaLike(value: unknown): value is JsonSchemaObject {
   if (!isRecord(value)) return false
   if (typeof value['type'] === 'string') return true
+  if (Array.isArray(value['type'])) return true
+  if (Array.isArray(value['enum'])) return true
+  if (Array.isArray(value['anyOf'])) return true
+  if (Array.isArray(value['oneOf'])) return true
   return isRecord(value['properties'])
 }
 

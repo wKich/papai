@@ -54,6 +54,18 @@ describe('tool-schema-format', () => {
     expect(formatToolSchema(schema)).toBe(['  query (string) *required* - Search query', '  limit (number)'].join('\n'))
   })
 
+  it('formats JSON schema enum objects directly', () => {
+    expect(formatToolSchema({ enum: ['open', 'closed'] })).toBe('  (enum: "open", "closed")')
+  })
+
+  it('formats JSON schema union objects directly', () => {
+    expect(formatToolSchema({ anyOf: [{ type: 'string' }, { type: 'number' }] })).toBe('  (union)')
+  })
+
+  it('formats JSON schema type arrays directly', () => {
+    expect(formatToolSchema({ type: ['string', 'null'] })).toBe('  (string | null)')
+  })
+
   it('formats empty object schemas as no parameters', () => {
     expect(formatToolSchema(z.object({}))).toBe('  (no parameters)')
   })
