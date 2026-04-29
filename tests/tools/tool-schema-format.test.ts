@@ -4,6 +4,12 @@ import { z } from 'zod'
 
 import { formatToolSchema, toJsonSchemaObject } from '../../src/tools/tool-schema-format.js'
 
+function expectJsonSchemaObject(
+  value: ReturnType<typeof toJsonSchemaObject>,
+): asserts value is NonNullable<typeof value> {
+  expect(value).not.toBeNull()
+}
+
 describe('tool-schema-format', () => {
   it('converts a Zod object schema to JSON schema metadata', () => {
     const schema = z.object({
@@ -13,9 +19,11 @@ describe('tool-schema-format', () => {
 
     const json = toJsonSchemaObject(schema)
 
-    expect(json?.['type']).toBe('object')
-    expect(json?.['properties']).toBeObject()
-    const properties = json?.['properties']
+    expectJsonSchemaObject(json)
+
+    expect(json['type']).toBe('object')
+    expect(json['properties']).toBeObject()
+    const properties = json['properties']
     expect(properties).toBeObject()
     expect(Object.prototype.hasOwnProperty.call(properties, 'taskId')).toBeTrue()
   })

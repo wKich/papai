@@ -8,7 +8,8 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 
 function isJsonSchemaLike(value: unknown): value is JsonSchemaObject {
   if (!isRecord(value)) return false
-  return typeof value['type'] === 'string' || isRecord(value['properties'])
+  if (typeof value['type'] === 'string') return true
+  return isRecord(value['properties'])
 }
 
 function isZodSchema(value: unknown): value is z.ZodType {
@@ -51,7 +52,7 @@ function formatProperty(name: string, schema: unknown, required: boolean, indent
   ].join(' ')
 }
 
-export function formatToolSchema(schema: unknown, indent = '  '): string {
+function formatToolSchemaWithIndent(schema: unknown, indent: string): string {
   const jsonSchema = toJsonSchemaObject(schema)
   if (jsonSchema === null) return `${indent}(no schema)`
 
@@ -62,9 +63,17 @@ export function formatToolSchema(schema: unknown, indent = '  '): string {
   if (entries.length === 0) return `${indent}(no parameters)`
 
   const required = Array.isArray(jsonSchema['required']) ? jsonSchema['required'] : []
-  const requiredNames = required.filter((value): value is string => typeof value === 'string')
+  const requiredNames = new Set(required.filter((value): value is string => typeof value === 'string'))
 
   return entries
-    .map(([name, propSchema]) => formatProperty(name, propSchema, requiredNames.includes(name), indent))
+    .map(([name, propSchema]) => formatProperty(name, propSchema, requiredNames.has(name), indent))
     .join('\n')
+}
+
+export function formatToolSchema(schema: unknown): string
+export function formatToolSchema(schema: unknown, indent: string): string
+export function formatToolSchema(schema: unknown, ...indent: readonly string[]): string {
+  const [firstIndent] = indent
+  if (firstIndent === undefined) return formatToolSchemaWithIndent(schema, '  ')
+  return formatToolSchemaWithIndent(schema, firstIndent)
 }
