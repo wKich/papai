@@ -25,6 +25,16 @@ describe('clustering profile helpers', () => {
     expect(updated.timings.matrixBuildMs).toBe(0)
   })
 
+  test('recordClusteringTiming accumulates repeated phase measurements immutably', () => {
+    const initial = createClusteringProfile({ enabled: true, linkage: 'average', threshold: 0.9, size: 3 })
+    const firstUpdate = recordClusteringTiming(initial, 'nearestNeighborMs', 12.5)
+    const secondUpdate = recordClusteringTiming(firstUpdate, 'nearestNeighborMs', 2.5)
+
+    expect(initial.timings.nearestNeighborMs).toBe(0)
+    expect(firstUpdate.timings.nearestNeighborMs).toBe(12.5)
+    expect(secondUpdate.timings.nearestNeighborMs).toBe(15)
+  })
+
   test('incrementClusteringCounter updates one counter immutably', () => {
     const initial = createClusteringProfile({ enabled: true, linkage: 'complete', threshold: 0.91, size: 4 })
     const updated = incrementClusteringCounter(initial, 'nearestNeighborCalls', 7)

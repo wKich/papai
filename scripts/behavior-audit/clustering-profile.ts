@@ -94,7 +94,7 @@ export function recordClusteringTiming(
     ...currentProfile,
     timings: {
       ...currentProfile.timings,
-      [key]: value,
+      [key]: currentProfile.timings[key] + value,
     },
   }))
 }
