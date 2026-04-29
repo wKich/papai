@@ -79,7 +79,7 @@ export let PROGRESS_RENDERER = 'auto'
 export let EXCLUDED_PREFIXES: readonly string[] = DEFAULT_EXCLUDED_PREFIXES
 
 export let EMBEDDING_MODEL = 'Qwen3-Embedding-8B'
-export let EMBEDDING_BASE_URL = BASE_URL
+export let EMBEDDING_BASE_URL = 'http://localhost:8000/v1'
 export let CONSOLIDATION_THRESHOLD = 0.92
 export let CONSOLIDATION_MIN_CLUSTER_SIZE = 2
 export let CONSOLIDATION_DRY_RUN = false

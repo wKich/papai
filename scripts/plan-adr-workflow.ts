@@ -15,6 +15,7 @@
  *   bun scripts/plan-adr-workflow.ts --dry-run
  *   bun scripts/plan-adr-workflow.ts --filter deferred
  *   bun scripts/plan-adr-workflow.ts --port 4097
+ *   bun scripts/plan-adr-workflow.ts --model anthropic/claude-opus-4-5
  */
 
 import { readFile } from 'node:fs/promises'
@@ -23,7 +24,14 @@ import { basename, join } from 'node:path'
 import { createOpencode } from '@opencode-ai/sdk/v2'
 
 import {
-  IMPLEMENTATION_CHECK_SCHEMA,
+  type OpencodeClient,
+  checkImplementationStatus,
+  createSession,
+  deleteSession,
+  generateRemainingWork,
+  runAdrCommand,
+} from './plan-adr-workflow-ai.js'
+import {
   PLANS_DIR,
   SPECS_DIR,
   PROJECT_ROOT,
@@ -34,103 +42,22 @@ import {
   extractSpecReference,
   parseArgs,
   resolveSpecFile,
+  writeRemainingWorkDoc,
 } from './plan-adr-workflow-helpers.js'
 
-// ─── Session Management ───────────────────────────────────────────────────────
+// ─── Per-Plan Processing ──────────────────────────────────────────────────────
 
-type OpencodeClient = Awaited<ReturnType<typeof createOpencode>>['client']
-
-async function createSession(client: OpencodeClient, title: string): Promise<string> {
-  const result = await client.session.create({ title })
-  const sessionData = result.data
-  const sessionID = sessionData === undefined ? undefined : sessionData.id
-  if (sessionID === undefined || sessionID === '') throw new Error('session.create returned no id')
-  return sessionID
-}
-
-async function deleteSession(client: OpencodeClient, sessionID: string): Promise<void> {
-  try {
-    await client.session.delete({ sessionID })
-  } catch {
-    // best-effort session cleanup — non-fatal
-  }
-}
-
-// ─── Implementation Check ─────────────────────────────────────────────────────
-
-function isImplementationCheck(value: unknown): value is ImplementationCheck {
-  if (typeof value !== 'object' || value === null) return false
-  return (
-    'status' in value &&
-    typeof value.status === 'string' &&
-    'is_fully_implemented' in value &&
-    typeof value.is_fully_implemented === 'boolean' &&
-    'evidence' in value &&
-    typeof value.evidence === 'string'
-  )
-}
-
-async function checkImplementationStatus(
+async function getSkippedResult(
   client: OpencodeClient,
   sessionID: string,
   planFile: string,
-): Promise<ImplementationCheck> {
-  const planRelPath = `docs/superpowers/plans/${planFile}`
-  const result = await client.session.prompt({
-    sessionID,
-    parts: [
-      {
-        type: 'text',
-        text: [
-          `Read the implementation plan at @${planRelPath} and verify its status in the codebase.`,
-          '',
-          'Steps:',
-          '1. Read the plan to understand the goal, target files, and task checklist',
-          '2. Check whether the key source files listed in the plan exist with the expected content',
-          '3. If the plan has checkbox tasks (- [x] done / - [ ] todo), note the completion ratio',
-          '4. Look for a "Spec:" or "Design:" reference in the plan frontmatter or body',
-          '5. Return structured JSON with your findings',
-        ].join('\n'),
-      },
-    ],
-    format: {
-      type: 'json_schema',
-      schema: IMPLEMENTATION_CHECK_SCHEMA,
-    },
-  })
-
-  const responseData = result.data
-  if (responseData === undefined) throw new Error('session.prompt returned no data')
-  const responseInfo = responseData.info
-  const structured: unknown = responseInfo === undefined ? undefined : responseInfo.structured
-  if (!isImplementationCheck(structured)) throw new Error('implementation check returned no structured output')
-  return structured
+  check: ImplementationCheck,
+  dryRun: boolean,
+): Promise<WorkflowResult> {
+  const work = await generateRemainingWork(client, sessionID, planFile)
+  const remainingDocFile = await writeRemainingWorkDoc(planFile, check.status, work, dryRun)
+  return { kind: 'skipped', planFile, status: check.status, reason: check.evidence, remainingDocFile }
 }
-
-// ─── ADR Command ─────────────────────────────────────────────────────────────
-
-async function runAdrCommand(client: OpencodeClient, sessionID: string, planFile: string): Promise<void> {
-  await client.session.prompt({
-    sessionID,
-    parts: [
-      {
-        type: 'text',
-        text: [
-          `Use the architecture-decision-records skill to write an ADR for the decision implemented in @docs/superpowers/plans/${planFile}.`,
-          '',
-          'Steps:',
-          '1. Load the architecture-decision-records skill',
-          '2. List existing files in docs/adr/ to determine the next sequential ADR number',
-          '3. Write the ADR using the MADR template from the skill with status "Accepted"',
-          '4. Save it to docs/adr/<NNNN>-<kebab-case-title>.md',
-          '5. The ADR must document the architectural decision: what was chosen, why, and the consequences',
-        ].join('\n'),
-      },
-    ],
-  })
-}
-
-// ─── Per-Plan Processing ──────────────────────────────────────────────────────
 
 async function processPlan(
   client: OpencodeClient,
@@ -150,7 +77,7 @@ async function processPlan(
     console.log(`  evidence: ${evidencePreview}`)
 
     if (!check.is_fully_implemented) {
-      return { kind: 'skipped', planFile, status: check.status, reason: check.evidence }
+      return await getSkippedResult(client, sessionID, planFile, check, dryRun)
     }
 
     if (dryRun) {
@@ -188,12 +115,14 @@ function printSummary(results: readonly WorkflowResult[]): void {
   const written = results.filter((r) => r.kind === 'adr_written')
   const skipped = results.filter((r) => r.kind === 'skipped')
   const errors = results.filter((r) => r.kind === 'error')
+  const remainingDocs = skipped.filter((r) => r.kind === 'skipped' && r.remainingDocFile !== null)
 
   console.log('\n' + '-'.repeat(60))
   console.log(`Plans processed: ${results.length}`)
-  console.log(`  ADRs written : ${written.length}`)
-  console.log(`  Skipped      : ${skipped.length}  (not fully implemented)`)
-  console.log(`  Errors       : ${errors.length}`)
+  console.log(`  ADRs written        : ${written.length}`)
+  console.log(`  Skipped             : ${skipped.length}  (not fully implemented)`)
+  console.log(`  Remaining-work docs : ${remainingDocs.length}`)
+  console.log(`  Errors              : ${errors.length}`)
 
   if (errors.length > 0) {
     console.log('\nErrors:')
@@ -208,6 +137,15 @@ function printSummary(results: readonly WorkflowResult[]): void {
       if (r.kind === 'adr_written') {
         const specNote = r.specFile === null ? '' : ` (+ spec: ${r.specFile})`
         console.log(`  ${r.planFile}${specNote}`)
+      }
+    }
+  }
+
+  if (remainingDocs.length > 0) {
+    console.log('\nRemaining-work docs:')
+    for (const r of remainingDocs) {
+      if (r.kind === 'skipped' && r.remainingDocFile !== null) {
+        console.log(`  docs/superpowers/remaining/${r.planFile}  [${r.status}]`)
       }
     }
   }
@@ -263,7 +201,7 @@ async function main(): Promise<void> {
   let opencode: Awaited<ReturnType<typeof createOpencode>> | null = null
 
   try {
-    opencode = await createOpencode({ port: args.port })
+    opencode = await createOpencode({ port: args.port, config: { model: args.model } })
     const { client } = opencode
     await client.global.health()
     const results = await runPlanSequence(client, planFiles, args.dryRun)
