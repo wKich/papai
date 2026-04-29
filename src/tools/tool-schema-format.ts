@@ -19,8 +19,16 @@ function isZodSchema(value: unknown): value is z.ZodType {
 export function toJsonSchemaObject(schema: unknown): JsonSchemaObject | null {
   if (!isZodSchema(schema)) return isJsonSchemaLike(schema) ? schema : null
 
-  const jsonSchema = z.toJSONSchema(schema)
+  const jsonSchema = tryToJsonSchema(schema)
   return isRecord(jsonSchema) ? jsonSchema : null
+}
+
+function tryToJsonSchema(schema: z.ZodType): unknown {
+  try {
+    return z.toJSONSchema(schema)
+  } catch {
+    return null
+  }
 }
 
 function getTypeLabel(schema: Readonly<Record<string, unknown>>): string {

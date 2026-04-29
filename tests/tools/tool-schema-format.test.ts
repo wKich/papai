@@ -62,4 +62,11 @@ describe('tool-schema-format', () => {
     expect(toJsonSchemaObject('not-a-schema')).toBeNull()
     expect(formatToolSchema('not-a-schema')).toBe('  (no schema)')
   })
+
+  it('returns no schema for unrepresentable Zod schemas', () => {
+    const schema = z.date()
+
+    expect(toJsonSchemaObject(schema)).toBeNull()
+    expect(formatToolSchema(schema)).toBe('  (no schema)')
+  })
 })
