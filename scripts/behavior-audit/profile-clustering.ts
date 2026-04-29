@@ -60,6 +60,16 @@ function parsePositiveIntegerList(flag: string, value: string): readonly number[
   })
 }
 
+function requireFlagValue(flag: string, value: string | undefined): string {
+  if (value === undefined) {
+    throw new TypeError(`Missing value for ${flag}`)
+  }
+  if (value.startsWith('--')) {
+    throw new TypeError(`Missing value for ${flag}`)
+  }
+  return value
+}
+
 function parseArgsRecursive(args: readonly string[], index: number, params: BenchmarkParams): BenchmarkParams {
   const flag = args[index]
   const value = args[index + 1]
@@ -67,20 +77,25 @@ function parseArgsRecursive(args: readonly string[], index: number, params: Benc
   if (flag === undefined) {
     return params
   }
-  if (flag === '--threshold' && value !== undefined) {
-    return parseArgsRecursive(args, index + 2, { ...params, threshold: parseFiniteNumber(flag, value) })
+  if (flag === '--threshold') {
+    const flagValue = requireFlagValue(flag, value)
+    return parseArgsRecursive(args, index + 2, { ...params, threshold: parseFiniteNumber(flag, flagValue) })
   }
-  if (flag === '--linkage' && value !== undefined) {
-    return parseArgsRecursive(args, index + 2, { ...params, linkage: parseLinkage(value) })
+  if (flag === '--linkage') {
+    const flagValue = requireFlagValue(flag, value)
+    return parseArgsRecursive(args, index + 2, { ...params, linkage: parseLinkage(flagValue) })
   }
-  if (flag === '--gap-threshold' && value !== undefined) {
-    return parseArgsRecursive(args, index + 2, { ...params, gapThreshold: parseFiniteNumber(flag, value) })
+  if (flag === '--gap-threshold') {
+    const flagValue = requireFlagValue(flag, value)
+    return parseArgsRecursive(args, index + 2, { ...params, gapThreshold: parseFiniteNumber(flag, flagValue) })
   }
-  if (flag === '--sizes' && value !== undefined) {
-    return parseArgsRecursive(args, index + 2, { ...params, sizes: parsePositiveIntegerList(flag, value) })
+  if (flag === '--sizes') {
+    const flagValue = requireFlagValue(flag, value)
+    return parseArgsRecursive(args, index + 2, { ...params, sizes: parsePositiveIntegerList(flag, flagValue) })
   }
-  if ((flag === '--output' || flag === '--output-path') && value !== undefined) {
-    return parseArgsRecursive(args, index + 2, { ...params, outputPath: value })
+  if (flag === '--output' || flag === '--output-path') {
+    const flagValue = requireFlagValue(flag, value)
+    return parseArgsRecursive(args, index + 2, { ...params, outputPath: flagValue })
   }
   if (flag.startsWith('--')) {
     throw new TypeError(value === undefined ? `Missing value for ${flag}` : `Unknown flag: ${flag}`)
