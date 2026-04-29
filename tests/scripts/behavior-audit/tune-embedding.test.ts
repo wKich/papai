@@ -8,7 +8,7 @@ import type {
   ProfiledClusters,
 } from '../../../scripts/behavior-audit/consolidate-keywords-advanced-clustering.js'
 import type { LinkageMode } from '../../../scripts/behavior-audit/consolidate-keywords-helpers.js'
-import { runTuneEmbedding } from '../../../scripts/behavior-audit/tune-embedding.js'
+import { parseArgs, runTuneEmbedding } from '../../../scripts/behavior-audit/tune-embedding.js'
 
 type RecordedSubdivideCall = {
   readonly maxClusterSize: number
@@ -92,6 +92,14 @@ function buildClustersAdvancedStub(
 }
 
 describe('tune-embedding wiring', () => {
+  test('parseArgs enables clustering profile output', () => {
+    expect(parseArgs(['--profile-clustering']).profileClustering).toBe(true)
+  })
+
+  test('parseArgs parses comma-separated profile sizes', () => {
+    expect(parseArgs(['--profile-sizes', '500,1000,2000']).profileSizes).toEqual([500, 1000, 2000])
+  })
+
   test('forwards gapThreshold into subdivideOversizedClusters', async () => {
     const extractedDir = await makeExtractedDir()
     const recordedCalls: RecordedSubdivideCall[] = []

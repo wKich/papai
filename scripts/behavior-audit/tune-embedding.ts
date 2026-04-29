@@ -2,7 +2,9 @@ import { mkdtemp, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { formatClusteringProfile } from './clustering-profile.js'
 import { reloadBehaviorAuditConfig, EXTRACTED_DIR, EMBEDDING_BASE_URL, EMBEDDING_MODEL } from './config.js'
+import type { ProfiledClusters } from './consolidate-keywords-advanced-clustering.js'
 import { embedSlugBatch } from './consolidate-keywords-agent.js'
 import {
   buildClustersAdvanced,
@@ -11,13 +13,14 @@ import {
   subdivideOversizedClusters,
   toNormalizedFloat64Arrays,
 } from './consolidate-keywords-helpers.js'
-import type { LinkageMode } from './consolidate-keywords-helpers.js'
 import { getOrEmbed } from './embedding-cache.js'
 import type { ExtractedBehaviorRecord } from './extracted-store.js'
 import { normalizeKeywordSlug } from './keyword-vocabulary.js'
 import type { KeywordVocabularyEntry } from './keyword-vocabulary.js'
+import { parseArgs } from './tune-embedding-args.js'
+import type { TuneParams } from './tune-embedding-args.js'
 
-const VALID_LINKAGES: readonly LinkageMode[] = ['single', 'average', 'complete']
+export { parseArgs } from './tune-embedding-args.js'
 
 interface TuneEmbeddingDeps {
   readonly extractedDir: string
@@ -49,31 +52,6 @@ const defaultTuneEmbeddingDeps: TuneEmbeddingDeps = {
   normalizeKeywordSlug,
 }
 
-function parseFiniteNumber(flag: string, value: string): number {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) {
-    throw new TypeError(`Invalid numeric value for ${flag}: ${value}`)
-  }
-  return parsed
-}
-
-function parseLinkage(value: string): LinkageMode {
-  if (value === 'single' || value === 'average' || value === 'complete') {
-    return value
-  }
-  throw new Error(`Unsupported linkage '${value}'. Expected one of: ${VALID_LINKAGES.join(', ')}`)
-}
-
-interface TuneParams {
-  readonly threshold: number
-  readonly minClusterSize: number
-  readonly maxClusterSize: number
-  readonly linkage: LinkageMode
-  readonly gapThreshold: number
-  readonly reembed: boolean
-  readonly cacheDir: string
-}
-
 interface TuneResult {
   readonly initialCount: number
   readonly finalCount: number
@@ -81,44 +59,6 @@ interface TuneResult {
   readonly initialKeywords: readonly string[]
   readonly finalKeywords: readonly string[]
   readonly mergePairs: ReadonlyArray<readonly [string, string]>
-}
-
-export function parseArgs(args: readonly string[]): TuneParams {
-  let threshold = 0.92
-  let minClusterSize = 2
-  let maxClusterSize = 0
-  let linkage: LinkageMode = 'single'
-  let gapThreshold = 0
-  let reembed = false
-  for (let i = 0; i < args.length; i++) {
-    const flag = args[i]
-    const value = args[i + 1]
-    if (flag === '--threshold' && value !== undefined) {
-      threshold = parseFiniteNumber(flag, value)
-      i++
-    }
-    if (flag === '--min-cluster-size' && value !== undefined) {
-      minClusterSize = parseFiniteNumber(flag, value)
-      i++
-    }
-    if (flag === '--max-cluster-size' && value !== undefined) {
-      maxClusterSize = parseFiniteNumber(flag, value)
-      i++
-    }
-    if (flag === '--linkage' && value !== undefined) {
-      linkage = parseLinkage(value)
-      i++
-    }
-    if (flag === '--gap-threshold' && value !== undefined) {
-      gapThreshold = parseFiniteNumber(flag, value)
-      i++
-    }
-    if (flag === '--re-embed') {
-      reembed = true
-    }
-  }
-  const cacheDir = join(tmpdir(), 'tune-embed-cache')
-  return { threshold, minClusterSize, maxClusterSize, linkage, gapThreshold, reembed, cacheDir }
 }
 
 async function collectJsonFiles(dir: string): Promise<readonly string[]> {
@@ -183,13 +123,11 @@ function buildTuneClusters(
     `[tune] Clustering at threshold=${params.threshold}, minClusterSize=${params.minClusterSize}, linkage=${params.linkage}, gap=${params.gapThreshold}, maxClusterSize=${params.maxClusterSize}...`,
   )
 
-  const clusters = deps.buildClustersAdvanced(
-    normalized,
-    params.threshold,
-    params.minClusterSize,
-    params.linkage,
-    params.gapThreshold,
-  )
+  const clusterResult = buildTuneClusterResult(normalized, params, deps)
+  const clusters = isProfiledClusters(clusterResult) ? clusterResult.clusters : clusterResult
+  if (isProfiledClusters(clusterResult)) {
+    console.log(formatClusteringProfile(clusterResult.profile))
+  }
 
   return params.maxClusterSize > 0
     ? deps.subdivideOversizedClusters(
@@ -201,6 +139,33 @@ function buildTuneClusters(
         params.gapThreshold,
       )
     : clusters
+}
+
+function isProfiledClusters(result: readonly (readonly number[])[] | ProfiledClusters): result is ProfiledClusters {
+  return !Array.isArray(result)
+}
+
+function buildTuneClusterResult(
+  normalized: readonly Float64Array[],
+  params: TuneParams,
+  deps: TuneEmbeddingDeps,
+): readonly (readonly number[])[] | ProfiledClusters {
+  return params.profileClustering
+    ? deps.buildClustersAdvanced(
+        normalized,
+        params.threshold,
+        params.minClusterSize,
+        params.linkage,
+        params.gapThreshold,
+        { profile: true },
+      )
+    : deps.buildClustersAdvanced(
+        normalized,
+        params.threshold,
+        params.minClusterSize,
+        params.linkage,
+        params.gapThreshold,
+      )
 }
 
 async function runTune(params: TuneParams, deps: TuneEmbeddingDeps): Promise<TuneResult> {
