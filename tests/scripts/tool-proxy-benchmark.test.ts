@@ -6,6 +6,14 @@ import {
   summarizeBenchmarkResults,
 } from '../../scripts/tool-proxy-benchmark.js'
 
+const restoreToolProxyBenchmarkModels = (value: string | undefined): void => {
+  if (value === undefined) {
+    delete process.env['TOOL_PROXY_BENCHMARK_MODELS']
+    return
+  }
+  process.env['TOOL_PROXY_BENCHMARK_MODELS'] = value
+}
+
 describe('tool-proxy-benchmark utilities', () => {
   it('parses explicit benchmark flags', () => {
     const args = parseBenchmarkArgs([
@@ -36,6 +44,18 @@ describe('tool-proxy-benchmark utilities', () => {
       'Invalid positive integer value for --repetitions: 0',
     )
     expect(() => parseBenchmarkArgs(['--models', ','])).toThrow('Invalid non-empty model list for --models')
+  })
+
+  it('rejects empty model list from environment defaults', () => {
+    const envName = 'TOOL_PROXY_BENCHMARK_MODELS'
+    const previousModels = process.env[envName]
+    process.env[envName] = ','
+
+    try {
+      expect(() => parseBenchmarkArgs([])).toThrow('Invalid non-empty model list for TOOL_PROXY_BENCHMARK_MODELS')
+    } finally {
+      restoreToolProxyBenchmarkModels(previousModels)
+    }
   })
 
   it('rejects unknown flags and positional args', () => {

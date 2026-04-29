@@ -70,7 +70,7 @@ export function parseBenchmarkArgs(args: readonly string[]): BenchmarkArgs {
   const defaults: BenchmarkArgs = {
     baseUrl: firstEnv(['TOOL_PROXY_BENCHMARK_BASE_URL', 'LLM_BASE_URL'], DEFAULT_BASE_URL),
     apiKeyEnv: firstEnv(['TOOL_PROXY_BENCHMARK_API_KEY_ENV'], DEFAULT_API_KEY_ENV),
-    models: parseModels(firstEnv(['TOOL_PROXY_BENCHMARK_MODELS'], DEFAULT_MODEL)),
+    models: parseModelFlag('TOOL_PROXY_BENCHMARK_MODELS', firstEnv(['TOOL_PROXY_BENCHMARK_MODELS'], DEFAULT_MODEL)),
     outputPath: DEFAULT_OUTPUT_PATH,
     repetitions: 1,
   }
