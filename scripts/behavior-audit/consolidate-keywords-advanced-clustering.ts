@@ -1,11 +1,4 @@
-import {
-  filterClusters,
-  findBestAgglomerativeMerge,
-  findBestAgglomerativeMergeWithGap,
-  getLinkageSimilarity,
-  mergeClusters,
-} from './consolidate-keywords-advanced-clustering-helpers.js'
-import type { AgglomerativeMerge, Cluster } from './consolidate-keywords-advanced-clustering-helpers.js'
+import { buildAgglomerativeClusters } from './consolidate-keywords-agglomerative-clustering.js'
 import {
   buildClustersNormalized,
   dotProduct,
@@ -14,6 +7,8 @@ import {
   toIndexedSubEmbeddings,
 } from './consolidate-keywords-clustering.js'
 import type { LinkageMode } from './consolidate-keywords-clustering.js'
+
+type Cluster = readonly number[]
 
 export type MutableDistanceMatrix = {
   readonly n: number
@@ -70,6 +65,23 @@ export function activeIndices(state: ActiveState): readonly number[] {
 
 export function isActive(state: ActiveState, index: number): boolean {
   return state.active[index] === 1
+}
+
+function mergeClusters(clusters: readonly Cluster[], mergePair: readonly [number, number]): readonly Cluster[] {
+  const [bestA, bestB] = mergePair
+  const clusterA = clusters[bestA]
+  const clusterB = clusters[bestB]
+  if (clusterA === undefined || clusterB === undefined) return clusters
+  return clusters.flatMap((cluster, index) => {
+    if (index === bestA) {
+      return [[...clusterA, ...clusterB]]
+    }
+    return index === bestB ? [] : [cluster]
+  })
+}
+
+function filterClusters(clusters: readonly Cluster[], minClusterSize: number): readonly Cluster[] {
+  return clusters.filter((cluster) => cluster.length >= minClusterSize)
 }
 
 function buildCandidatePairs(
@@ -137,26 +149,7 @@ function buildClustersNonSingle(
   linkage: Exclude<LinkageMode, 'single'>,
   gapThreshold: number,
 ): readonly Cluster[] {
-  let clusters: readonly Cluster[] = normalizedEmbeddings.map((_, index) => [index])
-  const linkageSimilarity = getLinkageSimilarity(linkage)
-  const findBestMerge: (currentClusters: readonly Cluster[]) => AgglomerativeMerge =
-    gapThreshold > 0
-      ? (currentClusters: readonly Cluster[]) =>
-          findBestAgglomerativeMergeWithGap(
-            currentClusters,
-            threshold,
-            linkageSimilarity,
-            normalizedEmbeddings,
-            gapThreshold,
-          )
-      : (currentClusters: readonly Cluster[]) =>
-          findBestAgglomerativeMerge(currentClusters, threshold, linkageSimilarity, normalizedEmbeddings)
-
-  for (;;) {
-    const bestMerge = findBestMerge(clusters)
-    if (bestMerge === undefined) return filterClusters(clusters, minClusterSize)
-    clusters = mergeClusters(clusters, bestMerge.pair)
-  }
+  return buildAgglomerativeClusters(normalizedEmbeddings, threshold, minClusterSize, linkage, gapThreshold)
 }
 
 export function buildClustersAdvanced(
