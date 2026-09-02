@@ -12,10 +12,10 @@
 
 ## 3. Arming, settle ordering, and recovery
 
-- [ ] 3.1 Red: `tests/afk-runner/cli.test.ts` asserts `parseStartArgs` accepts `--execute` and rejects unknown near-misses; the `sdd-auto.md` doc pin test names the flag. Implement the flag + doc. Verify: `bun test tests/afk-runner/cli.test.ts`
-- [ ] 3.2 Red: `tests/afk-runner/run-final.test.ts` asserts an armed start appends exactly one `execution armed` event before intake and an unarmed start appends none. Wire in `run.ts` start. Verify: `bun test tests/afk-runner/run-final.test.ts`
-- [ ] 3.3 Red: `tests/afk-runner/work/gate-settle-final.test.ts` (extend the suite) asserts armed final approve orders `stage_exit(gate)` → `stage_enter(implement)` → `gate.answered{approve}` and parks nothing (implement active), while unarmed ordering is byte-unchanged. Implement in `work/gate-settle.ts`. Verify: `bun test tests/afk-runner/work/gate-settle-final.test.ts`
-- [ ] 3.4 Red: `tests/afk-runner/run-recovery.test.ts` heals the reversed window — mover landed, answer missing → resume appends the owed `gate.answered{approve}` — and re-derives armedness from the fold. Implement the recovery row in `run-recovery.ts`/`drive/resume.ts`. Verify: `bun test tests/afk-runner/run-recovery.test.ts`
+- [x] 3.1 Red: `tests/afk-runner/cli.test.ts` asserts `parseStartArgs` accepts `--execute` and rejects unknown near-misses; the `sdd-auto.md` doc pin test names the flag. Implement the flag + doc. Verify: `bun test tests/afk-runner/cli.test.ts`
+- [x] 3.2 Red: `tests/afk-runner/run-final.test.ts` asserts an armed start appends exactly one `execution armed` event before intake and an unarmed start appends none. Wire in `run.ts` start. Verify: `bun test tests/afk-runner/run-final.test.ts`
+- [x] 3.3 Red: `tests/afk-runner/work/gate-settle-final.test.ts` (extend the suite) asserts armed final approve orders `stage_exit(gate)` → `stage_enter(implement)` → `gate.answered{approve}` and parks nothing (implement active), while unarmed ordering is byte-unchanged. Implement in `work/gate-settle.ts`. Verify: `bun test tests/afk-runner/work/gate-settle-final.test.ts`
+- [x] 3.4 Red: `tests/afk-runner/run-recovery.test.ts` heals the reversed window — mover landed, answer missing → resume appends the owed `gate.answered{approve}` — and re-derives armedness from the fold. Implement the recovery row in `run-recovery.ts`/`drive/resume.ts`. Verify: `bun test tests/afk-runner/run-recovery.test.ts`
 
 ## 4. Implement work module
 

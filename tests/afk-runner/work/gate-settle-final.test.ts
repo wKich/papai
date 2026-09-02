@@ -20,6 +20,7 @@ interface FinalHarness {
   readonly appended: EventInput[]
   readonly settleWith: (answers: GateAnswers) => ReturnType<typeof settleGateWithAnswers>
   readonly log: () => SddEvent[]
+  readonly runDir: string
 }
 
 /** Narrow an answers settle to its settled shape — throws (failing the test) on a rejection. */
@@ -84,8 +85,50 @@ function makeParkedFinalGate(): FinalHarness {
     appended,
     settleWith: (answers) => settleGateWithAnswers(input, answers),
     log: () => stamp(appended),
+    runDir,
   }
 }
+
+/**
+ * The parked-final harness with the run's armed log on disk: the settle seam
+ * reads armedness from `runDir/events.ndjson` (U3 D1 — log truth, no producer
+ * threading), so the armed walk must exist where the seam folds it.
+ */
+function makeArmedParkedFinalGate(): FinalHarness {
+  const h = makeParkedFinalGate()
+  const armedPrelude: EventInput[] = [{ altitude: 'L2', type: 'execution', action: 'armed' }, ...ARMED_WALK]
+  const stamped = armedPrelude.map((event, index) => stampEvent(event, index + 1, '2026-08-27T00:00:00.000Z'))
+  fs.writeFileSync(
+    path.join(h.runDir, 'events.ndjson'),
+    `${stamped.map((event) => JSON.stringify(event)).join('\n')}\n`,
+  )
+  return h
+}
+
+/** The think-half walk of the parked-final PRELUDE (the harness folds PRELUDE+appends; the disk copy needs the same shape through the presentation). */
+const ARMED_WALK: readonly EventInput[] = [
+  { altitude: 'L2', type: 'stage_enter', stage: 'intake' },
+  { altitude: 'L2', type: 'depth', profile: 'M', rationale: 'two modules', source: 'estimator' },
+  { altitude: 'L2', type: 'stage_exit', stage: 'intake' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'draft' },
+  { altitude: 'L2', type: 'stage_exit', stage: 'draft' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'review' },
+  { altitude: 'L2', type: 'round_open', round: 1, cap: 3 },
+  {
+    altitude: 'L2',
+    type: 'convergence',
+    round: 1,
+    verdict: 'converged',
+    counts: { blocker: 0, material: 0, nitpick: 0 },
+  },
+  { altitude: 'L2', type: 'round_close', round: 1, cap: 3 },
+  { altitude: 'L2', type: 'stage_exit', stage: 'review' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'decompose' },
+  { altitude: 'L2', type: 'stage_exit', stage: 'decompose' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'atomicity' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'gate' },
+  { altitude: 'L2', type: 'gate', action: 'presented', mode: 'final', version: 1 },
+]
 
 describe('settle seam at final gates — outcome-ordered settlement (C5 D3)', () => {
   it('approve appends the gate stage exit before the answered event and completes on the answer', async () => {
@@ -151,5 +194,48 @@ describe('settle seam at final gates — outcome-ordered settlement (C5 D3)', ()
     const folded = foldEvents(pipelineMachine, h.log()).snapshot
     expect(folded.value).toBe('aborted')
     expect(folded.status).toBe('done')
+  })
+})
+
+describe('settle seam at final gates — armed final approve enters execution (U3 D3)', () => {
+  it('armed approve appends exit, the implement mover, then the answer — landing in implement, not completed', async () => {
+    const h = makeArmedParkedFinalGate()
+    const result = settledOf(
+      await h.settleWith({
+        items: [{ kind: 'assumption', id: 'A1', text: 'guests stay read-only', accepted: true }],
+        blockerAnswers: [],
+        acks: [],
+        decision: 'approve',
+      }),
+    )
+    expect(result.outcome).toBe('approve')
+    const events = h.log()
+    expect(events.at(-3)).toMatchObject({ type: 'stage_exit', stage: 'gate' })
+    expect(events.at(-2)).toMatchObject({ type: 'stage_enter', stage: 'implement' })
+    expect(events.at(-1)).toMatchObject({ type: 'gate', action: 'answered', outcome: 'approve', mode: 'final' })
+    const folded = foldEvents(pipelineMachine, events).snapshot
+    expect(folded.value).toBe('implement')
+    expect(folded.context.stages['implement']).toBe('active')
+  })
+
+  it('armed extend/veto/abort orderings stay the C5 shapes — the mover difference is approve-only', async () => {
+    const extendHarness = makeArmedParkedFinalGate()
+    settledOf(await extendHarness.settleWith({ items: [], blockerAnswers: [], acks: [], decision: 'extend' }))
+    expect(extendHarness.appended.map((event) => event.type).slice(-3)).toEqual(['gate', 'stage_exit', 'round_open'])
+
+    const vetoHarness = makeArmedParkedFinalGate()
+    settledOf(
+      await vetoHarness.settleWith({
+        items: [{ kind: 'assumption', id: 'A1', text: 'guests stay read-only', accepted: false, redirect: 'dm-only' }],
+        blockerAnswers: [],
+        acks: [],
+        decision: 'veto',
+      }),
+    )
+    expect(vetoHarness.appended.map((event) => event.type).slice(-3)).toEqual(['gate', 'stage_exit', 'stage_enter'])
+
+    const abortHarness = makeArmedParkedFinalGate()
+    settledOf(await abortHarness.settleWith({ items: [], blockerAnswers: [], acks: [], decision: 'abort' }))
+    expect(abortHarness.appended).toHaveLength(1)
   })
 })

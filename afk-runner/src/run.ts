@@ -12,6 +12,7 @@ import type { ExecGitFn, RunnerConfig } from './config.js'
 import { drive } from './drive/loop.js'
 import type { DriveResult, ParkedReason, StopSeam } from './drive/loop.js'
 import { parkedReasonOf } from './drive/resume.js'
+import { appendEvent } from './events.js'
 import type { DepthProfile } from './events.js'
 import { workForOf } from './graph/pipeline-work.js'
 import { pipelineMachine } from './graph/pipeline.js'
@@ -53,6 +54,8 @@ export interface StartOptions {
   readonly taskText?: string
   readonly changeName?: string
   readonly depthOverride?: DepthProfile
+  /** U3 D1: append the armed fact event before any stage work. */
+  readonly execute?: boolean
 }
 
 function nowOf(deps: RunDeps): Date {
@@ -109,6 +112,11 @@ export async function startRun(deps: RunDeps, options: StartOptions): Promise<Ru
     now,
   )
   await writeFile(path.join(state.runDir, 'task.md'), taskText, 'utf8')
+  if (options.execute === true) {
+    // U3 D1: the armed fact lands before any stage work — the fold's only
+    // source of execution-armedness, so a crashed run re-derives it.
+    appendEvent(logPathOf(state.runDir), { altitude: 'L2', type: 'execution', action: 'armed' })
+  }
   return driveRun(deps, state, { taskText, changeName, depthOverride: options.depthOverride })
 }
 

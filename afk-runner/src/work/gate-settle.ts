@@ -7,6 +7,9 @@ import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import type { GateOutcome, StageId } from '../events.js'
+import { pipelineMachine } from '../graph/pipeline.js'
+import { foldLogOrInitial } from '../kernel/fold.js'
+import { logPathOf } from '../memo-project.js'
 import { renderGateAnswers } from './gate-answers.js'
 import type { GateAnswers } from './gate-answers.js'
 import { responseFromAnswers } from './gate-answers.js'
@@ -169,6 +172,9 @@ async function settleGateFileChecked(input: SettleInput): Promise<SettleResult> 
     await verifyGateIntegrity(input.gate, input.version)
   }
   const answeredMode = input.gateMode === 'escalation' ? 'escalation' : outcome === 'extend' ? input.gateMode : 'final'
+  // U3 D1/D3: armedness is log truth — the seam folds the run's log, never a
+  // producer-threaded flag, so every settle producer inherits the behavior.
+  const executionArmed = foldLogOrInitial(pipelineMachine, logPathOf(input.gate.runDir)).snapshot.context.executionArmed
   const emitAnswered = (): void => {
     input.gate.emit({
       altitude: 'L2',
@@ -185,6 +191,12 @@ async function settleGateFileChecked(input: SettleInput): Promise<SettleResult> 
   const owesExit = input.gateMode === 'final' && outcome !== 'abort'
   if (owesExit && outcome === 'approve') {
     emitGateStageExit()
+    if (executionArmed) {
+      // Armed approve (U3 D3): the implement mover lands BEFORE the answer, so
+      // implement is active when the answer folds and the completed edge
+      // cannot fire — the machine sits in implement.
+      input.gate.emit({ altitude: 'L2', type: 'stage_enter', stage: 'implement' })
+    }
     emitAnswered()
     return { outcome, vetoes: response.vetoes, answeredMode }
   }

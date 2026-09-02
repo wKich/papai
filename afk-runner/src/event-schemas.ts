@@ -22,33 +22,9 @@ import {
   AgentDoneEvent,
 } from './agent-noise-schemas.js'
 
-export { ExecutionEvent, TaskEvent } from './execution-schemas.js'
-import { ExecutionEvent, TaskEvent } from './execution-schemas.js'
-
-export const StageIdSchema = z.enum([
-  'intake',
-  'draft',
-  'review',
-  'decompose',
-  'atomicity',
-  'gate',
-  'implement',
-  'verify',
-  'release',
-])
-export type StageId = z.infer<typeof StageIdSchema>
-
-export const STAGE_ORDER: readonly StageId[] = [
-  'intake',
-  'draft',
-  'review',
-  'decompose',
-  'atomicity',
-  'gate',
-  'implement',
-  'verify',
-  'release',
-]
+export { ExecutionEvent, TaskEvent, GateModeSchema, StageIdSchema, STAGE_ORDER } from './execution-schemas.js'
+export type { GateMode, StageId } from './execution-schemas.js'
+import { ExecutionEvent, GateModeSchema, StageIdSchema, TaskEvent } from './execution-schemas.js'
 
 /** Declared failure kinds (C6 D1 taxonomy): exhaustion, structural precondition, agent-transport infra. */
 export const FailureKindSchema = z.enum(['exhausted', 'precondition', 'infra'])
@@ -163,9 +139,6 @@ const DepthEvent = z.object({
 
 export const GateOutcomeSchema = z.enum(['approve', 'veto', 'extend', 'abort'])
 export type GateOutcome = z.infer<typeof GateOutcomeSchema>
-
-export const GateModeSchema = z.enum(['early', 'final', 'plan', 'escalation', 'release'])
-export type GateMode = z.infer<typeof GateModeSchema>
 
 const GateEvent = z.object({
   altitude: z.literal('L2'),
