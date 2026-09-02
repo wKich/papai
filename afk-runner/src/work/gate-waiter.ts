@@ -55,9 +55,9 @@ type WaiterRejection = { readonly kind: 'rejected'; readonly reason: string }
 
 type AttemptOutcome = GateWaiterResult | WaiterRejection
 
-/** Escalation stays first-class (C6 D4); only the dormant plan mode collapses to final. */
-function narrowGateMode(mode: 'early' | 'final' | 'plan' | 'escalation'): 'early' | 'final' | 'escalation' {
-  return mode === 'plan' ? 'final' : mode
+/** Escalation stays first-class (C6 D4); only the dormant plan mode and release collapse to final (U3 D7 — release is final-shaped for the waiter: no extend). */
+function narrowGateMode(mode: 'early' | 'final' | 'plan' | 'escalation' | 'release'): 'early' | 'final' | 'escalation' {
+  return mode === 'plan' || mode === 'release' ? 'final' : mode
 }
 
 function readGateMd(runDir: string, version: number): Promise<string | null> {

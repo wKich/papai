@@ -31,7 +31,7 @@ export const PersistedRunStateSchema = z.object({
   round: z.number().int().nonnegative(),
   roundCap: z.number().int().positive().optional(),
   gate: z
-    .object({ mode: z.enum(['early', 'final', 'plan', 'escalation']), version: z.number().int().positive() })
+    .object({ mode: z.enum(['early', 'final', 'plan', 'escalation', 'release']), version: z.number().int().positive() })
     .nullable(),
   status: z.enum(['running', 'completed', 'aborted', 'failed', 'stopped']),
   /**

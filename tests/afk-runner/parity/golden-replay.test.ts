@@ -87,10 +87,21 @@ const REPLAY_FIELDS = [
   'children',
 ] as const satisfies readonly (keyof ReplayState)[]
 
+/**
+ * The legacy stage vocabulary (U3 D8): the execution stages are kernel-only
+ * map entries — pending in every historical log — so the parity comparison
+ * normalizes to the legacy stages, exactly as it excludes the scratch tally.
+ */
+const LEGACY_STAGE_IDS = ['intake', 'draft', 'review', 'decompose', 'atomicity', 'gate'] as const
+
+function legacyStagesOf(stages: KernelContext['stages']): Record<string, unknown> {
+  return Object.fromEntries(LEGACY_STAGE_IDS.map((id) => [id, stages[id] ?? 'pending']))
+}
+
 /** Project machine context onto the legacy ReplayState fields; the scratch tally is deliberately excluded (residue is not a parity field). */
 function projectedFields(context: KernelContext): Record<(typeof REPLAY_FIELDS)[number], unknown> {
   return {
-    stages: context.stages,
+    stages: legacyStagesOf(context.stages),
     depth: context.depth,
     round: context.round,
     perRound: context.perRound,

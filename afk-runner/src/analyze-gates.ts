@@ -24,7 +24,7 @@ import { looksAnswered } from './work/gate-waiter.js'
  * pinned by tests in their own suites so this join cannot silently rot.
  */
 
-type GateMode = 'early' | 'final' | 'plan' | 'escalation'
+type GateMode = 'early' | 'final' | 'plan' | 'escalation' | 'release'
 
 export interface GateAnswerForensic {
   readonly version: number

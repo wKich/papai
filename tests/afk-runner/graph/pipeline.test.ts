@@ -37,6 +37,10 @@ describe('pipeline graph v0 shape', () => {
         'plan',
         'child.spawned',
         'child.done',
+        'execution.armed',
+        'task.started',
+        'task.done',
+        'task.failed',
       ].sort(),
     )
   })
@@ -46,7 +50,7 @@ describe('pipeline graph v0 shape', () => {
     expect(pipelineStates['review']).toBeDefined()
   })
 
-  it('initial state derives all six stages pending with an empty full derived state', () => {
+  it('initial state derives all nine stages pending with an empty full derived state', () => {
     const [snapshot] = initialStep(pipelineMachine)
     expect(snapshot.value).toBe('start')
     expect(snapshot.context).toEqual(
@@ -57,6 +61,9 @@ describe('pipeline graph v0 shape', () => {
         decompose: 'pending',
         atomicity: 'pending',
         gate: 'pending',
+        implement: 'pending',
+        verify: 'pending',
+        release: 'pending',
       }),
     )
   })

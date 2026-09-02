@@ -22,10 +22,30 @@ import {
   AgentDoneEvent,
 } from './agent-noise-schemas.js'
 
-export const StageIdSchema = z.enum(['intake', 'draft', 'review', 'decompose', 'atomicity', 'gate'])
+export const StageIdSchema = z.enum([
+  'intake',
+  'draft',
+  'review',
+  'decompose',
+  'atomicity',
+  'gate',
+  'implement',
+  'verify',
+  'release',
+])
 export type StageId = z.infer<typeof StageIdSchema>
 
-export const STAGE_ORDER: readonly StageId[] = ['intake', 'draft', 'review', 'decompose', 'atomicity', 'gate']
+export const STAGE_ORDER: readonly StageId[] = [
+  'intake',
+  'draft',
+  'review',
+  'decompose',
+  'atomicity',
+  'gate',
+  'implement',
+  'verify',
+  'release',
+]
 
 /** Declared failure kinds (C6 D1 taxonomy): exhaustion, structural precondition, agent-transport infra. */
 export const FailureKindSchema = z.enum(['exhausted', 'precondition', 'infra'])
@@ -141,11 +161,14 @@ const DepthEvent = z.object({
 export const GateOutcomeSchema = z.enum(['approve', 'veto', 'extend', 'abort'])
 export type GateOutcome = z.infer<typeof GateOutcomeSchema>
 
+export const GateModeSchema = z.enum(['early', 'final', 'plan', 'escalation', 'release'])
+export type GateMode = z.infer<typeof GateModeSchema>
+
 const GateEvent = z.object({
   altitude: z.literal('L2'),
   type: z.literal('gate'),
   action: z.enum(['presented', 'answered', 'rearmed']),
-  mode: z.enum(['early', 'final', 'plan', 'escalation']),
+  mode: GateModeSchema,
   version: z.number().int().positive(),
   /** Explicit settle outcome (C4); historical answered events carry none. */
   outcome: GateOutcomeSchema.optional(),
@@ -171,6 +194,22 @@ const ChildDoneEvent = z.object({
   type: z.literal('child_done'),
   child: z.string().min(1),
   outcome: z.enum(['done', 'failed']),
+})
+
+/** Execution arming (U3 D1): one fact event per armed start; unarmed runs carry none. */
+const ExecutionEvent = z.object({
+  altitude: z.literal('L2'),
+  type: z.literal('execution'),
+  action: z.literal('armed'),
+})
+
+/** Per-task walk facts (U3 D4): attempts derive from started counts, status from the last event per id. */
+const TaskEvent = z.object({
+  altitude: z.literal('L2'),
+  type: z.literal('task'),
+  action: z.enum(['started', 'done', 'failed']),
+  id: z.string().min(1),
+  detail: z.string().optional(),
 })
 
 const HumanEditsEvent = z.object({
@@ -231,6 +270,8 @@ const EVENT_VARIANTS = [
   PlanEvent,
   ChildSpawnedEvent,
   ChildDoneEvent,
+  ExecutionEvent,
+  TaskEvent,
   HumanEditsEvent,
   ResumeEvent,
   RunAbortEvent,
@@ -263,6 +304,8 @@ export const SddEventSchema = z.discriminatedUnion('type', [
   PlanEvent.extend(StampShape),
   ChildSpawnedEvent.extend(StampShape),
   ChildDoneEvent.extend(StampShape),
+  ExecutionEvent.extend(StampShape),
+  TaskEvent.extend(StampShape),
   HumanEditsEvent.extend(StampShape),
   ResumeEvent.extend(StampShape),
   RunAbortEvent.extend(StampShape),

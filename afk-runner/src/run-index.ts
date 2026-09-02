@@ -13,7 +13,7 @@ import { PersistedRunStateSchema } from './run-state.js'
 export interface PendingGateEntry {
   readonly runId: string
   readonly changeName: string
-  readonly gateMode: 'early' | 'final' | 'plan' | 'escalation'
+  readonly gateMode: 'early' | 'final' | 'plan' | 'escalation' | 'release'
   readonly gateVersion: number
   readonly updatedAt: string
 }

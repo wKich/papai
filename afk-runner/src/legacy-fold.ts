@@ -4,7 +4,6 @@
 // See LICENSE in the project root for details.
 
 import { readEvents } from './events.js'
-import { STAGE_ORDER } from './events.js'
 import type { AutoDecisionKind, AutoDecisionRule, DepthProfile, EventInput, FindingCounts, StageId } from './events.js'
 
 export interface DigestRecord {
@@ -71,13 +70,14 @@ export interface AutoDecisionRecord {
 }
 
 export interface ReplayState {
-  readonly stages: Record<StageId, 'done' | 'active' | 'pending'>
+  /** The frozen oracle's stage vocabulary (U3 D8): execution stages never enter this map. */
+  readonly stages: Record<LegacyStageId, 'done' | 'active' | 'pending'>
   readonly depth: DepthProfile | null
   readonly round: { readonly current: number; readonly cap: number } | null
   readonly perRound: readonly DigestRecord[]
   readonly lastVerdict: DigestRecord | null
   readonly gate: {
-    readonly mode: 'early' | 'final' | 'plan' | 'escalation'
+    readonly mode: 'early' | 'final' | 'plan' | 'escalation' | 'release'
     readonly version: number
     readonly answered: boolean
   } | null
@@ -85,12 +85,21 @@ export interface ReplayState {
   readonly children: Readonly<Record<string, { readonly status: 'pending' | 'running' | 'done' | 'failed' }>>
 }
 
+/** The legacy stage vocabulary the frozen fold tracks; parse-widened ids replay as strict no-ops. */
+const LEGACY_STAGES = ['intake', 'draft', 'review', 'decompose', 'atomicity', 'gate'] as const
+
+type LegacyStageId = (typeof LEGACY_STAGES)[number]
+
+function isLegacyStage(stage: StageId): stage is LegacyStageId {
+  return (LEGACY_STAGES as readonly string[]).includes(stage)
+}
+
 interface RoundDigest {
   resolved: number
   dismissed: number
 }
 
-function initialStages(): Record<StageId, 'done' | 'active' | 'pending'> {
+function initialStages(): Record<LegacyStageId, 'done' | 'active' | 'pending'> {
   return {
     intake: 'pending',
     draft: 'pending',
@@ -136,13 +145,18 @@ function foldChildEvent(state: ReplayState, event: EventInput): ReplayState | nu
 }
 
 function foldEvent(state: ReplayState, event: EventInput, pending: Map<number, RoundDigest>): ReplayState {
-  if (event.type === 'stage_enter') {
-    const stages = { ...state.stages }
-    for (const id of STAGE_ORDER) if (stages[id] === 'active') stages[id] = 'done'
-    stages[event.stage] = 'active'
-    return { ...state, stages }
+  // Execution-stage events are strict no-ops here (U3 D8): the frozen oracle
+  // has no execution states, so their enters/exits never touch this map.
+  if (event.type === 'stage_enter' || event.type === 'stage_exit') {
+    if (!isLegacyStage(event.stage)) return state
+    if (event.type === 'stage_enter') {
+      const stages = { ...state.stages }
+      for (const id of LEGACY_STAGES) if (stages[id] === 'active') stages[id] = 'done'
+      stages[event.stage] = 'active'
+      return { ...state, stages }
+    }
+    return { ...state, stages: { ...state.stages, [event.stage]: 'done' } }
   }
-  if (event.type === 'stage_exit') return { ...state, stages: { ...state.stages, [event.stage]: 'done' } }
   if (event.type === 'depth') return { ...state, depth: event.profile }
   if (event.type === 'round_open') return { ...state, round: { current: event.round, cap: event.cap } }
   if (event.type === 'finding') {

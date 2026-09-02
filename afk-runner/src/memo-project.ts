@@ -54,14 +54,20 @@ export interface MemoFields {
   readonly depth: KernelContext['depth']
   readonly round: number
   readonly roundCap: number
-  readonly gate: { readonly mode: 'early' | 'final' | 'plan' | 'escalation'; readonly version: number } | null
+  readonly gate: {
+    readonly mode: 'early' | 'final' | 'plan' | 'escalation' | 'release'
+    readonly version: number
+  } | null
   readonly status: 'running' | 'stopped' | 'completed' | 'aborted' | 'failed'
   readonly createdAt: string
   readonly updatedAt: string
   readonly autoExtendsUsed: number
   readonly gateDeadlineAt: string | null
   readonly gateDeadlineReArmed: boolean
-  readonly plan: { readonly childCount: number; readonly digest: string } | null
+  readonly plan: {
+    readonly childCount: number
+    readonly digest: string
+  } | null
   readonly children: Readonly<Record<string, { readonly status: 'pending' | 'running' | 'done' | 'failed' }>> | null
 }
 
