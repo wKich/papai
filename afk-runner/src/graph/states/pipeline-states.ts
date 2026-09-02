@@ -137,6 +137,83 @@ export const atomicity = kernelSetup.createStateConfig({
 })
 
 /**
+ * EXECUTION HALF (U3): implement walks tasks.md items sequentially (one
+ * implementer spawn per unchecked item, self-successor re-entry per task and
+ * on crash resume); verify runs the repo gate set at the boundary — a red
+ * suite routes back into implement as a normal outcome (the back-edge); the
+ * armed final-approve mover and release-gate vetoes land here too.
+ */
+export const implement = kernelSetup.createStateConfig({
+  on: {
+    ...runAbort,
+    'stage.enter': [
+      {
+        target: 'implement',
+        guard: { type: 'isStage', params: { stage: 'implement' } },
+        actions: ['closeThenActivate'],
+      },
+      {
+        target: 'verify',
+        guard: { type: 'isStage', params: { stage: 'verify' } },
+        actions: ['closeThenActivate'],
+      },
+    ],
+    'gate.presented': { target: 'gate', actions: ['presentGate'] },
+  },
+})
+
+export const verify = kernelSetup.createStateConfig({
+  on: {
+    ...runAbort,
+    'stage.enter': [
+      {
+        target: 'verify',
+        guard: { type: 'isStage', params: { stage: 'verify' } },
+        actions: ['closeThenActivate'],
+      },
+      {
+        // Red verify routes back into implement with the failure output as
+        // fix context (U3 D5) — routing, not a declared failure.
+        target: 'implement',
+        guard: { type: 'isStage', params: { stage: 'implement' } },
+        actions: ['closeThenActivate'],
+      },
+      {
+        target: 'release',
+        guard: { type: 'isStage', params: { stage: 'release' } },
+        actions: ['closeThenActivate'],
+      },
+    ],
+    'gate.presented': { target: 'gate', actions: ['presentGate'] },
+  },
+})
+
+export const release = kernelSetup.createStateConfig({
+  on: {
+    ...runAbort,
+    'stage.enter': [
+      {
+        target: 'release',
+        guard: { type: 'isStage', params: { stage: 'release' } },
+        actions: ['closeThenActivate'],
+      },
+      {
+        // The release gate presentation rides the tail choreography (C5):
+        // stage_enter(gate) as release's last work act.
+        target: 'gate',
+        guard: { type: 'isStage', params: { stage: 'gate' } },
+        actions: ['closeThenActivate'],
+      },
+      {
+        target: 'implement',
+        guard: { type: 'isStage', params: { stage: 'implement' } },
+        actions: ['closeThenActivate'],
+      },
+    ],
+  },
+})
+
+/**
  * GATE compound (C4 D1): `awaiting` is the machine-state park of a presented
  * gate. Entries: interstitial `gate.presented` from any work stage (early
  * cap-hit, C6 escalation) or the compound's own initial child via
@@ -187,6 +264,24 @@ export const gate = kernelSetup.createStateConfig({
           {
             target: '#pipeline.intake',
             guard: { type: 'isStage', params: { stage: 'intake' } },
+            actions: ['closeThenActivate'],
+          },
+          {
+            // The armed final-approve mover and release-gate vetoes land in
+            // implement (U3); escalation retries target a failed execution
+            // stage the same way (verify/release re-entries).
+            target: '#pipeline.implement',
+            guard: { type: 'isStage', params: { stage: 'implement' } },
+            actions: ['closeThenActivate'],
+          },
+          {
+            target: '#pipeline.verify',
+            guard: { type: 'isStage', params: { stage: 'verify' } },
+            actions: ['closeThenActivate'],
+          },
+          {
+            target: '#pipeline.release',
+            guard: { type: 'isStage', params: { stage: 'release' } },
             actions: ['closeThenActivate'],
           },
         ],

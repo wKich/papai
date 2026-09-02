@@ -6,9 +6,9 @@
 
 ## 2. Graph states and parity normalization
 
-- [ ] 2.1 Red: `tests/afk-runner/graph/pipeline.test.ts` transition-probes the new edges: `implement`/`verify`/`release` self-loops, `implement → verify → release`, `verify → implement`, `release` presenting via `stage_enter(gate)`, `gate.awaiting` mover edges to the three states, `run_abort` mixin coverage, and `allStagesDone` blocked while any execution stage is active. Add the states to `graph/states/pipeline-states.ts` + `graph/pipeline.ts`. Verify: `bun test tests/afk-runner/graph/pipeline.test.ts`
+- [x] 2.1 Red: `tests/afk-runner/graph/pipeline.test.ts` transition-probes the new edges: `implement`/`verify`/`release` self-loops, `implement → verify → release`, `verify → implement`, `release` presenting via `stage_enter(gate)`, `gate.awaiting` mover edges to the three states, `run_abort` mixin coverage, and `allStagesDone` blocked while any execution stage is active. Add the states to `graph/states/pipeline-states.ts` + `graph/pipeline.ts`. Verify: `bun test tests/afk-runner/graph/pipeline.test.ts`
 - [x] 2.2 Red: `tests/afk-runner/parity/golden-replay.test.ts` asserts every historical fixture still folds kernel≡legacy with the stage-map comparison normalized to the legacy stage vocabulary (execution entries pending residue). Implement the normalization. Verify: `bun test tests/afk-runner/parity/golden-replay.test.ts`
-- [ ] 2.3 Red: `tests/afk-runner/kernel/machine.test.ts` asserts unarmed final-gate approval still reaches `completed` with the execution stages forever pending. Verify: `bun test tests/afk-runner/kernel/machine.test.ts`
+- [x] 2.3 Red: `tests/afk-runner/kernel/machine.test.ts` asserts unarmed final-gate approval still reaches `completed` with the execution stages forever pending. Verify: `bun test tests/afk-runner/kernel/machine.test.ts`
 
 ## 3. Arming, settle ordering, and recovery
 

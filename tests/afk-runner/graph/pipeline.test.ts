@@ -14,9 +14,22 @@ function keysOf(states?: Record<string, unknown>): string[] {
 }
 
 describe('pipeline graph v0 shape', () => {
-  it('declares the legacy stage map states plus finals', () => {
+  it('declares the legacy stage map states, the execution states, and finals', () => {
     expect(Object.keys(pipelineStates).sort()).toEqual(
-      ['aborted', 'atomicity', 'completed', 'decompose', 'draft', 'gate', 'intake', 'review', 'start'].sort(),
+      [
+        'aborted',
+        'atomicity',
+        'completed',
+        'decompose',
+        'draft',
+        'gate',
+        'implement',
+        'intake',
+        'release',
+        'review',
+        'start',
+        'verify',
+      ].sort(),
     )
   })
 
@@ -484,5 +497,98 @@ describe('pipeline C6 run_abort — operator abort mixin from every non-final st
     snapshot = step(pipelineMachine, snapshot, { type: 'run.abort' })[0]
     expect(snapshot.value).toBe('aborted')
     expect(snapshot.status).toBe('done')
+  })
+})
+
+describe('pipeline execution states (U3)', () => {
+  function toFinalAwaiting(): KernelSnapshot {
+    let snapshot = initialStep(pipelineMachine)[0]
+    for (const stage of ['intake', 'draft', 'review', 'decompose', 'atomicity', 'gate'] as const) {
+      snapshot = step(pipelineMachine, snapshot, { type: 'stage.enter', stage })[0]
+    }
+    return step(pipelineMachine, snapshot, { type: 'gate.presented', mode: 'final', version: 1 })[0]
+  }
+
+  it('the armed final-approve mover enters implement with the answer landing active-blocked', () => {
+    let snapshot = toFinalAwaiting()
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.exit', stage: 'gate' })[0]
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.enter', stage: 'implement' })[0]
+    expect(snapshot.value).toBe('implement')
+    expect(snapshot.context.stages['gate']).toBe('done')
+    snapshot = step(pipelineMachine, snapshot, { type: 'gate.answered', outcome: 'approve' })[0]
+    // implement is active — completion cannot fire on the answer.
+    expect(snapshot.value).toBe('implement')
+    expect(snapshot.context.stages['implement']).toBe('active')
+  })
+
+  it('implement → verify → release walk, with verify red routing back to implement', () => {
+    let snapshot = toFinalAwaiting()
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.exit', stage: 'gate' })[0]
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.enter', stage: 'implement' })[0]
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.enter', stage: 'verify' })[0]
+    expect(snapshot.value).toBe('verify')
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.enter', stage: 'implement' })[0]
+    expect(snapshot.value).toBe('implement')
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.enter', stage: 'verify' })[0]
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.enter', stage: 'release' })[0]
+    expect(snapshot.value).toBe('release')
+  })
+
+  it('self-loop re-entries keep each execution stage re-enterable at its own position (crash resume shape)', () => {
+    let snapshot = toFinalAwaiting()
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.exit', stage: 'gate' })[0]
+    for (const stage of ['implement', 'verify', 'release'] as const) {
+      snapshot = step(pipelineMachine, snapshot, { type: 'stage.enter', stage })[0]
+      const reentered = step(pipelineMachine, snapshot, { type: 'stage.enter', stage })[0]
+      expect(reentered.value).toBe(stage)
+    }
+  })
+
+  it('release presents its gate through the tail choreography and approve completes', () => {
+    let snapshot = toFinalAwaiting()
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.exit', stage: 'gate' })[0]
+    for (const stage of ['implement', 'verify', 'release', 'gate'] as const) {
+      snapshot = step(pipelineMachine, snapshot, { type: 'stage.enter', stage })[0]
+    }
+    expect(snapshot.value).toEqual({ gate: 'awaiting' })
+    snapshot = step(pipelineMachine, snapshot, { type: 'gate.presented', mode: 'release', version: 2 })[0]
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.exit', stage: 'release' })[0]
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.exit', stage: 'gate' })[0]
+    snapshot = step(pipelineMachine, snapshot, { type: 'gate.answered', outcome: 'approve' })[0]
+    expect(snapshot.value).toBe('completed')
+  })
+
+  it('a release-gate veto movers back into implement; awaiting carries execution movers', () => {
+    let snapshot = toFinalAwaiting()
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.exit', stage: 'gate' })[0]
+    for (const stage of ['implement', 'verify', 'release', 'gate'] as const) {
+      snapshot = step(pipelineMachine, snapshot, { type: 'stage.enter', stage })[0]
+    }
+    snapshot = step(pipelineMachine, snapshot, { type: 'gate.presented', mode: 'release', version: 2 })[0]
+    snapshot = step(pipelineMachine, snapshot, { type: 'gate.answered', outcome: 'veto' })[0]
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.exit', stage: 'gate' })[0]
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.enter', stage: 'implement' })[0]
+    expect(snapshot.value).toBe('implement')
+  })
+
+  it('escalation presentations interstitial from the execution stages; run_abort reaches aborted', () => {
+    let snapshot = toFinalAwaiting()
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.exit', stage: 'gate' })[0]
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.enter', stage: 'implement' })[0]
+    const escalated = step(pipelineMachine, snapshot, { type: 'gate.presented', mode: 'escalation', version: 2 })[0]
+    expect(escalated.value).toEqual({ gate: 'awaiting' })
+    expect(escalated.context.stages['implement']).toBe('active')
+    const aborted = step(pipelineMachine, snapshot, { type: 'run.abort' })[0]
+    expect(aborted.value).toBe('aborted')
+  })
+
+  it('an unarmed final approve still completes with the execution stages forever pending', () => {
+    let snapshot = toFinalAwaiting()
+    snapshot = step(pipelineMachine, snapshot, { type: 'stage.exit', stage: 'gate' })[0]
+    snapshot = step(pipelineMachine, snapshot, { type: 'gate.answered', outcome: 'approve' })[0]
+    expect(snapshot.value).toBe('completed')
+    expect(snapshot.context.stages['implement']).toBe('pending')
+    expect(snapshot.context.stages['verify']).toBe('pending')
+    expect(snapshot.context.stages['release']).toBe('pending')
   })
 })

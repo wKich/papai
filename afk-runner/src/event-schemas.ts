@@ -22,6 +22,9 @@ import {
   AgentDoneEvent,
 } from './agent-noise-schemas.js'
 
+export { ExecutionEvent, TaskEvent } from './execution-schemas.js'
+import { ExecutionEvent, TaskEvent } from './execution-schemas.js'
+
 export const StageIdSchema = z.enum([
   'intake',
   'draft',
@@ -194,22 +197,6 @@ const ChildDoneEvent = z.object({
   type: z.literal('child_done'),
   child: z.string().min(1),
   outcome: z.enum(['done', 'failed']),
-})
-
-/** Execution arming (U3 D1): one fact event per armed start; unarmed runs carry none. */
-const ExecutionEvent = z.object({
-  altitude: z.literal('L2'),
-  type: z.literal('execution'),
-  action: z.literal('armed'),
-})
-
-/** Per-task walk facts (U3 D4): attempts derive from started counts, status from the last event per id. */
-const TaskEvent = z.object({
-  altitude: z.literal('L2'),
-  type: z.literal('task'),
-  action: z.enum(['started', 'done', 'failed']),
-  id: z.string().min(1),
-  detail: z.string().optional(),
 })
 
 const HumanEditsEvent = z.object({
