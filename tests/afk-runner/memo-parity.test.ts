@@ -9,8 +9,8 @@ import path from 'node:path'
 
 import { flattenPosition } from '../../afk-runner/src/drive/loop.js'
 import type { ParkedReason } from '../../afk-runner/src/drive/loop.js'
-import { readEvents } from '../../afk-runner/src/events.js'
-import type { SddEvent } from '../../afk-runner/src/events.js'
+import { readEvents, stampEvent } from '../../afk-runner/src/events.js'
+import type { EventInput, SddEvent } from '../../afk-runner/src/events.js'
 import { pipelineMachine } from '../../afk-runner/src/graph/pipeline.js'
 import { foldEvents } from '../../afk-runner/src/kernel/fold.js'
 import { memoFieldsOf } from '../../afk-runner/src/memo-project.js'
@@ -100,6 +100,49 @@ describe('memo parity with the surviving originals (C5 D7 — parity complete)',
       const derived = memoFieldsOf(events, snapshot.context, halted, flattenPosition(snapshot.value))
       const persisted = PersistedRunStateSchema.parse(JSON.parse(readFileSync(fixture.statePath, 'utf8')))
       assertMemoParity(derived, persisted, snapshot.status === 'done')
+      // U3 D9: no historical log carries task events — the projection is
+      // absent (null) and the old memo parses with no tasks key at all.
+      expect(derived.tasks).toBeNull()
+      expect(persisted.tasks).toBeUndefined()
     })
   }
+})
+
+/** An armed walk's task facts — mixed statuses and a restarted item so attempts count. */
+const ARMED_WALK: readonly EventInput[] = [
+  { altitude: 'L2', type: 'execution', action: 'armed' },
+  { altitude: 'L2', type: 'task', action: 'started', id: '1' },
+  { altitude: 'L2', type: 'task', action: 'done', id: '1' },
+  { altitude: 'L2', type: 'task', action: 'started', id: '2' },
+  { altitude: 'L2', type: 'task', action: 'failed', id: '2' },
+  { altitude: 'L2', type: 'task', action: 'started', id: '2' },
+  { altitude: 'L2', type: 'task', action: 'started', id: '3' },
+  { altitude: 'L2', type: 'task', action: 'done', id: '3' },
+]
+
+const ARMED_NO_WALK: readonly EventInput[] = [{ altitude: 'L2', type: 'execution', action: 'armed' }]
+
+function stamped(events: readonly EventInput[]): readonly SddEvent[] {
+  return events.map((event, index) => stampEvent(event, index + 1, '2026-01-07T00:00:00.000Z'))
+}
+
+describe('memo tasks projection (U3 D9 — optional, matches the fold)', () => {
+  it('projects the folded task records exactly — status last-wins, attempts count starts', () => {
+    const events = stamped(ARMED_WALK)
+    const snapshot = foldEvents(pipelineMachine, events).snapshot
+    const derived = memoFieldsOf(events, snapshot.context, 'gate-pending', flattenPosition(snapshot.value))
+    expect(derived.tasks).toEqual({
+      '1': { status: 'done', attempts: 1 },
+      '2': { status: 'running', attempts: 2 },
+      '3': { status: 'done', attempts: 1 },
+    })
+    expect(derived.tasks).toEqual(snapshot.context.tasks)
+  })
+
+  it('an armed log with no task events projects tasks null — the projection is omitted', () => {
+    const events = stamped(ARMED_NO_WALK)
+    const snapshot = foldEvents(pipelineMachine, events).snapshot
+    const derived = memoFieldsOf(events, snapshot.context, 'gate-pending', flattenPosition(snapshot.value))
+    expect(derived.tasks).toBeNull()
+  })
 })

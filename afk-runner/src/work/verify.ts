@@ -8,6 +8,7 @@ import path from 'node:path'
 
 import type { WorkIO } from '../drive/loop.js'
 import type { KernelContext } from '../kernel/machine.js'
+import type { VerifyOutcomeLine } from './gate-model.js'
 import type { RunCheckFn } from './run-check.js'
 
 /**
@@ -64,6 +65,32 @@ export function newestVerifyVerdict(runDir: string): VerifyVerdict | null {
   if (last === 'verdict: green') return 'green'
   if (last === 'verdict: red') return 'red'
   return null
+}
+
+/** Every verify log's verdict, version-ordered — the release digest and report seam (U3 D7/D9). */
+export function verifyOutcomeLines(runDir: string): readonly VerifyOutcomeLine[] {
+  let names: string[]
+  try {
+    names = readdirSync(runDir)
+  } catch {
+    return []
+  }
+  return names
+    .map((name) => /^verify-(\d+)\.log$/u.exec(name))
+    .filter((match): match is RegExpExecArray => match !== null)
+    .map((match) => Number(match[1]))
+    .sort((a, b) => a - b)
+    .flatMap((version) => {
+      const label = `verify-${String(version)}`
+      try {
+        const body = readFileSync(path.join(runDir, `${label}.log`), 'utf8')
+        const verdict = /^verdict: (green|red)$/mu.exec(body)
+        if (verdict !== null) return [{ log: label, verdict: verdict[1] ?? 'unknown' }]
+        return [{ log: label, verdict: 'unknown' }]
+      } catch {
+        return [{ log: label, verdict: 'unknown' }]
+      }
+    })
 }
 
 /**

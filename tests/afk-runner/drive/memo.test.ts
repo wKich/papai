@@ -8,8 +8,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { readEvents } from '../../../afk-runner/src/events.js'
+import { pipelineMachine } from '../../../afk-runner/src/graph/pipeline.js'
+import { foldEvents } from '../../../afk-runner/src/kernel/fold.js'
 import { resumeRun } from '../../../afk-runner/src/run-resume.js'
 import { PersistedRunStateSchema } from '../../../afk-runner/src/run-state.js'
+import type { PersistedRunState } from '../../../afk-runner/src/run-state.js'
 import { startRun, statusRun } from '../../../afk-runner/src/run.js'
 import { BLOCKER_ROUND, TASK_TEXT, makeFakePipeline } from '../fixtures/fake-pipeline.js'
 
@@ -91,5 +94,53 @@ describe('state.json is a derived memo, never truth (design D6)', () => {
     fs.rmSync(path.join(runDir, 'state.json'))
     const resumed = await resumeRun(pipeline.deps, result.runId)
     expect(resumed).toMatchObject({ halted: 'gate-pending', drove: false })
+  })
+})
+
+const WALK_TASKS_MD = ['## 1. Walk', '', '- [ ] 1.1 first item', '- [ ] 1.2 second item', ''].join('\n')
+
+/** The memo an armed run wrote at a park — parsed from the run dir's state.json. */
+function memoAt(pipeline: ReturnType<typeof makeFakePipeline>, runId: string): PersistedRunState {
+  const body = fs.readFileSync(path.join(pipeline.runDirOf(runId), 'state.json'), 'utf8')
+  return PersistedRunStateSchema.parse(JSON.parse(body))
+}
+
+describe('execution memo tasks projection (U3 D9)', () => {
+  it('an armed run parked at the final gate before any walk omits the projection', async () => {
+    const pipeline = makeFakePipeline({ artifactOverrides: { 'decompose-tasks.json': WALK_TASKS_MD } })
+    const started = await startRun(pipeline.deps, { taskText: TASK_TEXT, execute: true })
+    expect(started.halted).toBe('gate-pending')
+    const memo = memoAt(pipeline, started.runId)
+    expect(memo['status']).toBe('running')
+    expect(memo['tasks']).toBeNull()
+  })
+
+  it('a run parked mid-walk writes the tasks projection matching the folded records exactly', async () => {
+    const pipeline = makeFakePipeline({
+      artifactOverrides: { 'decompose-tasks.json': WALK_TASKS_MD },
+      sidecarOverrides: {
+        'implement-t1.json': JSON.stringify({ files_written: ['src/one.ts'] }),
+        'implement-t2.json': JSON.stringify({ files_written: ['src/two.ts'] }),
+      },
+      checkExitCodes: [0, 1, 1],
+    })
+    const started = await startRun(pipeline.deps, { taskText: TASK_TEXT, execute: true })
+    const runDir = pipeline.runDirOf(started.runId)
+    fs.writeFileSync(
+      path.join(runDir, 'gate-1.md'),
+      '<!-- gate-1.md -->\n\n## Final gate\n\n## Gate response\n\nAPPROVE\n',
+    )
+    const resumed = await resumeRun(pipeline.deps, started.runId)
+    expect(resumed).toMatchObject({ halted: 'gate-pending' })
+    const memo = memoAt(pipeline, started.runId)
+    expect(memo['status']).toBe('running')
+    expect(memo['gate']).toMatchObject({ mode: 'escalation' })
+    expect(memo['tasks']).toEqual({
+      '1': { status: 'done', attempts: 1 },
+      '2': { status: 'failed', attempts: 2 },
+    })
+    const events = readEvents(path.join(runDir, 'events.ndjson'))
+    const snapshot = foldEvents(pipelineMachine, events).snapshot
+    expect(memo['tasks']).toEqual(snapshot.context.tasks)
   })
 })

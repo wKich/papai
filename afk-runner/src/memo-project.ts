@@ -69,6 +69,8 @@ export interface MemoFields {
     readonly digest: string
   } | null
   readonly children: Readonly<Record<string, { readonly status: 'pending' | 'running' | 'done' | 'failed' }>> | null
+  /** U3 D9: the folded task records — null when the log carries no task events (the children precedent). */
+  readonly tasks: KernelContext['tasks'] | null
 }
 
 /** The last plan event's payload (childCount + digest) — the memo projects the dormant plan fields, no producer exists (U2). */
@@ -118,6 +120,7 @@ export function memoFieldsOf(
     gateDeadlineReArmed: context.gateDeadlineReArmed,
     plan: lastPlanOf(events),
     children: Object.keys(context.children).length === 0 ? null : context.children,
+    tasks: Object.keys(context.tasks).length === 0 ? null : context.tasks,
   }
 }
 

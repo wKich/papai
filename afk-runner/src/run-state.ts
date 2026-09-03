@@ -55,6 +55,17 @@ export const PersistedRunStateSchema = z.object({
     .record(z.string(), z.object({ status: z.enum(['pending', 'running', 'done', 'failed']) }))
     .nullable()
     .optional(),
+  /**
+   * U3 D9: the execution walk's task records projected from the fold —
+   * optional so memos persisted before execution parse unchanged.
+   */
+  tasks: z
+    .record(
+      z.string(),
+      z.object({ status: z.enum(['running', 'done', 'failed']), attempts: z.number().int().positive() }),
+    )
+    .nullable()
+    .optional(),
 })
 
 export type PersistedRunState = z.infer<typeof PersistedRunStateSchema>

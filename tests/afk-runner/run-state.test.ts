@@ -258,6 +258,30 @@ describe('memo shape (C5 D7 — parity complete)', () => {
     expect(PersistedRunStateSchema.safeParse({ ...base, stage: 'release' }).success).toBe(true)
   })
 
+  it('accepts the tasks projection with its canonical shape, null, and absence (U3 D9)', () => {
+    const base: Record<string, unknown> = { ...createSeeded('/w') }
+    expect(
+      PersistedRunStateSchema.safeParse({ ...base, tasks: { '1': { status: 'running', attempts: 2 } } }).success,
+    ).toBe(true)
+    expect(
+      PersistedRunStateSchema.safeParse({ ...base, tasks: { '2': { status: 'done', attempts: 1 } } }).success,
+    ).toBe(true)
+    expect(
+      PersistedRunStateSchema.safeParse({ ...base, tasks: { '3': { status: 'failed', attempts: 1 } } }).success,
+    ).toBe(true)
+    expect(PersistedRunStateSchema.safeParse({ ...base, tasks: null }).success).toBe(true)
+  })
+
+  it('rejects malformed tasks projections (U3 D9)', () => {
+    const base: Record<string, unknown> = { ...createSeeded('/w') }
+    expect(
+      PersistedRunStateSchema.safeParse({ ...base, tasks: { '1': { status: 'skipped', attempts: 1 } } }).success,
+    ).toBe(false)
+    expect(
+      PersistedRunStateSchema.safeParse({ ...base, tasks: { '1': { status: 'done', attempts: 0 } } }).success,
+    ).toBe(false)
+  })
+
   it('rejects malformed projections', () => {
     const base: Record<string, unknown> = { ...createSeeded('/w') }
     expect(PersistedRunStateSchema.safeParse({ ...base, plan: { childIds: ['a'], digest: 'd' } }).success).toBe(false)

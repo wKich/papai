@@ -35,9 +35,9 @@
 
 ## 7. Operator surface
 
-- [ ] 7.1 Red: `tests/afk-runner/memo-parity.test.ts` + `tests/afk-runner/drive/memo.test.ts` assert the optional `tasks` memo projection matches the fold and old memos parse unchanged; `memoStatusOf` unchanged. Implement in `run-state.ts`/`memo-project.ts`. Verify: `bun test tests/afk-runner/memo-parity.test.ts tests/afk-runner/drive/memo.test.ts`
-- [ ] 7.2 Red: `tests/afk-runner/accounting.test.ts` asserts `runs` rows render `exec:implement 3/7` from the fold; `tests/afk-runner/work/report.test.ts` asserts the report's execution facts block and byte-determinism. Implement both surfaces. Verify: `bun test tests/afk-runner/accounting.test.ts tests/afk-runner/work/report.test.ts`
-- [ ] 7.3 Red: `tests/afk-runner/resume-event.test.ts` asserts execution stages classify `stage-rebuild, <stage>` and mid-implement resume continues the killed implementer session (ledger `(label, round)` keyed per task). Verify: `bun test tests/afk-runner/resume-event.test.ts`
+- [x] 7.1 Red: `tests/afk-runner/memo-parity.test.ts` + `tests/afk-runner/drive/memo.test.ts` assert the optional `tasks` memo projection matches the fold and old memos parse unchanged; `memoStatusOf` unchanged. Implement in `run-state.ts`/`memo-project.ts`. Verify: `bun test tests/afk-runner/memo-parity.test.ts tests/afk-runner/drive/memo.test.ts`
+- [x] 7.2 Red: `tests/afk-runner/accounting.test.ts` asserts `runs` rows render `exec:implement 3/7` from the fold; `tests/afk-runner/work/report.test.ts` asserts the report's execution facts block and byte-determinism. Implement both surfaces. Verify: `bun test tests/afk-runner/accounting.test.ts tests/afk-runner/work/report.test.ts`
+- [x] 7.3 Red: `tests/afk-runner/resume-event.test.ts` asserts execution stages classify `stage-rebuild, <stage>` and mid-implement resume continues the killed implementer session (ledger `(label, round)` keyed per task). Verify: `bun test tests/afk-runner/resume-event.test.ts`
 
 ## 8. Fixtures and conformance drills
 

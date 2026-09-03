@@ -21,6 +21,7 @@ import {
   VERIFY_CHECKS,
   newestVerifyVerdict,
   runVerifyWork,
+  verifyOutcomeLines,
   verifyOutcomeOf,
 } from '../../../afk-runner/src/work/verify.js'
 import { assertEach, type Row } from '../../utils/grouped-assertions.js'
@@ -81,6 +82,25 @@ describe('VERIFY_CHECKS — the compiled gate set (U3 D5)', () => {
       ['bun', 'run', 'lint'],
       ['bun', 'run', 'test', '--', '--serial'],
     ])
+  })
+})
+
+describe('verifyOutcomeLines — the per-log verdict listing (U3 D9 report seam)', () => {
+  it('lists every verify log version-ordered with its verdict, unknown when the line is absent', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sdd-verify-lines-'))
+    tmpDirs.push(dir)
+    fs.writeFileSync(path.join(dir, 'verify-2.log'), 'output\nverdict: green\n')
+    fs.writeFileSync(path.join(dir, 'verify-1.log'), 'output\nverdict: red\n')
+    fs.writeFileSync(path.join(dir, 'verify-3.log'), 'no verdict line\n')
+    expect(verifyOutcomeLines(dir)).toEqual([
+      { log: 'verify-1', verdict: 'red' },
+      { log: 'verify-2', verdict: 'green' },
+      { log: 'verify-3', verdict: 'unknown' },
+    ])
+  })
+
+  it('an absent run dir lists nothing', () => {
+    expect(verifyOutcomeLines(path.join(os.tmpdir(), 'sdd-verify-absent-'))).toEqual([])
   })
 })
 

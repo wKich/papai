@@ -3,7 +3,6 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
-import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 
 import type { ExecGitFn, RunnerConfig } from '../config.js'
@@ -16,12 +15,13 @@ import { foldEvents } from '../kernel/fold.js'
 import type { KernelContext } from '../kernel/machine.js'
 import { readChangeDigest } from './gate-digest-extract.js'
 import { writeGateFiles } from './gate-files.js'
-import type { ExecutionDigest, GateDigestInput, VerifyOutcomeLine } from './gate-model.js'
+import type { ExecutionDigest, GateDigestInput } from './gate-model.js'
 import { runGatePrelude } from './gate-prelude.js'
 import { gatherGateSignals } from './gate-signals.js'
 import type { GateSignals } from './gate-signals.js'
 import type { ReviewLoopResult } from './review-loop.js'
 import { readTaskItemsAt } from './tasks-md.js'
+import { verifyOutcomeLines } from './verify.js'
 
 export interface PresentReleaseDeps {
   readonly config: RunnerConfig
@@ -44,32 +44,6 @@ const RELEASE_REVIEW_RESULT = {
   openMaterial: [],
   openNitpicks: [],
 } as const satisfies ReviewLoopResult
-
-/** Every verify log's verdict, version-ordered — the boundary rounds the digest reports (U3 D7). */
-function verifyOutcomesOf(runDir: string): readonly VerifyOutcomeLine[] {
-  let names: string[]
-  try {
-    names = readdirSync(runDir)
-  } catch {
-    return []
-  }
-  return names
-    .map((name) => /^verify-(\d+)\.log$/u.exec(name))
-    .filter((match): match is RegExpExecArray => match !== null)
-    .map((match) => Number(match[1]))
-    .sort((a, b) => a - b)
-    .flatMap((version) => {
-      const label = `verify-${String(version)}`
-      try {
-        const body = readFileSync(path.join(runDir, `${label}.log`), 'utf8')
-        const verdict = /^verdict: (green|red)$/mu.exec(body)
-        if (verdict !== null) return [{ log: label, verdict: verdict[1] ?? 'unknown' }]
-        return [{ log: label, verdict: 'unknown' }]
-      } catch {
-        return [{ log: label, verdict: 'unknown' }]
-      }
-    })
-}
 
 /** The run's own commits since run start — runner-made slice commits, listed for the operator (U3 D7). */
 async function commitsOf(deps: PresentReleaseDeps, startedAt: string): Promise<readonly string[]> {
@@ -100,7 +74,7 @@ async function executionDigestOf(
   return {
     tasksDone,
     tasksTotal: readTaskItemsAt(changeDir).length,
-    verifyOutcomes: verifyOutcomesOf(runDir),
+    verifyOutcomes: verifyOutcomeLines(runDir),
     commits: await commitsOf(deps, startedAt),
   }
 }
