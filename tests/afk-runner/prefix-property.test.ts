@@ -66,8 +66,8 @@ function advance(snapshot: KernelSnapshot, event: SddEvent): KernelSnapshot {
 describe('prefix property — every event prefix of the corpus folds legally (C6 D10)', () => {
   const workFor = workForOf()
 
-  it('covers the full corpus (real hoard + scenarios)', () => {
-    expect(logPaths().length).toBeGreaterThanOrEqual(21)
+  it('covers the full corpus (real hoard + scenarios incl. the seven execution shapes)', () => {
+    expect(logPaths()).toHaveLength(34)
   })
 
   for (const logPath of logPaths()) {

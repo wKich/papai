@@ -13,6 +13,7 @@ import { readEvents, stampEvent } from '../../afk-runner/src/events.js'
 import type { EventInput, SddEvent } from '../../afk-runner/src/events.js'
 import { pipelineMachine } from '../../afk-runner/src/graph/pipeline.js'
 import { foldEvents } from '../../afk-runner/src/kernel/fold.js'
+import type { KernelContext } from '../../afk-runner/src/kernel/machine.js'
 import { memoFieldsOf } from '../../afk-runner/src/memo-project.js'
 import { PersistedRunStateSchema } from '../../afk-runner/src/run-state.js'
 import type { PersistedRunState } from '../../afk-runner/src/run-state.js'
@@ -145,4 +146,96 @@ describe('memo tasks projection (U3 D9 — optional, matches the fold)', () => {
     const derived = memoFieldsOf(events, snapshot.context, 'gate-pending', flattenPosition(snapshot.value))
     expect(derived.tasks).toBeNull()
   })
+})
+
+const SCENARIOS_ROOT = path.join(import.meta.dir, 'fixtures', 'scenarios')
+
+/** U3 D8: the execution fixtures' derived memo rows — kernel fold + memo parity, never legacy equality. */
+type MemoStage = 'intake' | 'draft' | 'review' | 'decompose' | 'atomicity' | 'gate' | 'implement' | 'verify' | 'release'
+
+interface ExecutionMemoRow {
+  readonly name: string
+  readonly stage: MemoStage
+  readonly status: 'running' | 'completed'
+  readonly gate: {
+    readonly mode: 'early' | 'final' | 'plan' | 'escalation' | 'release'
+    readonly version: number
+  } | null
+  readonly tasks: Readonly<
+    Record<string, { readonly status: 'done' | 'running' | 'failed'; readonly attempts: number }>
+  > | null
+}
+
+const EXECUTION_MEMO_ROWS: readonly ExecutionMemoRow[] = [
+  {
+    name: 'armed-approval-synthetic.ndjson',
+    stage: 'implement',
+    status: 'running',
+    gate: { mode: 'final', version: 1 },
+    tasks: null,
+  },
+  {
+    name: 'task-walk-synthetic.ndjson',
+    stage: 'implement',
+    status: 'running',
+    gate: { mode: 'final', version: 1 },
+    tasks: { '1': { status: 'done', attempts: 1 }, '2': { status: 'running', attempts: 1 } },
+  },
+  {
+    name: 'red-verify-fix-loop-synthetic.ndjson',
+    stage: 'gate',
+    status: 'running',
+    gate: { mode: 'release', version: 2 },
+    tasks: { '1': { status: 'done', attempts: 1 }, '2': { status: 'done', attempts: 2 } },
+  },
+  {
+    name: 'attempt-bound-exhaustion-synthetic.ndjson',
+    stage: 'implement',
+    status: 'running',
+    gate: { mode: 'escalation', version: 2 },
+    tasks: { '1': { status: 'failed', attempts: 2 } },
+  },
+  {
+    name: 'release-approval-synthetic.ndjson',
+    stage: 'gate',
+    status: 'completed',
+    gate: null,
+    tasks: { '1': { status: 'done', attempts: 1 } },
+  },
+  {
+    name: 'release-veto-synthetic.ndjson',
+    stage: 'gate',
+    status: 'completed',
+    gate: null,
+    tasks: { '1': { status: 'done', attempts: 2 } },
+  },
+  {
+    name: 'execution-crash-windows-synthetic.ndjson',
+    stage: 'implement',
+    status: 'running',
+    gate: { mode: 'final', version: 1 },
+    tasks: null,
+  },
+]
+
+/** The fold's own tasks residue as the memo projection — null when the record is empty. */
+function tasksProjectionOf(context: KernelContext): ReturnType<typeof memoFieldsOf>['tasks'] {
+  if (Object.keys(context.tasks).length === 0) return null
+  return context.tasks
+}
+
+describe('memo parity over the execution scenario fixtures (U3 D8 — kernel fold + memo, never legacy)', () => {
+  for (const row of EXECUTION_MEMO_ROWS) {
+    it(`${row.name}: the derived memo matches the fold — stage, status, gate, and the tasks projection`, () => {
+      const events = readEvents(path.join(SCENARIOS_ROOT, row.name))
+      const snapshot = foldEvents(pipelineMachine, events).snapshot
+      const halted = haltedOf(snapshot.status)
+      const derived = memoFieldsOf(events, snapshot.context, halted, flattenPosition(snapshot.value))
+      expect(derived.stage).toBe(row.stage)
+      expect(derived.status).toBe(row.status)
+      expect(derived.gate).toEqual(row.gate)
+      expect(derived.tasks).toEqual(row.tasks)
+      expect(derived.tasks).toEqual(tasksProjectionOf(snapshot.context))
+    })
+  }
 })

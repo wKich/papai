@@ -58,12 +58,18 @@ const FINAL_VALUES: Readonly<Record<string, string | Record<string, string>>> = 
   'sdd-runner-decomposition-2nd': 'intake',
   'tests-consolidation': 'completed',
   'abort-at-final-synthetic.ndjson': 'aborted',
+  'armed-approval-synthetic.ndjson': 'implement',
+  'attempt-bound-exhaustion-synthetic.ndjson': AWAITING,
   'children-plan-synthetic.ndjson': 'start',
   'escalation-abort-synthetic.ndjson': 'aborted',
   'escalation-approve-cycle-synthetic.ndjson': 'completed',
   'escalation-extend-cycle-synthetic.ndjson': 'completed',
+  'execution-crash-windows-synthetic.ndjson': 'implement',
   'extend-at-final-cycle-synthetic.ndjson': 'completed',
   'precondition-escalation-synthetic.ndjson': 'completed',
+  'red-verify-fix-loop-synthetic.ndjson': AWAITING,
+  'release-approval-synthetic.ndjson': 'completed',
+  'release-veto-synthetic.ndjson': 'completed',
   'resume-artifact-skip-gate.ndjson': AWAITING,
   's-depth-calm-stop-resume.ndjson': 'review',
   's-final-tail-synthetic.ndjson': AWAITING,
@@ -71,6 +77,7 @@ const FINAL_VALUES: Readonly<Record<string, string | Record<string, string>>> = 
   'steer-extend-round.ndjson': 'review',
   'tail-crash-resume-healed-synthetic.ndjson': AWAITING,
   'tail-crash-resume-synthetic.ndjson': AWAITING,
+  'task-walk-synthetic.ndjson': 'implement',
   'under-budget-retry-synthetic.ndjson': 'completed',
   'veto-at-final-cycle-synthetic.ndjson': 'completed',
   'veto-revision-synthetic.ndjson': 'draft',
@@ -158,7 +165,7 @@ describe('golden-replay parity: graph v0 vs legacy fold', () => {
     })
   }
 
-  it('holds all twenty-seven fixtures from the C1+C4+C5+C6 corpus plus the log-fidelity scenario', () => {
-    expect(collectFixtures()).toHaveLength(27)
+  it('holds all thirty-four fixtures from the C1+C4+C5+C6+U3 corpus plus the log-fidelity scenario', () => {
+    expect(collectFixtures()).toHaveLength(34)
   })
 })

@@ -41,9 +41,9 @@
 
 ## 8. Fixtures and conformance drills
 
-- [ ] 8.1 Add synthetic-marked execution fixtures (armed-approval, task-walk, red-verify-fix-loop, attempt-bound-exhaustion, release-approval, release-veto, execution-crash-windows) to `tests/afk-runner/fixtures/scenarios/`; extend the golden-replay, memo-parity, `prefix-property.test.ts`, and `resume-equivalence.test.ts` drills over them. Verify: `bun test tests/afk-runner/prefix-property.test.ts tests/afk-runner/resume-equivalence.test.ts`
-- [ ] 8.2 Red: `tests/afk-runner/analyze.test.ts` folds an execution-run fixture degraded-gracefully (no errors, reduced coverage where metrics lack data). Verify: `bun test tests/afk-runner/analyze.test.ts`
-- [ ] 8.3 Full gate: `bun run test -- --serial`, `bun run typecheck`, `bun run lint`, `bun run check:full -- --staged` hygiene; update `docs/architecture/afk-runner.md` (mechanism section + ledger row) and `docs/architecture/sdd-pipeline.md`. Verify: `bun run test:status`
+- [x] 8.1 Add synthetic-marked execution fixtures (armed-approval, task-walk, red-verify-fix-loop, attempt-bound-exhaustion, release-approval, release-veto, execution-crash-windows) to `tests/afk-runner/fixtures/scenarios/`; extend the golden-replay, memo-parity, `prefix-property.test.ts`, and `resume-equivalence.test.ts` drills over them. Verify: `bun test tests/afk-runner/prefix-property.test.ts tests/afk-runner/resume-equivalence.test.ts`
+- [x] 8.2 Red: `tests/afk-runner/analyze.test.ts` folds an execution-run fixture degraded-gracefully (no errors, reduced coverage where metrics lack data). Verify: `bun test tests/afk-runner/analyze.test.ts`
+- [x] 8.3 Full gate: `bun run test -- --serial`, `bun run typecheck`, `bun run lint`, `bun run check:full -- --staged` hygiene; update `docs/architecture/afk-runner.md` (mechanism section + ledger row) and `docs/architecture/sdd-pipeline.md`. Verify: `bun run test:status`
 
 ## 9. Live drill (de-facto C9) and harvest
 
