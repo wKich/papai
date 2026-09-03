@@ -144,7 +144,7 @@ Each follow-on is its own explored OpenSpec change:
 | — | afk-runner-metered-budget — mirror of master's metered wave: unmetered budget semantics, waiter audit events | **delivered** — `budget` accepts `null` and the optional `metered` flag (derived `budget !== null`) unplugs the subscription deadlock (R4's cost-unknown branch is metered-only; the exceedance branch predicates on numeric-ceiling presence; the escalation rung keeps unknown-cost suppression), the deadline waiter emits the standard `auto_decision` per claimed outcome (settle names the rule, re-arm/stay-pending record `none`/`pending`, lost claims silent) with `pending` added to the decision kind, and the waiter's expiry ladder shares the prelude's `evaluateLadder` so the metered treatment reaches it with no waiter-side code; decisions D1–D5 in `openspec/changes/afk-runner-metered-budget/design.md` |
 | — | afk-runner-operator-surface-robustness — the C8 findings follow-up: steer containment, guarded render, deadline wiring | **delivered** — F-C1 (the settle seam's pre-write phase returns rejection data; machine producers rethrow the refusal alarm after their `auto_decision`; the waiter's steer branch writes the `(steer)`-marked response-error artifact unconditionally, embedding the consumed directive, its digest the directive line's sha256 so the file-path guard stays inert), F-C2 (one `guardedReviewResult` feeds both presenters' renders, the waiter's settle-time expected — `perRound` threaded through `expectedContentFor`, arrow answers associating by membership — and the ladder, so the substituted `POLICY-INTEGRITY` blocker renders as an acknowledgeable row end-to-end), F-C3 (`waitSettledGates` passes `repoRoot`/`autonomy`/`now` so armed deadlines claim with their audit events — fixture-pinned expiry behavior unchanged); decisions D1–D5 in `openspec/changes/afk-runner-operator-surface-robustness/design.md` |
 
-## Living follow-ups ledger (U1–U9, re-scored after C8)
+## Living follow-ups ledger (U1–U13; U1–U9 re-scored after C8, U10–U13 seeded mid-U3)
 
 The ledger lives here now — the afk-runner change's design.md is history. Re-scored after C8 from two live
 cycles (n=2, verdicts provisional; full evidence, measurements, and falsifiable triggers in
@@ -162,6 +162,10 @@ cycles (n=2, verdicts provisional; full evidence, measurements, and falsifiable 
 | U7 | snapshot memo for the fold                  | fall    |
 | U8 | TUI re-host as pure fold render             | hold (measured discovery < 20% of attended wall) |
 | U9 | sdd-runner retirement; cross-run accounting | **delivered** — retirement (R5 `sdd-runner-retirement`) + report half |
+| U10 | `research` state + draft back-edge | hold |
+| U11 | `aborted` reopen (explicit resurrection event) | hold |
+| U12 | per-state `meta` (roles/activities) | hold (rides U1) |
+| U13 | post-plan e2e weak-point audit | hold (wakes at U3 delivery) |
 
 Exactly one `next`: **U3** — two live cycles prove the think-half end-to-end (7 runs at C8, honest memos at
 every park, the mirror wave's behaviors live or honestly recorded), and all four C8 findings (F-A4's
@@ -186,6 +190,28 @@ half landed as R5 (`openspec/changes/sdd-runner-retirement/` — the workspace, 
 spec surfaces deleted, the jscpd re-tighten performed), and the cross-run accounting **report half
 landed** earlier (`openspec/changes/cross-run-accounting/` — the passive `runs` verb, tokens-first
 with honest cost bounds); portfolio **enforcement stays parked with U5**.
+
+**Post-plan hold queue (U10–U13, seeded mid-U3 from a port-table audit — no live evidence yet;
+that is what the hold waits for).** Three port-table promises never got a ledger home: the
+`research` state (a real state with its back-edge into draft, "post-V1 small change" — never
+opened), the `aborted` reopen event (the cancelled port's "terminal + explicit reopen event, no
+casual resurrection" — the terminal landed, the reopen never did; an aborted run today restarts
+from scratch), and the per-state `meta` data ("kept as data, dormant in V1, activated by U1
+without kernel changes" — dropped entirely, so U1 must add it fresh; the only `roles` in the
+tree are the analyzer's usage-by-spawn-role accounting). Every row stays `hold` until the
+planned scope is fully functional — U3 delivered through its §9 live drill — and is then
+re-explored on evidence, not nostalgia: U10's first probe is a zero-spawn `analyze` query (do
+gap fingerprints cluster on unknowns/assumptions; do veto/extend rates track unexplored-domain
+tasks), U11's is the `runs` roster's aborted sunk-spend beside one induced abort-and-continue
+drill (C6 made the mechanics cheap — stage exits clear failure ledgers, so a reopen edge
+re-enters a failed stage cleanly), U12 rides U1's promotion as its recorded precondition, and
+U13 is the vehicle: a deliberate post-plan deep-research cycle — fresh e2e live drills plus
+analyzer corpus deep-dives — stressing every deliberate delta (thin context vs. afk's
+blackboard, escalation-not-silent-death, single-spawn-per-stage vs. the dissolved discussion
+engine/RAG/event bus, the dormant `schedule` watcher, the once-bound verification round,
+escalation extend-suppression, the gated consistency-vocabulary widening, cost-as-lower-bound)
+and re-scoring the whole hold/park queue from measurements; weak points found there become
+changes, measured absences stay fallen.
 
 **Retirement sequence — the R4→R5 `sdd-runner:*` family split was deliberate.** After the R4
 cut-over the alias family served two different masters: `sdd-runner:start` was the cut-over alias
