@@ -28,7 +28,7 @@ export type SettleOutcome = GateOutcome
 export interface SettleInput {
   readonly gate: GateDeps
   readonly version: number
-  readonly gateMode: 'early' | 'final' | 'escalation'
+  readonly gateMode: 'early' | 'final' | 'escalation' | 'release'
   /** The still-active failed stage at an escalation gate — the retry mover's target (C6 D4). */
   readonly failedStage?: StageId
   readonly expected: ExpectedGateContent
@@ -39,8 +39,8 @@ export interface SettleInput {
 export interface SettleResult {
   readonly outcome: SettleOutcome
   readonly vetoes: readonly { readonly id: string; readonly redirect?: string }[]
-  /** The mode the answered event carries (legacy-faithful: extend keeps the gate's mode, the rest say final; escalation gates always say escalation). */
-  readonly answeredMode: 'early' | 'final' | 'escalation'
+  /** The mode the answered event carries (legacy-faithful: extend keeps the gate's mode, the rest say final; escalation gates always say escalation; release gates say release). */
+  readonly answeredMode: 'early' | 'final' | 'escalation' | 'release'
 }
 
 /** A contained settle rejection (D3): operator-input failure as data — the reason reaches the operator, nothing is appended. */
@@ -161,6 +161,14 @@ function withEmptyExpectedHint(reason: string, expected: ExpectedGateContent): s
   return `${reason} — the gate's expected content is empty; a missing sidecar can cause this`
 }
 
+/** The answered event's mode (legacy-faithful: extend keeps the gate's mode, the rest say final; escalation and release gates name themselves). */
+function answeredModeOf(gateMode: SettleInput['gateMode'], outcome: SettleOutcome): SettleResult['answeredMode'] {
+  if (gateMode === 'escalation') return 'escalation'
+  if (gateMode === 'release') return 'release'
+  if (outcome === 'extend') return gateMode
+  return 'final'
+}
+
 async function settleGateFileChecked(input: SettleInput): Promise<SettleResult> {
   const gateMdPath = path.join(input.gate.runDir, `gate-${input.version}.md`)
   const md = await readFile(gateMdPath, 'utf8')
@@ -171,7 +179,7 @@ async function settleGateFileChecked(input: SettleInput): Promise<SettleResult> 
   if ((outcome === 'approve' || outcome === 'veto') && input.gateMode !== 'escalation') {
     await verifyGateIntegrity(input.gate, input.version)
   }
-  const answeredMode = input.gateMode === 'escalation' ? 'escalation' : outcome === 'extend' ? input.gateMode : 'final'
+  const answeredMode = answeredModeOf(input.gateMode, outcome)
   // U3 D1/D3: armedness is log truth — the seam folds the run's log, never a
   // producer-threaded flag, so every settle producer inherits the behavior.
   const executionArmed = foldLogOrInitial(pipelineMachine, logPathOf(input.gate.runDir)).snapshot.context.executionArmed
@@ -188,6 +196,9 @@ async function settleGateFileChecked(input: SettleInput): Promise<SettleResult> 
   const emitGateStageExit = (): void => {
     input.gate.emit({ altitude: 'L2', type: 'stage_exit', stage: 'gate' })
   }
+  if (input.gateMode === 'release') {
+    return settleReleaseGate(input, outcome, response, emitAnswered, emitGateStageExit)
+  }
   const owesExit = input.gateMode === 'final' && outcome !== 'abort'
   if (owesExit && outcome === 'approve') {
     emitGateStageExit()
@@ -203,6 +214,37 @@ async function settleGateFileChecked(input: SettleInput): Promise<SettleResult> 
   emitAnswered()
   if (owesExit) emitGateStageExit()
   appendMover(input, outcome)
+  return { outcome, vetoes: response.vetoes, answeredMode }
+}
+
+/**
+ * The release-mode settle arms (U3 D7): approve is final-shaped —
+ * exit-then-answer, no armed implement mover (the walk is done, the answer
+ * itself completes the run); veto answers first, exits, writes the redirect
+ * as the fix-context sidecar, then moves into implement; abort answers
+ * alone (the aborted edge ignores the map).
+ */
+async function settleReleaseGate(
+  input: SettleInput,
+  outcome: SettleOutcome,
+  response: GateResponse,
+  emitAnswered: () => void,
+  emitGateStageExit: () => void,
+): Promise<SettleResult> {
+  const answeredMode = 'release'
+  if (outcome === 'approve') {
+    emitGateStageExit()
+    emitAnswered()
+    return { outcome, vetoes: response.vetoes, answeredMode }
+  }
+  if (outcome === 'veto') {
+    emitAnswered()
+    emitGateStageExit()
+    await writeReleaseVetoSidecar(input, response.gateVetoRedirect ?? '')
+    input.gate.emit({ altitude: 'L2', type: 'stage_enter', stage: 'implement' })
+    return { outcome, vetoes: response.vetoes, answeredMode }
+  }
+  emitAnswered()
   return { outcome, vetoes: response.vetoes, answeredMode }
 }
 
@@ -231,4 +273,16 @@ function appendMover(input: SettleInput, outcome: SettleOutcome): void {
   if (outcome === 'veto') {
     input.gate.emit({ altitude: 'L2', type: 'stage_enter', stage: 'draft' as StageId })
   }
+}
+
+/**
+ * The release-veto sidecar (U3 D7/D4): the operator's redirect written as
+ * fix context — implement's fix mode re-reads it from the run's own
+ * artifacts, and a completed fix answers it by appending past the redirect
+ * (the verify-log answer pattern, on the sidecar).
+ */
+async function writeReleaseVetoSidecar(input: SettleInput, redirect: string): Promise<void> {
+  const instruction =
+    redirect.length > 0 ? redirect : 'no redirect given — re-check the release digest and fix what blocks approval'
+  await writeFile(path.join(input.gate.runDir, 'release-veto.md'), `<!-- release-veto.md -->\nVETO: ${instruction}\n`)
 }

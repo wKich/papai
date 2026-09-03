@@ -43,6 +43,7 @@ function workForOf(): WorkFor {
       config: pipeline.deps.config,
     },
     { taskText: TASK_TEXT, changeName: 'add-thing' },
+    path.join(pipeline.deps.config.workDir, 'runs', 'probe'),
   )
 }
 

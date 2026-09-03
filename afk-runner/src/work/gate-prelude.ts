@@ -9,7 +9,7 @@ import type { AutonomyConfig } from '../config.js'
 import type { EventInput, SddEvent } from '../events.js'
 import type { KernelContext } from '../kernel/machine.js'
 import { classifyAssumptions } from './assumption-blast.js'
-import { evaluateCapHit, evaluateEscalationGate, evaluateFinalGate } from './auto-policy.js'
+import { evaluateCapHit, evaluateEscalationGate, evaluateFinalGate, evaluateReleaseGate } from './auto-policy.js'
 import type { PolicyDecision, PolicySignals } from './auto-policy.js'
 import { renderGateAnswers } from './gate-answers.js'
 import type { GateAnswers } from './gate-answers.js'
@@ -21,7 +21,7 @@ import type { ReviewLoopResult } from './review-loop.js'
 
 export interface GatePreludeInput {
   readonly version: number
-  readonly mode: 'early' | 'final' | 'escalation'
+  readonly mode: 'early' | 'final' | 'escalation' | 'release'
   readonly reviewResult: ReviewLoopResult
   readonly context: KernelContext
   readonly events: readonly SddEvent[]
@@ -176,6 +176,7 @@ export async function evaluateLadder(
       config: signals.config,
     })
   }
+  if (input.mode === 'release') return evaluateReleaseGate()
   return evaluateFinalGate(signals)
 }
 

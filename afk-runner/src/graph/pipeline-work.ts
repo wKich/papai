@@ -15,14 +15,13 @@ import type { OpenSpecDriver } from '../openspec-driver.js'
 import { runAtomicity } from '../work/atomicity.js'
 import { runDecompose, runsAtomicity } from '../work/decompose.js'
 import { runDraft } from '../work/draft.js'
-import { implementOutcomeOf, runImplementWork } from '../work/implement.js'
 import { runIntake } from '../work/intake.js'
 import { presentFinalGate } from '../work/present-final.js'
 import { reviewOutcomeOf, runReviewWork } from '../work/review.js'
-import { bunRunCheck } from '../work/run-check.js'
 import type { RunCheckFn } from '../work/run-check.js'
-import { readTaskItemsAt } from '../work/tasks-md.js'
 import { runVetoRevision } from '../work/veto-revision.js'
+import { GATE_AWAITING_MODULE, agentSeamsOf, sidecarDirOf } from './pipeline-agent.js'
+import { implementModule, releaseModule, verifyModule } from './pipeline-execution.js'
 
 export interface PipelineWorkDeps {
   readonly spawn: SpawnFn
@@ -113,26 +112,6 @@ function agentOf(deps: PipelineWorkDeps, io: WorkIO): AgentLayerDeps {
 }
 
 const START_MODULE: StateModule = { work: null, outcomeOf: () => 'boot', successors: { boot: { enter: 'intake' } } }
-const GATE_AWAITING_MODULE: StateModule = {
-  work: null,
-  outcomeOf: () => 'awaiting',
-  successors: { awaiting: { park: 'gate-pending' } },
-}
-
-function sidecarDirOf(io: WorkIO): string {
-  return path.join(io.runDir, 'sidecars')
-}
-
-function agentSeamsOf(deps: PipelineWorkDeps, io: WorkIO): AgentLayerDeps {
-  return {
-    spawn: deps.spawn,
-    config: deps.config,
-    execGit: deps.execGit,
-    emit: (event: EventInput): void => {
-      io.append(event)
-    },
-  }
-}
 
 function intakeModule(deps: PipelineWorkDeps, input: PipelineRunInput): StateModule {
   return {
@@ -234,39 +213,7 @@ function atomicityModule(deps: PipelineWorkDeps, input: PipelineRunInput): State
   }
 }
 
-/**
- * The implement stage (U3 D4): one walked tasks.md item per work bracket —
- * the self-successor re-enters for the next item, and outcomeOf reads the
- * residue against the shared tasks.md parser (outstanding → re-entry, all
- * recorded done → verify).
- */
-function implementModule(deps: PipelineWorkDeps, input: PipelineRunInput): StateModule {
-  const changeDir = path.join(deps.config.repoRoot, 'openspec', 'changes', input.changeName)
-  return {
-    work: {
-      kind: 'implement',
-      run: (io) =>
-        runImplementWork(
-          {
-            agent: agentSeamsOf(deps, io),
-            runDir: io.runDir,
-            sidecarDir: sidecarDirOf(io),
-            cwd: deps.config.repoRoot,
-            runCheck: deps.runCheck ?? bunRunCheck,
-          },
-          { changeName: input.changeName },
-          io,
-        ),
-    },
-    outcomeOf: (context) => implementOutcomeOf(context, readTaskItemsAt(changeDir)),
-    successors: {
-      outstanding: { enter: 'implement' },
-      done: { enter: 'verify' },
-    },
-  }
-}
-
-export function createPipelineWorkFor(deps: PipelineWorkDeps, input: PipelineRunInput): WorkFor {
+export function createPipelineWorkFor(deps: PipelineWorkDeps, input: PipelineRunInput, runDir: string): WorkFor {
   return (state): StateModule | null => {
     if (state === 'start') return START_MODULE
     if (state === 'intake') return intakeModule(deps, input)
@@ -274,7 +221,9 @@ export function createPipelineWorkFor(deps: PipelineWorkDeps, input: PipelineRun
     if (state === 'review') return reviewModule(deps, input)
     if (state === 'decompose') return decomposeModule(deps, input)
     if (state === 'atomicity') return atomicityModule(deps, input)
-    if (state === 'implement') return implementModule(deps, input)
+    if (state === 'implement') return implementModule(deps, input, runDir)
+    if (state === 'verify') return verifyModule(deps, runDir)
+    if (state === 'release') return releaseModule(deps, input)
     if (state === 'gate.awaiting') return GATE_AWAITING_MODULE
     return null
   }
@@ -284,7 +233,8 @@ export function createPipelineWorkFor(deps: PipelineWorkDeps, input: PipelineRun
 export function workForOf(
   deps: Omit<PipelineWorkDeps, 'stop'> & { readonly stop?: StopSeam },
   input: { readonly taskText: string; readonly changeName: string; readonly depthOverride?: DepthProfile },
+  runDir: string,
 ): WorkFor {
   const { stop, ...rest } = deps
-  return createPipelineWorkFor({ ...rest, ...(stop === undefined ? {} : { stop }) }, input)
+  return createPipelineWorkFor({ ...rest, ...(stop === undefined ? {} : { stop }) }, input, runDir)
 }

@@ -3,7 +3,7 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
-import { readdir, readFile } from 'node:fs/promises'
+import { appendFile, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import { z } from 'zod'
@@ -15,12 +15,14 @@ import { TASK_FIX_ATTEMPTS } from '../config.js'
 import type { WorkIO } from '../drive/loop.js'
 import type { KernelContext } from '../kernel/machine.js'
 import { changeFolderPrefix } from '../write-guard.js'
+import { fixTargetOf } from './fix-target.js'
 import { AFFECTED_CHECK_COMMAND } from './run-check.js'
 import type { RunCheckFn } from './run-check.js'
 import { commitTaskSlice } from './slice-commit.js'
 import { StageHaltError } from './stage-halt.js'
 import { parseTaskItems } from './tasks-md.js'
 import type { TaskItem } from './tasks-md.js'
+import { newestVerifyLogPath } from './verify.js'
 
 export interface ImplementDeps {
   readonly agent: AgentLayerDeps
@@ -45,122 +47,21 @@ export function firstOwedItem(items: readonly TaskItem[], tasks: KernelContext['
   return null
 }
 
-/** The implement outcome reader (D4): an owed item re-enters implement; everything recorded done maps to verify. */
-export function implementOutcomeOf(context: KernelContext, items: readonly TaskItem[]): 'outstanding' | 'done' {
-  return firstOwedItem(items, context.tasks) === null ? 'done' : 'outstanding'
-}
-
-interface FixTarget {
-  readonly item: TaskItem
-  readonly failingTail: string
-}
-
-/** The newest verify boundary log in the run dir — fix context re-read from the run's own artifacts (D4 fix mode). */
-async function newestVerifyLog(runDir: string): Promise<string | null> {
-  let names: string[]
-  try {
-    names = await readdir(runDir)
-  } catch {
-    return null
-  }
-  const versions = names
-    .map((name) => /^verify-(\d+)\.log$/u.exec(name))
-    .filter((match): match is RegExpExecArray => match !== null)
-    .map((match) => Number(match[1]))
-  if (versions.length === 0) return null
-  const newest = Math.max(...versions)
-  try {
-    return await readFile(path.join(runDir, `verify-${newest}.log`), 'utf8')
-  } catch {
-    return null
-  }
-}
-
-/** Repo-relative file paths a failing verification output names: `path:line:col` tokens and bare path lines. */
-function failingPathsOf(logBody: string): Set<string> {
-  const paths = new Set<string>()
-  for (const match of logBody.matchAll(/(?:^|[\s`(])([^\s:`(]+\.[a-z]+):\d+:\d+/gu)) {
-    const captured = match[1]
-    if (captured !== undefined) paths.add(captured)
-  }
-  for (const line of logBody.split('\n')) {
-    const bare = /^\s*([^\s]+\.(?:ts|tsx|js|mjs|json|svelte))\s*$/u.exec(line)
-    if (bare !== null && bare[1] !== undefined) paths.add(bare[1])
-  }
-  return paths
-}
-
-interface SliceCommit {
-  readonly subject: string
-  readonly paths: readonly string[]
-}
-
-/** Parse `git log --name-only --format=@@%s` output into commit blocks, preserving git's latest-first order. */
-function parseSliceCommits(stdout: string): readonly SliceCommit[] {
-  const commits: SliceCommit[] = []
-  for (const line of stdout.split('\n')) {
-    if (line.startsWith('@@')) {
-      commits.push({ subject: line.slice(2), paths: [] })
-      continue
-    }
-    const trimmed = line.trim()
-    if (trimmed.length > 0 && commits.length > 0) {
-      const current = commits[commits.length - 1]
-      if (current !== undefined) {
-        commits[commits.length - 1] = { subject: current.subject, paths: [...current.paths, trimmed] }
-      }
-    }
-  }
-  return commits
-}
-
-/** The last-walked id from the residue: the max numeric key over the task records. */
-function lastWalkedIdOf(tasks: KernelContext['tasks']): string | null {
-  let max: number | null = null
-  for (const id of Object.keys(tasks)) {
-    const numeric = Number(id)
-    if (Number.isFinite(numeric) && (max === null || numeric > max)) max = numeric
-  }
-  return max === null ? null : String(max)
-}
-
-/**
- * Fix mode (D4): with every item recorded done and a verify boundary log
- * present, re-target the culprit — the item whose runner-made slice commit
- * last touched a path the failing output names — falling back to the
- * last-walked id when nothing maps. The re-target re-emits `task started`
- * (last-state-wins flips the record to running; the attempt bound governs
- * thrash) and the spawn embeds the failing tail.
- */
-async function fixTargetOf(
-  deps: ImplementDeps,
+/** The implement outcome reader (D4): an owed item re-enters implement; everything recorded done maps to verify — unless an unanswered red verdict owes a fix (D5). */
+export function implementOutcomeOf(
+  context: KernelContext,
   items: readonly TaskItem[],
-  tasks: KernelContext['tasks'],
-): Promise<FixTarget | null> {
-  const logBody = await newestVerifyLog(deps.runDir)
-  if (logBody === null) return null
-  const failingTail = logBody.split('\n').slice(-30).join('\n')
-  const failing = failingPathsOf(logBody)
-  if (failing.size > 0) {
-    const { stdout } = await deps.agent.execGit(deps.cwd, ['log', '--name-only', '--format=@@%s'])
-    for (const commit of parseSliceCommits(stdout)) {
-      const item = items.find((candidate) => commit.subject.startsWith(candidate.text))
-      if (item === undefined) continue
-      if (commit.paths.some((commitPath) => failing.has(commitPath))) {
-        return { item, failingTail }
-      }
-    }
-  }
-  const fallbackId = lastWalkedIdOf(tasks)
-  const fallbackItem = fallbackId === null ? undefined : items.find((item) => item.id === fallbackId)
-  return fallbackItem === undefined ? null : { item: fallbackItem, failingTail }
+  redVerdictOwed = false,
+): 'outstanding' | 'done' {
+  if (firstOwedItem(items, context.tasks) === null) return redVerdictOwed ? 'outstanding' : 'done'
+  return 'outstanding'
 }
 
-/** The spawn prompt: fresh work states the item; fix mode embeds the failing verification tail (D4). */
+/** The spawn prompt: fresh work states the item; fix mode embeds the failing tail (D4) — a veto fix states the operator's redirect (D7). */
 function spawnPromptOf(
   deps: ImplementDeps,
   input: ImplementInput,
-  target: { readonly item: TaskItem; readonly failingTail: string | null },
+  target: { readonly item: TaskItem; readonly failingTail: string | null; readonly cause: 'verify' | 'veto' | 'fresh' },
   basename: string,
 ): string {
   const reportLine = `Write your JSON report to ${agentWritePath(deps.cwd, basename)}: {"files_written": [<paths relative to the repo root>]}`
@@ -173,14 +74,15 @@ function spawnPromptOf(
       reportLine,
     ].join('\n')
   }
-  return [
-    `Fix one task of the change ${input.changeName}: task ${target.item.id} broke the verification boundary.`,
-    target.item.text,
-    'The failing verification output tail:',
-    target.failingTail,
-    ...guardLines,
-    reportLine,
-  ].join('\n')
+  const causeLine =
+    target.cause === 'veto'
+      ? `Fix one task of the change ${input.changeName}: the operator vetoed the release of task ${target.item.id}.`
+      : `Fix one task of the change ${input.changeName}: task ${target.item.id} broke the verification boundary.`
+  const contextLines =
+    target.cause === 'veto'
+      ? ['The operator redirect to apply:', target.failingTail]
+      : ['The failing verification output tail:', target.failingTail]
+  return [causeLine, target.item.text, ...contextLines, ...guardLines, reportLine].join('\n')
 }
 
 /** The per-task affected check: green continues; red records `task failed` with the output tail and stops the item. */
@@ -222,7 +124,10 @@ export async function runImplementWork(deps: ImplementDeps, input: ImplementInpu
   }
   const items = parseTaskItems(tasksMd)
   const owed = firstOwedItem(items, io.context.tasks)
-  const target = owed === null ? await fixTargetOf(deps, items, io.context.tasks) : { item: owed, failingTail: null }
+  const target =
+    owed === null
+      ? await fixTargetOf({ execGit: deps.agent.execGit, runDir: deps.runDir, cwd: deps.cwd }, items, io.context.tasks)
+      : { item: owed, failingTail: null as string | null, cause: 'fresh' as const }
   if (target === null) return
   const priorAttempts = io.context.tasks[target.item.id]?.attempts ?? 0
   if (priorAttempts >= TASK_FIX_ATTEMPTS) {
@@ -252,4 +157,17 @@ export async function runImplementWork(deps: ImplementDeps, input: ImplementInpu
   if ((await runAffectedCheck(deps, io, target.item)) === 'red') return
   await commitTaskSlice({ execGit: deps.agent.execGit, cwd: deps.cwd, changeDir }, target.item)
   io.append({ altitude: 'L2', type: 'task', action: 'done', id: target.item.id })
+  if (target.cause !== 'fresh') await answerFixedVerdict(deps, target.item.id, target.cause)
+}
+
+/**
+ * A completed fix answers the artifact it re-read (D4/D5/D7): appending
+ * past a red verdict — or past the veto redirect — makes the artifact's
+ * last line no longer the open question, so the outcome reader stops owing
+ * a fix and the boundary (or the release) re-runs.
+ */
+async function answerFixedVerdict(deps: ImplementDeps, id: string, cause: 'verify' | 'veto'): Promise<void> {
+  const answerPath = cause === 'veto' ? path.join(deps.runDir, 'release-veto.md') : newestVerifyLogPath(deps.runDir)
+  if (answerPath === null) return
+  await appendFile(answerPath, `fix answered: task ${id}\n`)
 }

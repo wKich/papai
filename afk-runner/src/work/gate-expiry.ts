@@ -49,7 +49,7 @@ export interface ExpiryPorts {
 export async function processExpiry(
   ports: ExpiryPorts,
   version: number,
-  gateMode: 'early' | 'final' | 'escalation',
+  gateMode: 'early' | 'final' | 'escalation' | 'release',
   round: { readonly current: number; readonly cap: number } | null,
   deadlineAt: string | null,
   reArmed: boolean,
@@ -97,7 +97,7 @@ export async function processExpiry(
 async function evaluateExpiryLadder(
   ports: ExpiryPorts,
   version: number,
-  gateMode: 'early' | 'final' | 'escalation',
+  gateMode: 'early' | 'final' | 'escalation' | 'release',
   currentRound: number,
   repoRoot: string,
   autonomy: AutonomyConfig,
@@ -132,7 +132,7 @@ async function evaluateExpiryLadder(
 function reArmOrPark(
   ports: ExpiryPorts,
   version: number,
-  gateMode: 'early' | 'final' | 'escalation',
+  gateMode: 'early' | 'final' | 'escalation' | 'release',
   reArmed: boolean,
 ): null {
   if (reArmed) {
@@ -172,7 +172,7 @@ function emitPendingExpiryDecision(ports: ExpiryPorts, version: number): void {
 async function settleExpiryDecision(
   ports: ExpiryPorts,
   version: number,
-  gateMode: 'early' | 'final' | 'escalation',
+  gateMode: 'early' | 'final' | 'escalation' | 'release',
   round: { readonly current: number; readonly cap: number } | null,
   failedStage: StageId | null,
   currentRound: number,

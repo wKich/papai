@@ -79,7 +79,7 @@ async function driveRun(
   const runDir = path.join(seed.workDir, 'runs', seed.runId)
   const logPath = logPathOf(runDir)
   const stop = deps.stop ?? createStopMarkerSeam(runDir)
-  const workFor = workForOf(deps, input)
+  const workFor = workForOf(deps, input, runDir)
   const escalation = escalationPresenterOf(deps, input, seed.runId)
   writeHolder(runDir)
   try {
@@ -140,7 +140,7 @@ export async function statusRun(deps: RunDeps, runId: string): Promise<RunStatus
   const folded = foldRun(logPathOf(runDir))
   const changeName = await changeNameOf(deps, runId, runDir)
   const taskText = await readFile(path.join(runDir, 'task.md'), 'utf8')
-  const workFor = workForOf(deps, { taskText, changeName })
+  const workFor = workForOf(deps, { taskText, changeName }, runDir)
   return {
     runId,
     position: folded.position,

@@ -63,7 +63,7 @@ interface WalkHalt {
   readonly halted: { readonly halted: string; readonly position: string }
 }
 
-/** Start an armed run, park at the final gate, approve through the operator file, let the walk run. */
+/** Start an armed run, park at the final gate, approve through the operator file, let the walk run; the release gate settles ABORT (its arms are 6.3). */
 async function approvedIntoImplement(): Promise<WalkHalt> {
   const pipeline = makeArmedPipeline()
   const started = await startRun(pipeline.deps, { taskText: TASK_TEXT, execute: true })
@@ -74,11 +74,45 @@ async function approvedIntoImplement(): Promise<WalkHalt> {
     '<!-- gate-1.md -->\n\n## Final gate\n\n## Gate response\n\nAPPROVE\n',
   )
   const clock = fakeClock()
-  const halted = await settleAndWait(
+  const halted = await abortReleaseAndWait(
     resumeRun({ ...pipeline.deps, gateWait: { tick: clock.tick } }, started.runId),
     clock,
+    runDir,
   )
   return { pipeline, runId: started.runId, runDir, logPath: path.join(runDir, 'events.ndjson'), halted }
+}
+
+/** Tick until the resumed run halts; once the release presentation lands, settle it ABORT so the waiter exits. */
+async function abortReleaseAndWait<T>(
+  pending: Promise<T>,
+  clock: { readonly release: () => void },
+  runDir: string,
+  budgetMs = 10_000,
+): Promise<T> {
+  const state = { settled: false }
+  const tracked = pending.then(
+    (value: T): T => {
+      state.settled = true
+      return value
+    },
+    (error: unknown): never => {
+      state.settled = true
+      throw error
+    },
+  )
+  let aborted = false
+  const deadline = Date.now() + budgetMs
+  while (Date.now() < deadline && !state.settled) {
+    clock.release()
+    await new Promise((resolve) => {
+      setTimeout(resolve, 2)
+    })
+    if (!aborted && fs.existsSync(path.join(runDir, 'gate-2.md'))) {
+      fs.writeFileSync(path.join(runDir, 'gate-2.md'), '<!-- gate-2.md -->\n\n## Gate response\n\nABORT\n')
+      aborted = true
+    }
+  }
+  return tracked
 }
 
 function taskTokens(events: readonly SddEvent[]): string[] {
@@ -120,9 +154,11 @@ describe('implement work module — the sequential task walk (U3 D4)', () => {
     expect(taskTokens(events)).toEqual(['started:1', 'done:1', 'started:2', 'done:2', 'started:3', 'done:3'])
     // the armed-approve mover's entry plus one re-entry per walked item
     expect(stageTokens(events).filter((token) => token === 'stage_enter:implement')).toHaveLength(4)
-    expect(stageTokens(events)).not.toContain('stage_enter:verify')
-    // verify's work module is slice 6 — until it lands the walk's completion parks final
+    // the walk hands off to verify — its boundary runs green, release
+    // presents (the 6.2 module), and the test settles ABORT so the run ends
+    expect(stageTokens(events)).toContain('stage_enter:verify')
     expect(h.halted.halted).toBe('final')
+    expect(h.halted.position).toBe('aborted')
   })
 
   it('the spawn prompt carries the item text and the report path the affected check reads', async () => {
@@ -143,7 +179,11 @@ describe('implement work module — the sequential task walk (U3 D4)', () => {
       '<!-- gate-1.md -->\n\n## Final gate\n\n## Gate response\n\nAPPROVE\n',
     )
     const clock = fakeClock()
-    await settleAndWait(resumeRun({ ...pipeline.deps, gateWait: { tick: clock.tick } }, started.runId), clock)
+    await abortReleaseAndWait(
+      resumeRun({ ...pipeline.deps, gateWait: { tick: clock.tick } }, started.runId),
+      clock,
+      runDir,
+    )
     const events = readEvents(path.join(runDir, 'events.ndjson'))
     expect(taskTokens(events)).toEqual([
       'started:1',
@@ -155,13 +195,12 @@ describe('implement work module — the sequential task walk (U3 D4)', () => {
       'started:3',
       'done:3',
     ])
-    expect(pipeline.checkCalls.length).toBe(4)
-    expect(pipeline.checkCalls.every((command) => command.join(' ') === 'bun run test:affected')).toBe(true)
+    expect(pipeline.checkCalls.filter((command) => command.join(' ') === 'bun run test:affected')).toHaveLength(4)
   })
 
   it('outcomeOf maps all-done→verify; a file-ahead crash window advances rather than re-walking', async () => {
     const h = await approvedIntoImplement()
-    const module = workForOf(h.pipeline.deps, { taskText: TASK_TEXT, changeName: 'add-thing' })('implement')
+    const module = workForOf(h.pipeline.deps, { taskText: TASK_TEXT, changeName: 'add-thing' }, h.runDir)('implement')
     expect(module).not.toBeNull()
     expect(module?.successors).toEqual({ outstanding: { enter: 'implement' }, done: { enter: 'verify' } })
     const events = readEvents(h.logPath)
@@ -191,6 +230,7 @@ describe('firstOwedItem / implementOutcomeOf — the pick and outcome rules (D4)
     >
     readonly picked: string | null
     readonly outcome: 'outstanding' | 'done'
+    readonly redOwed?: boolean
   }
 
   type CaseRow = Row<CaseFields>
@@ -220,13 +260,25 @@ describe('firstOwedItem / implementOutcomeOf — the pick and outcome rules (D4)
       picked: null,
       outcome: 'done',
     },
+    {
+      label: 'every item done but an unanswered red verdict owes the fix (D4/D5)',
+      tasks: {
+        '1': { status: 'done', attempts: 1 },
+        '2': { status: 'done', attempts: 1 },
+        '3': { status: 'done', attempts: 1 },
+      },
+      picked: null,
+      outcome: 'outstanding',
+      redOwed: true,
+    },
   ]
 
   it('pick/outcome matrix', async () => {
     await assertEach(rows, (row) => {
+      const redOwed = row.redOwed === true
       const context = { ...initialKernelContext({}), tasks: row.tasks }
       expect(pickedIdOf(items, context.tasks)).toBe(row.picked)
-      expect(implementOutcomeOf(context, items)).toBe(row.outcome)
+      expect(implementOutcomeOf(context, items, redOwed)).toBe(row.outcome)
     })
   })
 })
@@ -376,6 +428,8 @@ describe('attempt bound, resume skip-forward, and fix-mode re-target (D4)', () =
     expect(h.spawnBasenames).toEqual(['implement-t2.json'])
     expect(taskTokens(h.appended)).toEqual(['started:2', 'done:2'])
     expect(h.prompts[0]).toContain('src/old.ts:31:7')
+    const answeredLog = fs.readFileSync(path.join(h.deps.runDir, 'verify-1.log'), 'utf8')
+    expect(answeredLog.trimEnd().endsWith('fix answered: task 2')).toBe(true)
   })
 
   it('fix mode picks the latest slice commit when several touch the failing path', async () => {
@@ -408,6 +462,28 @@ describe('attempt bound, resume skip-forward, and fix-mode re-target (D4)', () =
     await runImplementWork(h.deps, { changeName: 'add-thing' }, h.io)
     expect(h.spawnBasenames).toEqual(['implement-t3.json'])
     expect(taskTokens(h.appended)).toEqual(['started:3', 'done:3'])
+  })
+
+  it('fix mode re-targets the last-walked item from an unanswered release veto, answering the sidecar (D7)', async () => {
+    const h = unitHarness({
+      tasks: ALL_DONE,
+      runFiles: { 'release-veto.md': '<!-- release-veto.md -->\nVETO: tighten the error copy\n' },
+    })
+    await runImplementWork(h.deps, { changeName: 'add-thing' }, h.io)
+    expect(h.spawnBasenames).toEqual(['implement-t3.json'])
+    expect(h.prompts[0]).toContain('tighten the error copy')
+    const sidecar = fs.readFileSync(path.join(h.deps.runDir, 'release-veto.md'), 'utf8')
+    expect(sidecar.trimEnd().endsWith('fix answered: task 3')).toBe(true)
+  })
+
+  it('an answered release veto no longer owes a fix (D7)', async () => {
+    const h = unitHarness({
+      tasks: ALL_DONE,
+      runFiles: { 'release-veto.md': '<!-- release-veto.md -->\nVETO: tighten\nfix answered: task 3\n' },
+    })
+    await runImplementWork(h.deps, { changeName: 'add-thing' }, h.io)
+    expect(h.spawnBasenames).toEqual([])
+    expect(h.appended).toEqual([])
   })
 
   it('no fix context and all items done: the walk owes nothing further', async () => {
@@ -477,31 +553,4 @@ function fakeClock(): { readonly tick: () => Promise<void>; readonly release: ()
       if (resolve !== undefined) resolve()
     },
   }
-}
-
-/** Release ticks until the resumed run halts (wall-clock bounded — a fixed tick count races the settle chain's fs reads). */
-async function settleAndWait<T>(
-  pending: Promise<T>,
-  clock: { readonly release: () => void },
-  budgetMs = 10_000,
-): Promise<T> {
-  const state = { settled: false }
-  const tracked = pending.then(
-    (value: T): T => {
-      state.settled = true
-      return value
-    },
-    (error: unknown): never => {
-      state.settled = true
-      throw error
-    },
-  )
-  const deadline = Date.now() + budgetMs
-  while (Date.now() < deadline && !state.settled) {
-    clock.release()
-    await new Promise((resolve) => {
-      setTimeout(resolve, 2)
-    })
-  }
-  return tracked
 }

@@ -67,6 +67,12 @@ export interface FakePipelineOptions {
    * shape for the per-task fix loop.
    */
   readonly checkExitCodes?: readonly number[]
+  /**
+   * Successive stdout bodies the checks report (empty default): each check
+   * consumes the next entry — the verify boundary's failing output drill
+   * shape (a red log naming a path the fix prompt embeds).
+   */
+  readonly checkStdouts?: readonly string[]
 }
 
 export const TASK_TEXT = '# Add thing\n\nfixes a typo in the readme\n'
@@ -138,9 +144,10 @@ export function makeFakePipeline(options: FakePipelineOptions = {}): FakePipelin
   const checkCalls: string[][] = []
   const sequenceWrites: Record<string, number> = {}
   const checkExitCodes = [...(options.checkExitCodes ?? [])]
+  const checkStdouts = [...(options.checkStdouts ?? [])]
   const runCheck: RunCheckFn = (_cwd, command) => {
     checkCalls.push([...command])
-    return Promise.resolve({ exitCode: checkExitCodes.shift() ?? 0, stdout: '', stderr: '' })
+    return Promise.resolve({ exitCode: checkExitCodes.shift() ?? 0, stdout: checkStdouts.shift() ?? '', stderr: '' })
   }
 
   const sidecars: Record<string, string> = {

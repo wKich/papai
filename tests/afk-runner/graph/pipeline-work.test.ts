@@ -4,13 +4,18 @@
 // See LICENSE in the project root for details.
 
 import { describe, expect, it } from 'bun:test'
+import path from 'node:path'
 
 import { workForOf } from '../../../afk-runner/src/graph/pipeline-work.js'
 import type { FakePipeline } from '../fixtures/fake-pipeline.js'
 import { TASK_TEXT, makeFakePipeline } from '../fixtures/fake-pipeline.js'
 
 function registryOf(pipeline: FakePipeline): ReturnType<typeof workForOf> {
-  return workForOf(pipeline.deps, { taskText: TASK_TEXT, changeName: 'add-thing' })
+  return workForOf(
+    pipeline.deps,
+    { taskText: TASK_TEXT, changeName: 'add-thing' },
+    path.join(pipeline.deps.config.workDir, 'runs', 'registry-probe'),
+  )
 }
 
 /** The declared work kind of a state — null when the state parks or is unknown. */
