@@ -10,6 +10,7 @@ import path from 'node:path'
 import { createOpenSpecDriver } from '../../../afk-runner/src/openspec-driver.js'
 import type { OpenSpecDriver } from '../../../afk-runner/src/openspec-driver.js'
 import type { RunDeps } from '../../../afk-runner/src/run.js'
+import type { RunCheckFn } from '../../../afk-runner/src/work/run-check.js'
 import type { SpawnFn } from '../../../review-loop/src/agent-runner.js'
 import { agentWritePath } from '../../../review-loop/src/agent-runner.js'
 
@@ -25,12 +26,16 @@ export interface FakePipeline {
   /** Every spawn's full argv, keyed by output basename (append-only audit). */
   readonly spawnArgs: Record<string, string[][]>
   readonly stdoutLines: string[]
+  /** Every affected-check command issued by the walk, in order. */
+  readonly checkCalls: readonly string[][]
   readonly runDirOf: (runId: string) => string
 }
 
 export interface FakePipelineOptions {
   /** Sidecar JSON bodies by basename, overriding the defaults (fake agents write these). */
   readonly sidecarOverrides?: Record<string, string>
+  /** Artifact file bodies by basename, overriding the placeholder default the fake spawn writes. */
+  readonly artifactOverrides?: Record<string, string>
   /**
    * Successive sidecar bodies by basename: each spawn for that basename
    * writes the next entry (the last sticks). Wins over overrides/defaults
@@ -56,6 +61,12 @@ export interface FakePipelineOptions {
    * behind it.
    */
   readonly onSpawn?: (basename: string) => void
+  /**
+   * Successive exit codes the walk's affected checks report (green default):
+   * each check consumes the next entry — the fail-once-then-succeed drill
+   * shape for the per-task fix loop.
+   */
+  readonly checkExitCodes?: readonly number[]
 }
 
 export const TASK_TEXT = '# Add thing\n\nfixes a typo in the readme\n'
@@ -124,7 +135,13 @@ export function makeFakePipeline(options: FakePipelineOptions = {}): FakePipelin
   const spawnPrompts: Record<string, string[]> = {}
   const spawnArgs: Record<string, string[][]> = {}
   const stdoutLines: string[] = []
+  const checkCalls: string[][] = []
   const sequenceWrites: Record<string, number> = {}
+  const checkExitCodes = [...(options.checkExitCodes ?? [])]
+  const runCheck: RunCheckFn = (_cwd, command) => {
+    checkCalls.push([...command])
+    return Promise.resolve({ exitCode: checkExitCodes.shift() ?? 0, stdout: '', stderr: '' })
+  }
 
   const sidecars: Record<string, string> = {
     'depth.json': JSON.stringify({
@@ -182,7 +199,7 @@ export function makeFakePipeline(options: FakePipelineOptions = {}): FakePipelin
     const artifact = artifacts[basename]
     if (artifact !== undefined) {
       fs.mkdirSync(path.dirname(artifact), { recursive: true })
-      fs.writeFileSync(artifact, `<!-- content for ${basename} -->\n`)
+      fs.writeFileSync(artifact, options.artifactOverrides?.[basename] ?? `<!-- content for ${basename} -->\n`)
     }
     const sequence = options.sidecarSequences?.[basename]
     let body = sidecars[basename] ?? '{}'
@@ -227,6 +244,7 @@ export function makeFakePipeline(options: FakePipelineOptions = {}): FakePipelin
     spawn,
     execGit: () => Promise.resolve({ stdout: '', stderr: '' }),
     driver,
+    runCheck,
     stdout: (line) => {
       stdoutLines.push(line)
     },
@@ -241,6 +259,7 @@ export function makeFakePipeline(options: FakePipelineOptions = {}): FakePipelin
     spawnPrompts,
     spawnArgs,
     stdoutLines,
+    checkCalls,
     runDirOf: (runId: string): string => path.join(workDir, 'runs', runId),
   }
 }

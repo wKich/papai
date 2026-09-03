@@ -3,7 +3,6 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
-import fs from 'node:fs'
 import path from 'node:path'
 
 import type { SpawnFn } from '../../../review-loop/src/agent-runner.js'
@@ -16,12 +15,14 @@ import type { OpenSpecDriver } from '../openspec-driver.js'
 import { runAtomicity } from '../work/atomicity.js'
 import { runDecompose, runsAtomicity } from '../work/decompose.js'
 import { runDraft } from '../work/draft.js'
-import { parseGateResponse } from '../work/gate-model.js'
-import { expectedContentFor } from '../work/gate-settle.js'
+import { implementOutcomeOf, runImplementWork } from '../work/implement.js'
 import { runIntake } from '../work/intake.js'
 import { presentFinalGate } from '../work/present-final.js'
 import { reviewOutcomeOf, runReviewWork } from '../work/review.js'
-import { runVetoUpdater, updateAssumptionsFromVetoes } from '../work/veto-updater.js'
+import { bunRunCheck } from '../work/run-check.js'
+import type { RunCheckFn } from '../work/run-check.js'
+import { readTaskItemsAt } from '../work/tasks-md.js'
+import { runVetoRevision } from '../work/veto-revision.js'
 
 export interface PipelineWorkDeps {
   readonly spawn: SpawnFn
@@ -32,6 +33,8 @@ export interface PipelineWorkDeps {
   readonly stdout?: (line: string) => void
   /** Calm-stop seam consulted by the review loop between rounds. */
   readonly stop?: { readonly stopRequested: () => boolean }
+  /** Command runner for the execution-half checks (per-task affected check, verify boundary); defaults to Bun. */
+  readonly runCheck?: RunCheckFn
 }
 
 export interface PipelineRunInput {
@@ -107,49 +110,6 @@ function agentOf(deps: PipelineWorkDeps, io: WorkIO): AgentLayerDeps {
       io.append(event)
     },
   }
-}
-
-/**
- * The veto-updater revision round (C4 D8, D6): read the vetoes from the
- * settled gate file — per-item and whole-gate alike — fold the item vetoes
- * back into the resolver sidecar, and run one resolver pass that applies
- * the redirects to the existing artifacts. The no-op path requires an
- * empty item-veto list AND no gate-level veto: a settled outcome of veto
- * must never skip revision silently.
- */
-async function runVetoRevision(deps: PipelineWorkDeps, input: PipelineRunInput, io: WorkIO): Promise<void> {
-  const runDir = io.runDir
-  const sidecarDir = path.join(runDir, 'sidecars')
-  const version = io.context.gate?.version ?? 1
-  const round = io.context.round?.current ?? 1
-  const gateMode = io.context.gate?.mode === 'early' ? 'early' : 'final'
-  const md = await fs.promises.readFile(path.join(runDir, `gate-${version}.md`), 'utf8')
-  const expected = await expectedContentFor(sidecarDir, round, gateMode)
-  const response = parseGateResponse(md, expected)
-  if (response.vetoes.length === 0 && response.gateVetoRedirect === null) return
-  await updateAssumptionsFromVetoes(sidecarDir, round, response.vetoes)
-  await runVetoUpdater(
-    {
-      driver: deps.driver,
-      agent: {
-        spawn: deps.spawn,
-        config: deps.config,
-        execGit: deps.execGit,
-        emit: (event) => {
-          io.append(event)
-        },
-      },
-      runDir,
-      sidecarDir,
-      cwd: deps.config.repoRoot,
-    },
-    {
-      changeName: input.changeName,
-      round,
-      vetoes: response.vetoes,
-      ...(response.gateVetoRedirect === null ? {} : { gateRedirect: response.gateVetoRedirect }),
-    },
-  )
 }
 
 const START_MODULE: StateModule = { work: null, outcomeOf: () => 'boot', successors: { boot: { enter: 'intake' } } }
@@ -274,6 +234,38 @@ function atomicityModule(deps: PipelineWorkDeps, input: PipelineRunInput): State
   }
 }
 
+/**
+ * The implement stage (U3 D4): one walked tasks.md item per work bracket —
+ * the self-successor re-enters for the next item, and outcomeOf reads the
+ * residue against the shared tasks.md parser (outstanding → re-entry, all
+ * recorded done → verify).
+ */
+function implementModule(deps: PipelineWorkDeps, input: PipelineRunInput): StateModule {
+  const changeDir = path.join(deps.config.repoRoot, 'openspec', 'changes', input.changeName)
+  return {
+    work: {
+      kind: 'implement',
+      run: (io) =>
+        runImplementWork(
+          {
+            agent: agentSeamsOf(deps, io),
+            runDir: io.runDir,
+            sidecarDir: sidecarDirOf(io),
+            cwd: deps.config.repoRoot,
+            runCheck: deps.runCheck ?? bunRunCheck,
+          },
+          { changeName: input.changeName },
+          io,
+        ),
+    },
+    outcomeOf: (context) => implementOutcomeOf(context, readTaskItemsAt(changeDir)),
+    successors: {
+      outstanding: { enter: 'implement' },
+      done: { enter: 'verify' },
+    },
+  }
+}
+
 export function createPipelineWorkFor(deps: PipelineWorkDeps, input: PipelineRunInput): WorkFor {
   return (state): StateModule | null => {
     if (state === 'start') return START_MODULE
@@ -282,6 +274,7 @@ export function createPipelineWorkFor(deps: PipelineWorkDeps, input: PipelineRun
     if (state === 'review') return reviewModule(deps, input)
     if (state === 'decompose') return decomposeModule(deps, input)
     if (state === 'atomicity') return atomicityModule(deps, input)
+    if (state === 'implement') return implementModule(deps, input)
     if (state === 'gate.awaiting') return GATE_AWAITING_MODULE
     return null
   }

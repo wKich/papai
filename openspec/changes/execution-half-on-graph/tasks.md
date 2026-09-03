@@ -19,9 +19,9 @@
 
 ## 4. Implement work module
 
-- [ ] 4.1 Red: `tests/afk-runner/work/implement.test.ts` over a fake-agent fixture: the walk picks the first unchecked item, emits `task started`/`task done`, spawns one implementer per item sequentially, and self-succeeds until all items record done, then successor `verify`. Implement the module + registry entry in `graph/pipeline-work.ts` (tasks.md parsing extracted beside the `gate-digest-extract.ts` counts). Verify: `bun test tests/afk-runner/work/implement.test.ts`
-- [ ] 4.2 Red: the same suite asserts per-item attempt bounding — a third `started` for one id throws `StageHaltError('exhausted')` — and resume skip-forward (two items done → only remaining spawn). Verify: `bun test tests/afk-runner/work/implement.test.ts`
-- [ ] 4.3 Red: `tests/afk-runner/work/slice-commit.test.ts` asserts the runner (not the agent) commits after each verified item with the checked box and the work in one commit (`git-identity.ts` seam reused). Implement the commit seam. Verify: `bun test tests/afk-runner/work/slice-commit.test.ts`
+- [x] 4.1 Red: `tests/afk-runner/work/implement.test.ts` over a fake-agent fixture: the walk picks the first unchecked item, emits `task started`/`task done`, spawns one implementer per item sequentially, and self-succeeds until all items record done, then successor `verify`. Implement the module + registry entry in `graph/pipeline-work.ts` (tasks.md parsing extracted beside the `gate-digest-extract.ts` counts). Verify: `bun test tests/afk-runner/work/implement.test.ts`
+- [x] 4.2 Red: the same suite asserts per-item attempt bounding — a third `started` for one id throws `StageHaltError('exhausted')` — resume skip-forward (two items done → only remaining spawn), and fix-mode re-target (fix context present, all items done → culprit-mapped id re-started; no-path fallback = last-walked id). Verify: `bun test tests/afk-runner/work/implement.test.ts`
+- [x] 4.3 Red: `tests/afk-runner/work/slice-commit.test.ts` asserts the runner (not the agent) commits after each verified item with the checked box and the work in one commit (`git-identity.ts` seam reused). Implement the commit seam. Verify: `bun test tests/afk-runner/work/slice-commit.test.ts`
 
 ## 5. Write-guard widening for the implementer seam
 

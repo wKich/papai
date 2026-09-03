@@ -23,6 +23,7 @@ import { escalationPresenterOf } from './run-recovery.js'
 import { changeNameOf, parkLine, waitSettledGates } from './run-resume.js'
 import { createRunState } from './run-state.js'
 import { createStopMarkerSeam, removeHolder, writeHolder } from './stop-controller.js'
+import type { RunCheckFn } from './work/run-check.js'
 
 export interface RunDeps {
   readonly config: RunnerConfig
@@ -41,6 +42,12 @@ export interface RunDeps {
    * embedders) the park returns immediately as before.
    */
   readonly gateWait?: { readonly tick: () => Promise<void> }
+  /**
+   * Command runner for the execution-half checks (U3): the per-task affected
+   * check and the verify boundary. Absent means the work registry's Bun
+   * default; tests inject a scripted seam.
+   */
+  readonly runCheck?: RunCheckFn
 }
 
 export interface RunHalt {
