@@ -25,7 +25,7 @@
 
 ## 5. Write-guard widening for the implementer seam
 
-- [ ] 5.1 Red: `tests/afk-runner/agent-schemas.test.ts` (guard suite) asserts the implementer seam passes source-tree dirt, fails `openspec/changes/<sibling>/` dirt naming paths, and every think-half seam keeps the narrow change-folder guard. Implement the explicit guard mode in `agent-layer.ts`. Verify: `bun test tests/afk-runner/agent-schemas.test.ts`
+- [x] 5.1 Red: the guard suite (`tests/afk-runner/work/agent-layer.test.ts`, the guard tests' home, plus the mirrored `tests/afk-runner/write-guard.test.ts` unit rows) asserts the widened guard passes source-tree dirt, fails `openspec/changes/<sibling>/` dirt naming paths and the protection, and every think-half seam keeps the narrow change-folder guard byte-identical; `tests/afk-runner/work/implement.test.ts` pins the seam declaration. The explicit guard mode lives in `write-guard.ts` (extracted from `agent-layer.ts` at the max-lines seam). Verify: `bun test tests/afk-runner/write-guard.test.ts tests/afk-runner/work/agent-layer.test.ts tests/afk-runner/work/implement.test.ts`
 
 ## 6. Verify and release work modules
 

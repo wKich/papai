@@ -238,6 +238,7 @@ function unitHarness(options: {
   readonly runFiles?: Record<string, string>
   readonly gitLogStdout?: string
   readonly checkExitCodes?: readonly number[]
+  readonly porcelain?: readonly string[]
 }): {
   readonly deps: ImplementDeps
   readonly io: WorkIO
@@ -265,6 +266,8 @@ function unitHarness(options: {
   const gitCalls: string[][] = []
   const checkCalls: string[][] = []
   const checkExitCodes = [...(options.checkExitCodes ?? [])]
+  const porcelainOutputs = [...(options.porcelain ?? [''])]
+  let statusCalls = 0
   const config: RunnerConfig = { repoRoot: dir, workDir: path.join(dir, '.sdd-runner'), model: 'm', budget: 5 }
   const agent: AgentLayerDeps = {
     spawn: (_command, args, spawnOptions) => {
@@ -280,7 +283,13 @@ function unitHarness(options: {
     config,
     execGit: (_cwd, args) => {
       gitCalls.push([...args])
-      return Promise.resolve({ stdout: args.includes('log') ? (options.gitLogStdout ?? '') : '', stderr: '' })
+      if (args.includes('log')) return Promise.resolve({ stdout: options.gitLogStdout ?? '', stderr: '' })
+      if (args[0] === 'status') {
+        const stdout = porcelainOutputs[Math.min(statusCalls, porcelainOutputs.length - 1)] ?? ''
+        statusCalls += 1
+        return Promise.resolve({ stdout, stderr: '' })
+      }
+      return Promise.resolve({ stdout: '', stderr: '' })
     },
     emit: () => undefined,
   }
@@ -426,6 +435,27 @@ describe('attempt bound, resume skip-forward, and fix-mode re-target (D4)', () =
     expect(taskTokens(h.appended)).toEqual(['started:1', 'failed:1'])
     expect(commitCalls(h.gitCalls)).toEqual([])
     expect(fs.readFileSync(h.tasksMdPath, 'utf8')).not.toContain('- [x] 1.1 first item')
+  })
+})
+
+describe('write guard widening at the implementer seam (U3 D6)', () => {
+  it('source-tree dirt passes the widened guard and the slice still commits', async () => {
+    const h = unitHarness({ tasks: {}, porcelain: ['', ' M src/one.ts\n'] })
+    await runImplementWork(h.deps, { changeName: 'add-thing' }, h.io)
+    expect(taskTokens(h.appended)).toEqual(['started:1', 'done:1'])
+    expect(commitCalls(h.gitCalls)).toEqual([
+      ['add', '-A'],
+      ['commit', '-m', '1.1 first item'],
+    ])
+  })
+
+  it('sibling change-folder dirt fails the seam naming the path and the protection, committing nothing', async () => {
+    const h = unitHarness({ tasks: {}, porcelain: ['', '?? openspec/changes/other-change/x.md\n'] })
+    await expect(runImplementWork(h.deps, { changeName: 'add-thing' }, h.io)).rejects.toThrow(
+      'agent edited files in a protected change folder (writes under openspec/changes/ must stay within openspec/changes/add-thing/): openspec/changes/other-change/x.md',
+    )
+    expect(taskTokens(h.appended)).toEqual(['started:1'])
+    expect(commitCalls(h.gitCalls)).toEqual([])
   })
 })
 

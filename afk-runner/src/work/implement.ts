@@ -14,6 +14,7 @@ import { runStageAgent } from '../agent-layer.js'
 import { TASK_FIX_ATTEMPTS } from '../config.js'
 import type { WorkIO } from '../drive/loop.js'
 import type { KernelContext } from '../kernel/machine.js'
+import { changeFolderPrefix } from '../write-guard.js'
 import { AFFECTED_CHECK_COMMAND } from './run-check.js'
 import type { RunCheckFn } from './run-check.js'
 import { commitTaskSlice } from './slice-commit.js'
@@ -243,6 +244,10 @@ export async function runImplementWork(deps: ImplementDeps, input: ImplementInpu
     runDir: deps.runDir,
     round: Number(target.item.id),
     sidecarDir: deps.sidecarDir,
+    guard: {
+      allowedPrefix: changeFolderPrefix(input.changeName),
+      allowedExcept: ['openspec/changes/'],
+    },
   })
   if ((await runAffectedCheck(deps, io, target.item)) === 'red') return
   await commitTaskSlice({ execGit: deps.agent.execGit, cwd: deps.cwd, changeDir }, target.item)
