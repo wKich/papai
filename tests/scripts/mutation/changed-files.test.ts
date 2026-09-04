@@ -8,6 +8,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { isGateableImplFile } from '../../../.hooks/tdd/test-resolver.mjs'
 import { isBaselineMap } from '../../../scripts/mutation/baseline.js'
 import type { BaselineMap, PerFileScore } from '../../../scripts/mutation/baseline.js'
 import {
@@ -97,6 +98,22 @@ describe('selectChangedMutationTargets', () => {
     })
 
     expect(result).toEqual(['src/a.ts', 'src/m.ts', 'src/z.ts'])
+  })
+
+  // The mutation-gate scope widening to the coding-agent workspace: a diff whose only product
+  // file is under opencode-agent/src/ must select that file through the REAL gateable predicate
+  // (the one changed-files.ts itself imports), not pass as a zero-target run. Before the
+  // widening this exact case returned [] because the predicate rejected the path.
+  test('selects a workspace-only diff of opencode-agent/src product files via the real predicate', () => {
+    const deps = makeDeps('opencode-agent/src/orchestrator.ts\n', isGateableImplFile)
+
+    const result = selectChangedMutationTargets({
+      baseRef: 'HEAD~1',
+      projectRoot: '/repo',
+      deps,
+    })
+
+    expect(result).toEqual(['opencode-agent/src/orchestrator.ts'])
   })
 
   test('drops generated modules even when the gateable predicate accepts them', () => {
