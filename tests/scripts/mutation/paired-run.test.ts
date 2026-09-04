@@ -26,9 +26,7 @@ import type { MergedScore } from '../../../scripts/mutation/score-merger.js'
 
 const makeReport = (statuses: readonly string[]): StrykerReport => ({
   files: {
-    'src/x.ts': {
-      mutants: statuses.map((status, i) => ({ id: `m${i}`, status })),
-    },
+    'src/x.ts': { mutants: statuses.map((status, i) => ({ id: `m${i}`, status })) },
   },
 })
 
@@ -330,9 +328,7 @@ describe('pairedRun', () => {
       runStryker: mock(() => {
         const error = new Error('Command failed: stryker run')
         Object.defineProperties(error, {
-          stderr: {
-            value: new TextEncoder().encode('Stryker configuration failed'),
-          },
+          stderr: { value: new TextEncoder().encode('Stryker configuration failed') },
           stdout: { value: new TextEncoder().encode('initializing Stryker') },
         })
         throw error
@@ -477,9 +473,7 @@ describe('pairedRun', () => {
       runStryker,
       readReport: readStrykerReport,
       log: () => {},
-      buildMap: () => ({
-        'src/foo.ts': ['tests/integration/covers-foo.test.ts'],
-      }),
+      buildMap: () => ({ 'src/foo.ts': ['tests/integration/covers-foo.test.ts'] }),
     }
 
     await pairedRun({
@@ -764,11 +758,8 @@ describe('resolvePairedRunExitCode', () => {
 
 describe('resolvePairedRunCliUsageExitCode', () => {
   test('returns 2 for usage-error CLI parse results', () => {
-    expect(
-      resolvePairedRunCliUsageExitCode({
-        kind: 'usageError',
-        reason: 'threshold must be a finite number',
-      }),
-    ).toBe(2)
+    expect(resolvePairedRunCliUsageExitCode({ kind: 'usageError', reason: 'threshold must be a finite number' })).toBe(
+      2,
+    )
   })
 })

@@ -28,10 +28,7 @@ export const parsePairedRunCliArgs = (argv: readonly string[]): PairedRunCliArgs
   }
   const thresholdArgs = argv.filter((arg) => arg.startsWith('--threshold='))
   if (thresholdArgs.length > 1) {
-    return {
-      kind: 'usageError',
-      reason: 'threshold must be provided at most once',
-    }
+    return { kind: 'usageError', reason: 'threshold must be provided at most once' }
   }
   const thresholdArg = thresholdArgs[0]
   const thresholdText = thresholdArg === undefined ? undefined : thresholdArg.slice('--threshold='.length)

@@ -18,6 +18,14 @@ const config: Record<string, unknown> = (() => {
   return parsed
 })()
 
+// Array-ness and string entries are pinned at module scope (no-conditional-in-test):
+// the test bodies stay straight-line expects against a typed glob list.
+const mutateGlobs: readonly string[] = (() => {
+  const mutate = config['mutate']
+  if (!Array.isArray(mutate)) throw new Error('Expected stryker.config.json mutate to be an array')
+  return mutate.filter((entry): entry is string => typeof entry === 'string')
+})()
+
 describe('stryker.config.json', () => {
   test('keeps disableTypeChecks false so the sandbox leaves non-target source bytes untouched', () => {
     expect(config['disableTypeChecks']).toBe(false)
@@ -42,10 +50,8 @@ describe('stryker.config.json', () => {
     // tree-scoped `!**/index.ts` and `!**/constants.ts` exclusions — so the
     // globs (full-scope runs) and the gateable predicate (changed runs) keep
     // answering identically to "what product code is measured".
-    const mutate = config['mutate']
-    if (!Array.isArray(mutate)) throw new Error('Expected stryker.config.json mutate to be an array')
-    expect(mutate).toContain('opencode-agent/src/**/*.ts')
-    expect(mutate).toContain('!opencode-agent/src/**/index.ts')
-    expect(mutate).toContain('!opencode-agent/src/**/constants.ts')
+    expect(mutateGlobs).toContain('opencode-agent/src/**/*.ts')
+    expect(mutateGlobs).toContain('!opencode-agent/src/**/index.ts')
+    expect(mutateGlobs).toContain('!opencode-agent/src/**/constants.ts')
   })
 })
