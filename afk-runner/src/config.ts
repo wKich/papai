@@ -3,6 +3,7 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
+import { existsSync } from 'node:fs'
 import { mkdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
@@ -48,7 +49,7 @@ const REMOVED_KEY_POINTERS: Readonly<Record<string, string>> = {
 
 const FiveKeySchema = z.object({
   repoRoot: z.string().min(1),
-  workDir: z.string().min(1).default('.sdd-runner'),
+  workDir: z.string().min(1).default('.afk-runner'),
   model: z.string().min(1),
   budget: z.number().positive().nullable().default(5),
   deadline: z.number().positive().optional(),
@@ -58,6 +59,35 @@ const FiveKeySchema = z.object({
 export const RunnerConfigSchema = z.strictObject({
   ...FiveKeySchema.shape,
 })
+
+/** Compiled launch defaults — the ladder's bottom rung (D1). */
+export const DEFAULT_MODEL = 'opencode'
+export const DEFAULT_BUDGET = 5
+export const DEFAULT_WORK_DIR = '.afk-runner'
+
+/**
+ * The launch configuration ladder (D1-D5): a config file at
+ * `<repoRoot>/<DEFAULT_WORK_DIR>/config.json` is wholesale-authoritative when
+ * present (its five keys govern, `loadRunnerConfig` resolves and validates);
+ * only file absence falls to the `AFK_RUNNER_MODEL` environment entry, and
+ * unset entries fall to the compiled defaults.
+ */
+export async function resolveRunnerConfig(
+  repoRoot: string,
+  env: Record<string, string | undefined> = process.env,
+): Promise<RunnerConfig> {
+  const root = path.resolve(repoRoot)
+  const configPath = path.join(root, DEFAULT_WORK_DIR, 'config.json')
+  if (existsSync(configPath)) return loadRunnerConfig(configPath)
+  const workDir = path.join(root, DEFAULT_WORK_DIR)
+  await mkdir(workDir, { recursive: true })
+  return {
+    repoRoot: root,
+    workDir,
+    model: env['AFK_RUNNER_MODEL'] ?? DEFAULT_MODEL,
+    budget: DEFAULT_BUDGET,
+  }
+}
 
 export interface RunnerConfig {
   readonly repoRoot: string
