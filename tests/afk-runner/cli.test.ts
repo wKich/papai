@@ -113,12 +113,13 @@ describe('afk-runner cli', () => {
 describe('afk-runner cli launch resolution (the config ladder reaches every verb)', () => {
   const makeRoot = (): string => fs.mkdtempSync(path.join(os.tmpdir(), 'sdd-cli-resolution-'))
   const roots: string[] = []
+  const originalCwd = process.cwd()
   afterEach(() => {
     while (roots.length > 0) {
       const dir = roots.pop()
       if (dir !== undefined) fs.rmSync(dir, { recursive: true, force: true })
     }
-    process.chdir(import.meta.dir)
+    process.chdir(originalCwd)
   })
 
   it('a present config file is wholesale-authoritative for the verb — its workDir governs the roster', async () => {
@@ -147,7 +148,7 @@ describe('afk-runner cli launch resolution (the config ladder reaches every verb
     )
     process.chdir(root)
     await expect(cliMain(['runs'])).rejects.toThrow(/budgetUsd/u)
-    process.chdir(import.meta.dir)
+    process.chdir(originalCwd)
   })
 })
 
