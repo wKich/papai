@@ -294,4 +294,13 @@ use `bun test:mutate:file <path>` for focused work, `bun test:mutate:changed`
 for changed files, and `bun test:mutate` for the configured full mutate scope
 (see `scripts/mutation/README.md`). `test:mutate:changed` reuses scores recorded
 by an earlier run for files whose source, tests and toolchain all hash the same,
-so a repeat run is near-instant; `--no-score-cache` re-measures everything.
+so a repeat run is near-instant; `--no-score-cache` re-measures everything. The
+per-file floors cover exactly the gateable product roots — `src/`, `client/`,
+`plugins/`, `review-loop/src/`, `afk-runner/src/` and `opencode-agent/src/` (that
+workspace's `index.ts` barrel excluded) — selected by `isGateableImplFile`, the same
+predicate the write-hook TDD pipeline uses; `scripts/`, `mutation-improve/` and
+everything else outside those roots keep their suites but select zero mutation
+targets. The coding-agent workspace maps **flat**, not mirrored:
+`opencode-agent/src/phases/implement-steps.ts` is floored against
+`tests/opencode-agent/implement-steps.test.ts`, so a new `opencode-agent/src/**`
+source takes its test flat under `tests/opencode-agent/`.

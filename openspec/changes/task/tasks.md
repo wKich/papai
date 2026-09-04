@@ -43,7 +43,7 @@ master without its floors.
 
 - [x] 6.1 `docs/architecture/commands.md`: gateable-scope statement includes `opencode-agent/src/`. Verify: `grep -n "opencode-agent/src" docs/architecture/commands.md`
 - [x] 6.2 `scripts/mutation/README.md`: ungated list, "zero targets passes" verdict wording, and the scoped seed recipe (D4 command + chunking note). Verify: `grep -n "opencode-agent" scripts/mutation/README.md && grep -n "zero targets" scripts/mutation/README.md`
-- [ ] 6.3 Root `CLAUDE.md` (with `AGENTS.md` as its symlink) and `tests/CLAUDE.md` Testing Notes updated. Verify: `grep -n "opencode-agent/src" CLAUDE.md tests/CLAUDE.md`
+- [x] 6.3 Root `CLAUDE.md` (with `AGENTS.md` as its symlink) and `tests/CLAUDE.md` Testing Notes updated. Verify: `grep -n "opencode-agent/src" CLAUDE.md tests/CLAUDE.md`
 - [ ] 6.4 `opencode-agent/ROADMAP.md` updated with the mutation-gate widening. Verify: `grep -in "mutation" opencode-agent/ROADMAP.md`
 - [ ] 6.5 Retire the S6-5/S6-7 markers in `opencode-agent/docs/remaining-findings-evaluation.md`. Verify: `! grep -n "S6-5\|S6-7" opencode-agent/docs/remaining-findings-evaluation.md`
 - [ ] 6.6 (Hand re-target of 1.1 after the kill-drill exhausted its attempts — the operator's designed escape at the escalation gate.) Pin the three new `stryker.config.json` lines red-first in `tests/scripts/mutation/stryker-config.test.ts`: `opencode-agent/src/**/*.ts`, `!opencode-agent/src/**/index.ts`, `!opencode-agent/src/**/constants.ts`. Verify: `bun test tests/scripts/mutation/stryker-config.test.ts` red before the lines land, green after
