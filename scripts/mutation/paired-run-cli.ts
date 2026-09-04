@@ -10,6 +10,7 @@ export type PairedRunCliArgs =
       readonly kind: 'ok'
       readonly sourceFiles: readonly string[]
       readonly threshold: number
+      readonly updateBaseline: boolean
       readonly verbose: boolean
     }
   | { readonly kind: 'usageError'; readonly reason: string }
@@ -18,13 +19,19 @@ const THRESHOLD_DECIMAL_PATTERN = /^(0(?:\.\d+)?|1(?:\.0+)?)$/u
 const THRESHOLD_RANGE_ERROR = 'threshold must be a decimal number between 0 and 1'
 
 export const parsePairedRunCliArgs = (argv: readonly string[]): PairedRunCliArgs => {
-  const unknownArg = argv.find((arg) => arg.startsWith('-') && !arg.startsWith('--threshold=') && arg !== '--verbose')
+  const unknownArg = argv.find(
+    (arg) =>
+      arg.startsWith('-') && !arg.startsWith('--threshold=') && arg !== '--verbose' && arg !== '--update-baseline',
+  )
   if (unknownArg !== undefined) {
     return { kind: 'usageError', reason: `unknown argument ${unknownArg}` }
   }
   const thresholdArgs = argv.filter((arg) => arg.startsWith('--threshold='))
   if (thresholdArgs.length > 1) {
-    return { kind: 'usageError', reason: 'threshold must be provided at most once' }
+    return {
+      kind: 'usageError',
+      reason: 'threshold must be provided at most once',
+    }
   }
   const thresholdArg = thresholdArgs[0]
   const thresholdText = thresholdArg === undefined ? undefined : thresholdArg.slice('--threshold='.length)
@@ -41,8 +48,11 @@ export const parsePairedRunCliArgs = (argv: readonly string[]): PairedRunCliArgs
   const verbose = argv.includes('--verbose')
   return {
     kind: 'ok',
-    sourceFiles: argv.filter((arg) => !arg.startsWith('--threshold=') && arg !== '--verbose'),
+    sourceFiles: argv.filter(
+      (arg) => !arg.startsWith('--threshold=') && arg !== '--verbose' && arg !== '--update-baseline',
+    ),
     threshold,
+    updateBaseline: argv.includes('--update-baseline'),
     verbose,
   }
 }
