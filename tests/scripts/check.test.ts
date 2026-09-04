@@ -18,6 +18,9 @@ import {
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
+import { isGateableImplFile } from '../../.hooks/tdd/test-resolver.mjs'
+import { assertEach, type Row } from '../utils/grouped-assertions.js'
+
 const REPO_ROOT = path.resolve(import.meta.dir, '../..')
 const CHECK_SCRIPT_PATH = path.join(REPO_ROOT, 'scripts/check.sh')
 type CommandResult = Readonly<{
@@ -702,5 +705,133 @@ describe('check surface composition (check.sh vs check:verbose)', () => {
     // The staged array is the load-bearing exception and must keep typecheck.
     expect(staged).toContain('lint')
     expect(staged).toContain('typecheck')
+  })
+})
+
+describe('staged enumeration agreement (check.sh arms vs the mutation gate)', () => {
+  // openspec/changes/task D7: the staged shell check's two workspace
+  // enumerations (is_license_header_file, is_oxlint_scoped_file) and the
+  // mutation gate's gateable predicate must not drift apart about which trees
+  // ship product code. Both sides derive live — gateable roots from the widened
+  // `isGateableImplFile` (the established seam, also imported by
+  // scripts/mutation/changed-files.ts), routed roots from the path-prefix arms
+  // parsed out of check.sh — so a seventh gateable root added without a matching
+  // shell arm fails here instead of diverging silently. A static list of today's
+  // routed trees would stay green through exactly that divergence.
+  const RESOLVER_PATH = path.join(REPO_ROOT, '.hooks/tdd/test-resolver.mjs')
+
+  // plugins/ and afk-runner/src/ are gateable but unrouted today: no arm matches
+  // them, so staged files there fall to `*) return 1`. A pre-existing divergence
+  // recorded, not repaired (change non-goals forbid a check.sh behavioral
+  // change). Keyed — each entry asserts gateable and unrouted, so a tree that
+  // gains a shell arm or loses gateability fails here until its entry is
+  // retired in the same change that edits the shell arms.
+  const UNROUTED_GATEABLE_ROOTS: readonly string[] = ['plugins/', 'afk-runner/src/']
+
+  const readGateableRoots = (): readonly string[] => {
+    const fn = readFileSync(RESOLVER_PATH, 'utf8').match(/export function isGateableImplFile\([\s\S]*?\n\}/u)
+    if (fn === null) {
+      throw new Error('isGateableImplFile body not found in .hooks/tdd/test-resolver.mjs')
+    }
+    // Classify through the live predicate, not the parsed text: the pin is about
+    // what the predicate answers; the parse only enumerates candidate roots.
+    const roots = [...(fn[0] ?? '').matchAll(/rel\.startsWith\('([^']+)'\)/gu)]
+      .map((match) => match[1])
+      .filter((prefix): prefix is string => typeof prefix === 'string' && prefix.endsWith('/'))
+      .filter((root) => isGateableImplFile(`${root}agreement-probe.ts`, REPO_ROOT))
+    if (roots.length === 0) {
+      throw new Error('no gateable roots derived from isGateableImplFile — parse drifted from the predicate source')
+    }
+    return roots
+  }
+
+  const readShellEnumerationRoots = (fnName: string): readonly string[] => {
+    const fn = readFileSync(CHECK_SCRIPT_PATH, 'utf8').match(
+      new RegExp(`${fnName}\\(\\) \\{\\n([\\s\\S]*?)\\n\\}`, 'u'),
+    )
+    if (fn === null) {
+      throw new Error(`${fnName} body not found in scripts/check.sh`)
+    }
+    // Path-prefix arms only: `<path>/*` case patterns. `*.md`, `docs/*.md` and
+    // the bare `drizzle.config.ts` file arm are not root routings; the
+    // grep-sample fixture arm routes a non-gateable path and is inert here.
+    const roots = [...(fn[1] ?? '').matchAll(/([A-Za-z0-9_./-]+\/\*)(?=[|\s)])/gu)]
+      .map((match) => match[1])
+      .filter((arm): arm is string => typeof arm === 'string')
+      .map((arm) => arm.slice(0, -1))
+    if (roots.length === 0) {
+      throw new Error(`no path-prefix arms parsed from ${fnName} — parse drifted from check.sh`)
+    }
+    return roots
+  }
+
+  const routedBy = (root: string, roots: readonly string[]): boolean => roots.some((arm) => root.startsWith(arm))
+
+  type GateableRootRow = Row<{
+    readonly root: string
+    readonly meetsLicenseAgreement: boolean
+    readonly meetsOxlintAgreement: boolean
+  }>
+
+  // Row classification lives outside the test bodies (no-conditional-in-test):
+  // a gateable root agrees when it is routed by an enumeration or keyed as an
+  // exception; the row keeps the raw flags so a failure prints both sides.
+  const classifyGateableRoots = (
+    gateableRoots: readonly string[],
+    licenseRoots: readonly string[],
+    oxlintRoots: readonly string[],
+  ): readonly GateableRootRow[] =>
+    gateableRoots.map((root) => {
+      const excepted = UNROUTED_GATEABLE_ROOTS.includes(root)
+      return {
+        label: root,
+        root,
+        meetsLicenseAgreement: excepted || routedBy(root, licenseRoots),
+        meetsOxlintAgreement: excepted || routedBy(root, oxlintRoots),
+      }
+    })
+
+  test('every gateable root is routed by both staged enumerations or recorded as a keyed exception', async () => {
+    const gateableRoots = readGateableRoots()
+    const licenseRoots = readShellEnumerationRoots('is_license_header_file')
+    const oxlintRoots = readShellEnumerationRoots('is_oxlint_scoped_file')
+
+    await assertEach(classifyGateableRoots(gateableRoots, licenseRoots, oxlintRoots), (row) => {
+      expect(
+        row.meetsLicenseAgreement,
+        `${row.root}: not routed by is_license_header_file and not keyed in UNROUTED_GATEABLE_ROOTS`,
+      ).toBe(true)
+      expect(
+        row.meetsOxlintAgreement,
+        `${row.root}: not routed by is_oxlint_scoped_file and not keyed in UNROUTED_GATEABLE_ROOTS`,
+      ).toBe(true)
+    })
+  })
+
+  test('each keyed exception is still gateable and still unrouted by both enumerations', async () => {
+    const gateableRoots = readGateableRoots()
+    const licenseRoots = readShellEnumerationRoots('is_license_header_file')
+    const oxlintRoots = readShellEnumerationRoots('is_oxlint_scoped_file')
+
+    await assertEach(
+      UNROUTED_GATEABLE_ROOTS.map((root) => ({
+        label: root,
+        root,
+        gateable: gateableRoots.includes(root),
+        routedByLicense: routedBy(root, licenseRoots),
+        routedByOxlint: routedBy(root, oxlintRoots),
+      })),
+      (row) => {
+        expect(row.gateable, `${row.root}: exception recorded but no longer gateable — retire it`).toBe(true)
+        expect(
+          row.routedByLicense,
+          `${row.root}: gained an is_license_header_file arm — retire its exception in the same change`,
+        ).toBe(false)
+        expect(
+          row.routedByOxlint,
+          `${row.root}: gained an is_oxlint_scoped_file arm — retire its exception in the same change`,
+        ).toBe(false)
+      },
+    )
   })
 })
