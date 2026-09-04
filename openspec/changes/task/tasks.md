@@ -31,7 +31,7 @@ master without its floors.
 ## 4. Shell-check agreement pin (D7 — no `check.sh` edit)
 
 - [x] 4.1 Write the pin in `tests/scripts/check.test.ts` deriving both sides live: enumerate gateable roots via the widened `isGateableImplFile`, extract the path-prefix arms of `is_license_header_file`/`is_oxlint_scoped_file` from `scripts/check.sh`, and assert every gateable root is routed by both staged enumerations or recorded as a keyed exception (`plugins/`, `afk-runner/src/`). Verify: `bun test tests/scripts/check.test.ts` green
-- [ ] 4.2 Prove the pin bites: with a temporary synthetic seventh root added to the predicate (not committed), the pin fails without a matching shell arm. Verify: temporary red observed, then reverted
+- [x] 4.2 Prove the pin bites: with a temporary synthetic seventh root added to the predicate (not committed), the pin fails without a matching shell arm. Verify: temporary red observed, then reverted
 
 ## 5. Seed floors + single landing commit (D5/D8)
 
