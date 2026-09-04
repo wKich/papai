@@ -35,4 +35,17 @@ describe('stryker.config.json', () => {
     expect(config['tsconfigFile']).toBe('tsconfig.stryker-rewrite-disabled.json')
     expect(existsSync(path.join(path.dirname(CONFIG_PATH), 'tsconfig.stryker-rewrite-disabled.json'))).toBe(false)
   })
+
+  test('widens the mutate scope to the coding-agent workspace with the per-tree exclusion pattern', () => {
+    // D1 of the mutation-gate-widening change: the workspace joins the mutate
+    // globs with the same shape as every other gated tree — positive glob plus
+    // tree-scoped `!**/index.ts` and `!**/constants.ts` exclusions — so the
+    // globs (full-scope runs) and the gateable predicate (changed runs) keep
+    // answering identically to "what product code is measured".
+    const mutate = config['mutate']
+    if (!Array.isArray(mutate)) throw new Error('Expected stryker.config.json mutate to be an array')
+    expect(mutate).toContain('opencode-agent/src/**/*.ts')
+    expect(mutate).toContain('!opencode-agent/src/**/index.ts')
+    expect(mutate).toContain('!opencode-agent/src/**/constants.ts')
+  })
 })
