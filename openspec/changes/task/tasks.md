@@ -19,7 +19,7 @@ master without its floors.
 - [x] 2.4 Implement BOTH `.hooks/tdd/test-resolver.mjs` halves in one item — the `opencode-agent/src/` sixth root in `isGateableImplFile` AND the flat-mapping branches for `suggestTestPath`/`findTestFile`/`resolveImplPath` (2.4+2.5 merged: one test file carries both red families, so both must land green together). Verify: `bun run test:hooks` green on the 2.1 and 2.2 cases
 - [x] 2.5 (folded into 2.4 — the shared test file makes the halves one green-per-item unit)
 - [x] 2.6 Write the red test in `tests/scripts/mutation/coverage-map.test.ts` (`samePackageTestDir` → `tests/opencode-agent` for every workspace source, branch ahead of the `src/` fallback, via `_samePackageTestDirForTest`) AND implement the `tests/opencode-agent` branch in `scripts/mutation/coverage-map.ts`'s `samePackageTestDir` (2.3+2.6 merged — red observed, then green in one item). Verify: `bun test tests/scripts/mutation/coverage-map.test.ts` green
-- [ ] 2.7 Add the direct `git-commit.js` import to `tests/opencode-agent/git-commit.test.ts` (the one measured `verify-test-import` block, D3). Verify: no-op re-save of that test file passes the `verify-test-import` hook check, and `bun test tests/opencode-agent/git-commit.test.ts` green
+- [x] 2.7 Add the direct `git-commit.js` import to `tests/opencode-agent/git-commit.test.ts` (the one measured `verify-test-import` block, D3). Verify: no-op re-save of that test file passes the `verify-test-import` hook check, and `bun test tests/opencode-agent/git-commit.test.ts` green
 
 ## 3. Paired-run `--update-baseline` seed path (D4)
 
