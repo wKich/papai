@@ -26,7 +26,7 @@ master without its floors.
 - [x] 3.1 (folded into 3.3 — test+impl one item)
 - [x] 3.2 (folded into 3.4 — test+impl one item)
 - [x] 3.3 Write the red tests in `tests/scripts/mutation/paired-run-cli.test.ts` (`--update-baseline` parses alongside `--threshold=`) AND parse the flag in `scripts/mutation/paired-run-cli.ts` beside `--threshold=` (3.1+3.3 merged — red observed, then green). Verify: `bun test tests/scripts/mutation/paired-run-cli.test.ts` green
-- [ ] 3.4 Write the red tests in `tests/scripts/mutation/paired-run.test.ts` (an `--update-baseline` run routes through `runUpdateBaseline` in `paired-run.ts`'s `main`, not `resolvePairedRunExitCode`; reuse disabled; exit-0 seed semantics; empty-selection exit-2 usage guard preserved) AND route the seed in `main` through `runUpdateBaseline` (3.2+3.4 merged — red observed, then green). Verify: `bun test tests/scripts/mutation/paired-run.test.ts` green
+- [x] 3.4 Write the red tests in `tests/scripts/mutation/paired-run.test.ts` (an `--update-baseline` run routes through `runUpdateBaseline` in `paired-run.ts`'s `main`, not `resolvePairedRunExitCode`; reuse disabled; exit-0 seed semantics; empty-selection exit-2 usage guard preserved) AND route the seed in `main` through `runUpdateBaseline` (3.2+3.4 merged — red observed, then green). Verify: `bun test tests/scripts/mutation/paired-run.test.ts` green
 
 ## 4. Shell-check agreement pin (D7 — no `check.sh` edit)
 
