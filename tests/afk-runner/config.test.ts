@@ -38,6 +38,11 @@ afterEach(() => {
   }
 })
 
+/** Hoisted conditional (no-conditional-in-test): rows without mkdirDir assert nothing. */
+function expectMkdirDirCreated(mkdirDir: string | undefined): void {
+  if (mkdirDir !== undefined) expect(fs.existsSync(mkdirDir)).toBe(true)
+}
+
 function writeConfig(dir: string, config: unknown): string {
   const configPath = path.join(dir, 'config.json')
   fs.writeFileSync(configPath, JSON.stringify(config))
@@ -145,7 +150,7 @@ describe('resolveRunnerConfig (config ladder)', () => {
       const resolved = await resolveRunnerConfig(row.root, row.env)
       expect(resolved).toEqual(row.expected)
       expect(resolved.deadline).toBe(row.expected.deadline)
-      if (row.mkdirDir !== undefined) expect(fs.existsSync(row.mkdirDir)).toBe(true)
+      expectMkdirDirCreated(row.mkdirDir)
     })
   })
 })
