@@ -136,8 +136,12 @@ function reArmOrPark(
   reArmed: boolean,
 ): null {
   if (reArmed) {
+    // The pending record is per-gate-once: it landed at the re-arm tick (or at
+    // this waiter's first claiming tick); re-emitting it per waiter poll
+    // floods the log (the Run U live finding — one `auto_decision{none,
+    // pending}` per second for as long as the gate sits unattended).
     ports.stdout?.('auto-deadline: no safe policy branch — gate stays pending')
-    emitPendingExpiryDecision(ports, version)
+    if (!pendingRecordedFor(ports, version)) emitPendingExpiryDecision(ports, version)
     return null
   }
   const reArmMinutes = ports.autonomy?.deadlineMinutes ?? 10
@@ -154,6 +158,13 @@ function reArmOrPark(
   ports.stdout?.(`auto-deadline: no safe policy branch — re-armed once at ${nextDeadline}`)
   emitPendingExpiryDecision(ports, version)
   return null
+}
+
+/** Has this gate version already recorded a waiter pending record? (Per-gate-once emission.) */
+function pendingRecordedFor(ports: ExpiryPorts, version: number): boolean {
+  return readEvents(ports.logPath).some(
+    (event) => event.type === 'auto_decision' && event.decision === 'pending' && event.gateVersion === version,
+  )
 }
 
 /** The waiter's pending record: rule none, decision pending, version-keyed digest. */

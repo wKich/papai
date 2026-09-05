@@ -62,7 +62,7 @@ describe('commitTaskSlice — the runner-issued slice commit (U3 D4)', () => {
     )
     expect(h.gitCalls).toEqual([
       ['add', '-A'],
-      ['commit', '-m', '1.2 second item'],
+      ['commit', '--no-verify', '-m', '1.2 second item'],
     ])
   })
 
@@ -74,7 +74,7 @@ describe('commitTaskSlice — the runner-issued slice commit (U3 D4)', () => {
     expect(fs.readFileSync(h.tasksMdPath, 'utf8')).toBe(checked)
     expect(h.gitCalls).toEqual([
       ['add', '-A'],
-      ['commit', '-m', '1.2 second item'],
+      ['commit', '--no-verify', '-m', '1.2 second item'],
     ])
   })
 

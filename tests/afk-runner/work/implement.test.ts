@@ -500,7 +500,7 @@ describe('attempt bound, resume skip-forward, and fix-mode re-target (D4)', () =
     expect(h.checkCalls).toEqual([['bun', 'run', 'test:affected']])
     expect(commitCalls(h.gitCalls)).toEqual([
       ['add', '-A'],
-      ['commit', '-m', '1.1 first item'],
+      ['commit', '--no-verify', '-m', '1.1 first item'],
     ])
     expect(fs.readFileSync(h.tasksMdPath, 'utf8')).toContain('- [x] 1.1 first item')
   })
@@ -521,7 +521,7 @@ describe('write guard widening at the implementer seam (U3 D6)', () => {
     expect(taskTokens(h.appended)).toEqual(['started:1', 'done:1'])
     expect(commitCalls(h.gitCalls)).toEqual([
       ['add', '-A'],
-      ['commit', '-m', '1.1 first item'],
+      ['commit', '--no-verify', '-m', '1.1 first item'],
     ])
   })
 

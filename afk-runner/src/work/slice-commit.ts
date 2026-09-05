@@ -22,9 +22,14 @@ export interface SliceCommitDeps {
  * claims work the tree lacks. The commit inherits the process environment,
  * so a GIT_AUTHOR/GIT_COMMITTER identity applied by the launching
  * environment (the review-loop `git-identity.ts` contract) reaches it
- * unchanged. An already-checked line (fix-mode re-work) commits without a
- * rewrite; a checkbox line that moved out from under the item refuses
- * loudly rather than checking the wrong box.
+ * unchanged. The commit bypasses repo hooks (`--no-verify`): the verify
+ * boundary is the walk's quality gate, while a per-commit pre-commit hook
+ * re-checks the whole accumulating staged set — one red item poisoning
+ * every later slice commit — and EXEC_GIT's contract carries no exit code,
+ * so a hook rejection fails silently with the item already marked done
+ * (the Run P live finding). An already-checked line (fix-mode re-work)
+ * commits without a rewrite; a checkbox line that moved out from under the
+ * item refuses loudly rather than checking the wrong box.
  */
 export async function commitTaskSlice(deps: SliceCommitDeps, item: TaskItem): Promise<void> {
   const tasksPath = path.join(deps.changeDir, 'tasks.md')
@@ -37,11 +42,11 @@ export async function commitTaskSlice(deps: SliceCommitDeps, item: TaskItem): Pr
   }
   if (!/^\s*- \[ \]/u.test(target)) {
     await deps.execGit(deps.cwd, ['add', '-A'])
-    await deps.execGit(deps.cwd, ['commit', '-m', item.text])
+    await deps.execGit(deps.cwd, ['commit', '--no-verify', '-m', item.text])
     return
   }
   lines[lineIndex] = target.replace(/^(\s*)- \[ \]/u, '$1- [x]')
   await writeFile(tasksPath, lines.join('\n'), 'utf8')
   await deps.execGit(deps.cwd, ['add', '-A'])
-  await deps.execGit(deps.cwd, ['commit', '-m', item.text])
+  await deps.execGit(deps.cwd, ['commit', '--no-verify', '-m', item.text])
 }
