@@ -145,7 +145,7 @@ const scriptedGit = (status: string, numstat: string): { calls: string[][]; git:
     if (sub === 'add') return Promise.resolve(ok(''))
     if (sub === 'diff' && rest.includes('--numstat')) return Promise.resolve(ok(numstat))
     if (sub === 'diff') return Promise.resolve(ok(''))
-    if (sub === '-c') return Promise.resolve(ok(''))
+    if (sub === 'commit') return Promise.resolve(ok(''))
     return Promise.reject(new Error(`unexpected git call: ${argv.join(' ')}`))
   }
   return { calls, git }
@@ -161,7 +161,7 @@ describe('commitAll · the direct commit path this file is named after', () => {
     expect(calls.map((argv) => argv.join(' '))).toEqual(['status --porcelain'])
   })
 
-  it('stages, guards and commits as one: identity stamped from the author, message carried', async () => {
+  it('stages, guards and commits as one: message carried, identity riding the environment', async () => {
     const { calls, git } = scriptedGit(' M src/a.ts\n', '3\t1\tsrc/a.ts')
 
     const outcome = await commitAll(git, options, COMMIT_MESSAGE)
@@ -172,7 +172,7 @@ describe('commitAll · the direct commit path this file is named after', () => {
       'add --all',
       'diff --cached --numstat',
       'diff --cached',
-      '-c user.name=agent -c user.email=agent@example.com commit -m chore(openspec): scaffold add-retry-helper',
+      'commit -m chore(openspec): scaffold add-retry-helper',
     ])
   })
 })
