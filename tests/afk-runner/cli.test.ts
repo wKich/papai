@@ -110,6 +110,48 @@ describe('afk-runner cli', () => {
   })
 })
 
+describe('afk-runner cli launch resolution (the config ladder reaches every verb)', () => {
+  const makeRoot = (): string => fs.mkdtempSync(path.join(os.tmpdir(), 'sdd-cli-resolution-'))
+  const roots: string[] = []
+  const originalCwd = process.cwd()
+  afterEach(() => {
+    while (roots.length > 0) {
+      const dir = roots.pop()
+      if (dir !== undefined) fs.rmSync(dir, { recursive: true, force: true })
+    }
+    process.chdir(originalCwd)
+  })
+
+  it('a present config file is wholesale-authoritative for the verb — its workDir governs the roster', async () => {
+    const root = makeRoot()
+    roots.push(root)
+    fs.mkdirSync(path.join(root, '.afk-runner'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'bookkeeping'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, '.afk-runner', 'config.json'),
+      JSON.stringify({ repoRoot: root, workDir: 'bookkeeping', model: 'file-model', budget: null }),
+    )
+    const previous = process.cwd()
+    process.chdir(root)
+    const out = await cliMain(['runs'])
+    process.chdir(previous)
+    expect(out).toContain('totals: 0 runs')
+  })
+
+  it('an invalid config file fails the verb before any run work, naming the offending key', async () => {
+    const root = makeRoot()
+    roots.push(root)
+    fs.mkdirSync(path.join(root, '.afk-runner'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, '.afk-runner', 'config.json'),
+      JSON.stringify({ repoRoot: root, model: 'm', budgetUsd: 3 }),
+    )
+    process.chdir(root)
+    await expect(cliMain(['runs'])).rejects.toThrow(/budgetUsd/u)
+    process.chdir(originalCwd)
+  })
+})
+
 describe('afk-runner cli commands (fake agents)', () => {
   it('start drives a fresh think-half run to park and prints the halt', async () => {
     const pipeline = makeFakePipeline()

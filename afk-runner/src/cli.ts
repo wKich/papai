@@ -17,6 +17,7 @@ import { readOnlyGit } from './analyze-io.js'
 import { renderCorpusJson, renderCorpusReport } from './analyze-report.js'
 import { groundTruthJoin } from './analyze-truth.js'
 import type { ExecGitFn, RunnerConfig } from './config.js'
+import { resolveRunnerConfig } from './config.js'
 import { pipelineMachine } from './graph/pipeline.js'
 import { foldLog } from './kernel/fold.js'
 import { foldRun, logPathOf } from './memo-project.js'
@@ -100,14 +101,8 @@ export interface CliDeps extends RunDeps {
   readonly spawn: SpawnFn
 }
 
-/** Prototype CLI config: repo root is the cwd, the work dir sits beside it, model from the environment. */
-export function defaultCliDeps(cwd: string = process.cwd()): CliDeps {
-  const config: RunnerConfig = {
-    repoRoot: cwd,
-    workDir: path.join(cwd, '.afk-runner'),
-    model: process.env['AFK_RUNNER_MODEL'] ?? 'opencode',
-    budget: 5,
-  }
+/** Pure sync deps assembler over a resolved config (D7): the verbs own resolution, never the seam. */
+export function defaultCliDeps(config: RunnerConfig): CliDeps {
   return {
     config,
     spawn: typedSpawn(realSpawn),
@@ -236,7 +231,7 @@ function printUsage(): void {
   )
 }
 
-export function cliMain(argv: readonly string[]): Promise<string | undefined> {
+export async function cliMain(argv: readonly string[]): Promise<string | undefined> {
   const [command, ...rest] = argv
   if (
     command === 'start' ||
@@ -247,7 +242,7 @@ export function cliMain(argv: readonly string[]): Promise<string | undefined> {
     command === 'runs' ||
     command === 'analyze'
   ) {
-    const deps = defaultCliDeps()
+    const deps = defaultCliDeps(await resolveRunnerConfig(process.cwd()))
     if (command === 'start') return runStartCommand(deps, rest)
     if (command === 'report') return runReportCommand(deps, rest)
     if (command === 'runs') return runRunsCommand(deps)

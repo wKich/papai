@@ -16,9 +16,11 @@ import {
   loadRunnerConfig,
   modelFor,
   PLAN_REPLAN_PASSES,
+  type RunnerConfig,
   RunnerConfigSchema,
   slugify,
 } from '../../afk-runner/src/config.js'
+import { assertEach, type Row } from '../utils/grouped-assertions.js'
 
 const tmpDirs: string[] = []
 
@@ -34,6 +36,11 @@ afterEach(() => {
     if (dir !== undefined) fs.rmSync(dir, { recursive: true, force: true })
   }
 })
+
+/** Hoisted conditional (no-conditional-in-test): rows without mkdirDir assert nothing. */
+function expectMkdirDirCreated(mkdirDir: string | undefined): void {
+  if (mkdirDir !== undefined) expect(fs.existsSync(mkdirDir)).toBe(true)
+}
 
 function writeConfig(dir: string, config: unknown): string {
   const configPath = path.join(dir, 'config.json')
@@ -63,7 +70,7 @@ describe('loadRunnerConfig', () => {
     const dir = makeDir()
     const configPath = writeConfig(dir, { repoRoot: dir, model: 'test-model' })
     const config = await loadRunnerConfig(configPath)
-    expect(config.workDir).toBe(path.join(dir, '.sdd-runner'))
+    expect(config.workDir).toBe(path.join(dir, '.afk-runner'))
     expect(config.budget).toBe(5)
     expect(config.deadline).toBeUndefined()
   })
@@ -77,6 +84,74 @@ describe('loadRunnerConfig', () => {
   it('rejects a missing config file naming the path', async () => {
     const dir = makeDir()
     await expect(loadRunnerConfig(path.join(dir, 'absent.json'))).rejects.toThrow(/absent\.json/u)
+  })
+})
+
+describe('resolveRunnerConfig (config ladder)', () => {
+  type RungRow = Row<{
+    readonly env: Record<string, string | undefined>
+    readonly expected: RunnerConfig
+    readonly mkdirDir?: string
+    readonly root: string
+  }>
+
+  it('one ladder: file wholesale-authoritative → env entry → compiled defaults', async () => {
+    const { resolveRunnerConfig } = await import('../../afk-runner/src/config.js')
+    const fileRoot = makeDir()
+    const declaredRoot = makeDir()
+    const emptyRoot = makeDir()
+    fs.mkdirSync(path.join(fileRoot, '.afk-runner'))
+    writeConfig(path.join(fileRoot, '.afk-runner'), {
+      repoRoot: declaredRoot,
+      workDir: 'bookkeeping',
+      model: 'file-model',
+      budget: 25,
+      deadline: 30,
+    })
+    const rows: readonly RungRow[] = [
+      {
+        label:
+          'present file at <repoRoot>/.afk-runner/config.json is wholesale-authoritative — its five keys govern, env never consulted',
+        root: fileRoot,
+        env: { AFK_RUNNER_MODEL: 'env-model' },
+        expected: {
+          repoRoot: declaredRoot,
+          workDir: path.join(declaredRoot, 'bookkeeping'),
+          model: 'file-model',
+          budget: 25,
+          deadline: 30,
+        },
+        mkdirDir: path.join(declaredRoot, 'bookkeeping'),
+      },
+      {
+        label: 'absent file — env entry model, resolved default workDir, budget 5, no deadline',
+        root: emptyRoot,
+        env: { AFK_RUNNER_MODEL: 'env-model' },
+        expected: {
+          repoRoot: emptyRoot,
+          workDir: path.resolve(emptyRoot, '.afk-runner'),
+          model: 'env-model',
+          budget: 5,
+        },
+      },
+      {
+        label: 'absent file + unset entry — compiled defaults for everything',
+        root: emptyRoot,
+        env: {},
+        expected: {
+          repoRoot: emptyRoot,
+          workDir: path.resolve(emptyRoot, '.afk-runner'),
+          model: 'opencode',
+          budget: 5,
+        },
+      },
+    ]
+    await assertEach(rows, async (row) => {
+      const resolved = await resolveRunnerConfig(row.root, row.env)
+      expect(resolved).toEqual(row.expected)
+      expect(resolved.deadline).toBe(row.expected.deadline)
+      expectMkdirDirCreated(row.mkdirDir)
+    })
   })
 })
 
