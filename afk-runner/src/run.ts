@@ -12,6 +12,7 @@ import type { ExecGitFn, RunnerConfig } from './config.js'
 import { drive } from './drive/loop.js'
 import type { DriveResult, ParkedReason, StopSeam } from './drive/loop.js'
 import { parkedReasonOf } from './drive/resume.js'
+import { appendEvent } from './events.js'
 import type { DepthProfile } from './events.js'
 import { workForOf } from './graph/pipeline-work.js'
 import { pipelineMachine } from './graph/pipeline.js'
@@ -22,6 +23,7 @@ import { escalationPresenterOf } from './run-recovery.js'
 import { changeNameOf, parkLine, waitSettledGates } from './run-resume.js'
 import { createRunState } from './run-state.js'
 import { createStopMarkerSeam, removeHolder, writeHolder } from './stop-controller.js'
+import type { RunCheckFn } from './work/run-check.js'
 
 export interface RunDeps {
   readonly config: RunnerConfig
@@ -40,6 +42,12 @@ export interface RunDeps {
    * embedders) the park returns immediately as before.
    */
   readonly gateWait?: { readonly tick: () => Promise<void> }
+  /**
+   * Command runner for the execution-half checks (U3): the per-task affected
+   * check and the verify boundary. Absent means the work registry's Bun
+   * default; tests inject a scripted seam.
+   */
+  readonly runCheck?: RunCheckFn
 }
 
 export interface RunHalt {
@@ -53,6 +61,8 @@ export interface StartOptions {
   readonly taskText?: string
   readonly changeName?: string
   readonly depthOverride?: DepthProfile
+  /** U3 D1: append the armed fact event before any stage work. */
+  readonly execute?: boolean
 }
 
 function nowOf(deps: RunDeps): Date {
@@ -69,7 +79,7 @@ async function driveRun(
   const runDir = path.join(seed.workDir, 'runs', seed.runId)
   const logPath = logPathOf(runDir)
   const stop = deps.stop ?? createStopMarkerSeam(runDir)
-  const workFor = workForOf(deps, input)
+  const workFor = workForOf(deps, input, runDir)
   const escalation = escalationPresenterOf(deps, input, seed.runId)
   writeHolder(runDir)
   try {
@@ -109,6 +119,11 @@ export async function startRun(deps: RunDeps, options: StartOptions): Promise<Ru
     now,
   )
   await writeFile(path.join(state.runDir, 'task.md'), taskText, 'utf8')
+  if (options.execute === true) {
+    // U3 D1: the armed fact lands before any stage work — the fold's only
+    // source of execution-armedness, so a crashed run re-derives it.
+    appendEvent(logPathOf(state.runDir), { altitude: 'L2', type: 'execution', action: 'armed' })
+  }
   return driveRun(deps, state, { taskText, changeName, depthOverride: options.depthOverride })
 }
 
@@ -125,7 +140,7 @@ export async function statusRun(deps: RunDeps, runId: string): Promise<RunStatus
   const folded = foldRun(logPathOf(runDir))
   const changeName = await changeNameOf(deps, runId, runDir)
   const taskText = await readFile(path.join(runDir, 'task.md'), 'utf8')
-  const workFor = workForOf(deps, { taskText, changeName })
+  const workFor = workForOf(deps, { taskText, changeName }, runDir)
   return {
     runId,
     position: folded.position,

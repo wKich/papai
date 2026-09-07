@@ -14,6 +14,7 @@ import { foldEvents } from '../../afk-runner/src/kernel/fold.js'
 import { replayEvents } from '../../afk-runner/src/legacy-fold.js'
 import { writeRunMemo } from '../../afk-runner/src/memo-project.js'
 import { listPendingGates } from '../../afk-runner/src/run-index.js'
+import type { PendingGateEntry } from '../../afk-runner/src/run-index.js'
 import {
   ROUND_CAPS,
   PersistedRunStateSchema,
@@ -249,6 +250,38 @@ describe('memo shape (C5 D7 — parity complete)', () => {
     expect(PersistedRunStateSchema.safeParse({ ...base, plan: null }).success).toBe(true)
   })
 
+  it('accepts a release-mode gate record and the execution stage ids (U3 — additive widening)', () => {
+    const base: Record<string, unknown> = { ...createSeeded('/w') }
+    expect(PersistedRunStateSchema.safeParse({ ...base, gate: { mode: 'release', version: 2 } }).success).toBe(true)
+    expect(PersistedRunStateSchema.safeParse({ ...base, stage: 'implement' }).success).toBe(true)
+    expect(PersistedRunStateSchema.safeParse({ ...base, stage: 'verify' }).success).toBe(true)
+    expect(PersistedRunStateSchema.safeParse({ ...base, stage: 'release' }).success).toBe(true)
+  })
+
+  it('accepts the tasks projection with its canonical shape, null, and absence (U3 D9)', () => {
+    const base: Record<string, unknown> = { ...createSeeded('/w') }
+    expect(
+      PersistedRunStateSchema.safeParse({ ...base, tasks: { '1': { status: 'running', attempts: 2 } } }).success,
+    ).toBe(true)
+    expect(
+      PersistedRunStateSchema.safeParse({ ...base, tasks: { '2': { status: 'done', attempts: 1 } } }).success,
+    ).toBe(true)
+    expect(
+      PersistedRunStateSchema.safeParse({ ...base, tasks: { '3': { status: 'failed', attempts: 1 } } }).success,
+    ).toBe(true)
+    expect(PersistedRunStateSchema.safeParse({ ...base, tasks: null }).success).toBe(true)
+  })
+
+  it('rejects malformed tasks projections (U3 D9)', () => {
+    const base: Record<string, unknown> = { ...createSeeded('/w') }
+    expect(
+      PersistedRunStateSchema.safeParse({ ...base, tasks: { '1': { status: 'skipped', attempts: 1 } } }).success,
+    ).toBe(false)
+    expect(
+      PersistedRunStateSchema.safeParse({ ...base, tasks: { '1': { status: 'done', attempts: 0 } } }).success,
+    ).toBe(false)
+  })
+
   it('rejects malformed projections', () => {
     const base: Record<string, unknown> = { ...createSeeded('/w') }
     expect(PersistedRunStateSchema.safeParse({ ...base, plan: { childIds: ['a'], digest: 'd' } }).success).toBe(false)
@@ -264,6 +297,24 @@ describe('memo shape (C5 D7 — parity complete)', () => {
     expect(loaded.gate).toEqual({ mode: 'plan', version: 1 })
     const pending = await listPendingGates(workDir)
     expect(pending[0]).toMatchObject({ runId: created.runId, gateMode: 'plan', gateVersion: 1 })
+  })
+
+  it("reloads a persisted gate with mode 'release' and lists it pending (U3 D7)", async () => {
+    const workDir = makeWorkDir()
+    const created = await createRunState({ workDir, repoRoot: '/repo', changeName: 'exec-run' })
+    await saveRunState({ ...created, stage: 'gate', gate: { mode: 'release', version: 3 } })
+    const loaded = await loadRunState(workDir, created.runId)
+    const pending = await listPendingGates(workDir)
+    // The typed expectation is the point: `gateMode: 'release'` must be a
+    // legal pending-gate entry, or this file fails typecheck.
+    const expected: PendingGateEntry = {
+      runId: created.runId,
+      changeName: 'exec-run',
+      gateMode: 'release',
+      gateVersion: 3,
+      updatedAt: loaded.updatedAt,
+    }
+    expect(pending[0]).toEqual(expected)
   })
 })
 

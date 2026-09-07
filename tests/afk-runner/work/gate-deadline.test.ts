@@ -56,6 +56,10 @@ function rearmedEvents(events: readonly SddEvent[]): SddEvent[] {
   return events.filter((event) => event.type === 'gate' && event.action === 'rearmed')
 }
 
+function isPendingExpiryDecision(event: SddEvent): boolean {
+  return event.type === 'auto_decision' && event.decision === 'pending'
+}
+
 function autoDecisionEvents(events: readonly SddEvent[]): Extract<SddEvent, { type: 'auto_decision' }>[] {
   return events.flatMap((event) => (event.type === 'auto_decision' ? [event] : []))
 }
@@ -386,6 +390,10 @@ describe('gate deadline — expiry (C4 9.2)', () => {
     expect(probe).toBe('still-waiting')
     const rearmed = rearmedEvents(readEvents(logPath))
     expect(rearmed).toHaveLength(1)
+    await releaseTick(h.clock)
+    await releaseTick(h.clock)
+    const pending = readEvents(logPath).filter(isPendingExpiryDecision)
+    expect(pending).toHaveLength(1)
   })
 
   it('the expiry claim loser exits as external', async () => {

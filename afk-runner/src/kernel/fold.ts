@@ -21,6 +21,32 @@ export interface FoldResult {
   readonly accounting: FoldAccounting
 }
 
+/** Gate-event mapping extracted from the fold chain (max-lines-per-function split). */
+function gateKernelEventOf(event: SddEvent): KernelEvent | null {
+  if (event.type !== 'gate') return null
+  if (event.action === 'presented') {
+    return {
+      type: 'gate.presented',
+      mode: event.mode,
+      version: event.version,
+      ...(event.deadlineAt === undefined ? {} : { deadlineAt: event.deadlineAt }),
+    }
+  }
+  if (event.action === 'answered') {
+    return { type: 'gate.answered', ...(event.outcome === undefined ? {} : { outcome: event.outcome }) }
+  }
+  return { type: 'gate.rearmed', version: event.version, deadlineAt: event.deadlineAt ?? '' }
+}
+
+/** Execution-vocabulary mapping (U3): the armed fact and the task walk events. */
+function executionKernelEventOf(event: SddEvent): KernelEvent | null {
+  if (event.type === 'execution') return { type: 'execution.armed' }
+  if (event.type !== 'task') return null
+  if (event.action === 'started') return { type: 'task.started', id: event.id }
+  if (event.action === 'done') return { type: 'task.done', id: event.id }
+  return { type: 'task.failed', id: event.id }
+}
+
 export function toKernelEvent(event: SddEvent): KernelEvent | null {
   if (event.type === 'stage_enter') return { type: 'stage.enter', stage: event.stage }
   if (event.type === 'stage_exit') return { type: 'stage.exit', stage: event.stage }
@@ -39,20 +65,7 @@ export function toKernelEvent(event: SddEvent): KernelEvent | null {
       ...(event.concerns === undefined ? {} : { concerns: event.concerns }),
     }
   }
-  if (event.type === 'gate' && event.action === 'presented') {
-    return {
-      type: 'gate.presented',
-      mode: event.mode,
-      version: event.version,
-      ...(event.deadlineAt === undefined ? {} : { deadlineAt: event.deadlineAt }),
-    }
-  }
-  if (event.type === 'gate' && event.action === 'answered') {
-    return { type: 'gate.answered', ...(event.outcome === undefined ? {} : { outcome: event.outcome }) }
-  }
-  if (event.type === 'gate' && event.action === 'rearmed') {
-    return { type: 'gate.rearmed', version: event.version, deadlineAt: event.deadlineAt ?? '' }
-  }
+  if (event.type === 'gate') return gateKernelEventOf(event)
   if (event.type === 'auto_decision') {
     return {
       type: 'auto.decision',
@@ -68,7 +81,7 @@ export function toKernelEvent(event: SddEvent): KernelEvent | null {
   if (event.type === 'run_abort') return { type: 'run.abort' }
   if (event.type === 'child_spawned') return { type: 'child.spawned', child: event.child }
   if (event.type === 'child_done') return { type: 'child.done', child: event.child, outcome: event.outcome }
-  return null
+  return executionKernelEventOf(event)
 }
 
 export function foldEvents(machine: KernelMachine, events: readonly SddEvent[]): FoldResult {

@@ -11,7 +11,7 @@ import { escalationStageOf } from '../drive/failure-budget.js'
 import { flattenPosition } from '../drive/loop.js'
 import type { EventInput, StageId } from '../events.js'
 import { foldLogOrInitial } from '../kernel/fold.js'
-import type { KernelContext, KernelMachine } from '../kernel/machine.js'
+import type { GateRecord, KernelMachine } from '../kernel/machine.js'
 import type { DigestRecord } from '../legacy-fold.js'
 import { claimGateSettle, releaseGateSettle } from './gate-claims.js'
 import { processExpiry } from './gate-expiry.js'
@@ -55,8 +55,10 @@ type WaiterRejection = { readonly kind: 'rejected'; readonly reason: string }
 
 type AttemptOutcome = GateWaiterResult | WaiterRejection
 
-/** Escalation stays first-class (C6 D4); only the dormant plan mode collapses to final. */
-function narrowGateMode(mode: 'early' | 'final' | 'plan' | 'escalation'): 'early' | 'final' | 'escalation' {
+/** Escalation stays first-class (C6 D4); the dormant plan mode collapses to final; release passes through (U3 D7 — its settle arms differ, extend stays rejected). */
+function narrowGateMode(
+  mode: 'early' | 'final' | 'plan' | 'escalation' | 'release',
+): 'early' | 'final' | 'escalation' | 'release' {
   return mode === 'plan' ? 'final' : mode
 }
 
@@ -97,7 +99,7 @@ function emptyWaiterState(): WaiterState {
 
 interface WaiterContext {
   readonly version: number
-  readonly gateMode: 'early' | 'final' | 'escalation'
+  readonly gateMode: 'early' | 'final' | 'escalation' | 'release'
   readonly round: { readonly current: number; readonly cap: number } | null
   /** The fold's digest records — the F-C2 guard's input for settle-time expected content (D3 site 3). */
   readonly perRound: readonly DigestRecord[]
@@ -215,6 +217,19 @@ function feedbackAndKeepWaiting(
   return step(ports, state, attemptSettle)
 }
 
+/** The settle context of one tick: the narrowed mode, the round, and the escalation retry target (C6 D4). */
+function contextOf(gate: GateRecord, snapshot: ReturnType<typeof foldLogOrInitial>['snapshot']): WaiterContext {
+  const gateMode = narrowGateMode(gate.mode)
+  const escalationStage = gateMode === 'escalation' ? escalationStageOf(snapshot.context) : null
+  return {
+    version: gate.version,
+    gateMode,
+    round: snapshot.context.round,
+    perRound: snapshot.context.perRound,
+    ...(escalationStage === null ? {} : { failedStage: escalationStage }),
+  }
+}
+
 /** One waiter tick: expiry, steer, then the gate file's stable hand-edit. */
 async function step(
   ports: GateWaiterPorts,
@@ -237,18 +252,17 @@ async function step(
     state.seededFor = gate.version
     state.failedDigest = readFailedDigest(ports.runDir, gate.version)
   }
-  const gateMode = narrowGateMode(gate.mode)
-  // The escalation retry mover targets the still-active failed stage (C6 D4)
-  const escalationStage = gateMode === 'escalation' ? escalationStageOf(snapshot.context) : null
-  const context: WaiterContext = {
-    version: gate.version,
-    gateMode,
-    round: snapshot.context.round,
-    perRound: snapshot.context.perRound,
-    ...(escalationStage === null ? {} : { failedStage: escalationStage }),
-  }
+  const context = contextOf(gate, snapshot)
 
-  const expiry = await expiryTick(ports, snapshot.context, gate.version, gateMode, escalationStage)
+  const expiry = await processExpiry(
+    ports,
+    gate.version,
+    context.gateMode,
+    snapshot.context.round,
+    snapshot.context.gateDeadlineAt,
+    snapshot.context.gateDeadlineReArmed,
+    context.failedStage ?? null,
+  )
   if (expiry !== null) return expiry
 
   if (peekSteer(ports.runDir) !== null) return steerTick(ports, context, state, attemptSettle)
@@ -261,25 +275,6 @@ async function step(
   state.digests.push(digestOf(md))
   if (!isStableEdit(state.digests)) return step(ports, state, attemptSettle)
   return settleStableFile(ports, context, state, attemptSettle)
-}
-
-/** The deadline face of one tick: null keeps waiting. */
-function expiryTick(
-  ports: GateWaiterPorts,
-  context: KernelContext,
-  version: number,
-  gateMode: 'early' | 'final' | 'escalation',
-  escalationStage: StageId | null,
-): Promise<GateWaiterResult | null> {
-  return processExpiry(
-    ports,
-    version,
-    gateMode,
-    context.round,
-    context.gateDeadlineAt,
-    context.gateDeadlineReArmed,
-    escalationStage,
-  )
 }
 
 /** The stable hand-edit's settle attempt, behind the digest guard (D3). */

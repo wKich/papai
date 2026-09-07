@@ -17,7 +17,6 @@ import { readOnlyGit } from './analyze-io.js'
 import { renderCorpusJson, renderCorpusReport } from './analyze-report.js'
 import { groundTruthJoin } from './analyze-truth.js'
 import type { ExecGitFn, RunnerConfig } from './config.js'
-import type { DepthProfile } from './events.js'
 import { pipelineMachine } from './graph/pipeline.js'
 import { foldLog } from './kernel/fold.js'
 import { foldRun, logPathOf } from './memo-project.js'
@@ -28,6 +27,9 @@ import { stopRunOperator } from './run-stop.js'
 import type { OperatorStop } from './run-stop.js'
 import { startRun, statusRun } from './run.js'
 import type { RunDeps, RunStatus } from './run.js'
+import { parseStartArgs } from './start-args.js'
+export { parseStartArgs } from './start-args.js'
+export type { StartArgs } from './start-args.js'
 import { oneSecondTick } from './work/gate-waiter.js'
 import { buildRunReport } from './work/report.js'
 
@@ -117,33 +119,11 @@ export function defaultCliDeps(cwd: string = process.cwd()): CliDeps {
   }
 }
 
-function parseDepth(raw: string | undefined): DepthProfile | undefined {
-  if (raw === undefined) return undefined
-  if (raw === 'S' || raw === 'M' || raw === 'L') return raw
-  throw new Error(`invalid --depth '${raw}' (expected S, M, or L)`)
-}
-
-export interface StartArgs {
-  readonly taskFile: string
-  readonly depthOverride?: DepthProfile
-}
-
-/** Pure start-verb argument parsing — the seam the command-doc flag pin runs against. */
-export function parseStartArgs(args: readonly string[]): StartArgs {
-  const taskFile = args[0]
-  if (taskFile === undefined || taskFile.length === 0) {
-    throw new Error('usage: afk-runner start <taskFile> [--depth S|M|L]')
-  }
-  const depthFlag = args.indexOf('--depth')
-  const depthOverride = parseDepth(depthFlag === -1 ? undefined : args[depthFlag + 1])
-  return depthOverride === undefined ? { taskFile } : { taskFile, depthOverride }
-}
-
 export async function runStartCommand(deps: RunDeps, args: readonly string[]): Promise<string> {
-  const { taskFile, depthOverride } = parseStartArgs(args)
+  const { taskFile, depthOverride, execute } = parseStartArgs(args)
   // Never-on-start (R4 D2): start drives to park and exits — the foreground
   // waiter belongs to resume, so a machine-invoked start never blocks a shell.
-  const result = await startRun({ ...deps, gateWait: undefined }, { taskFile, depthOverride })
+  const result = await startRun({ ...deps, gateWait: undefined }, { taskFile, depthOverride, execute })
   const lines = [`run: ${result.runId}`, `halted: ${result.halted}`, `position: ${result.position}`]
   if (result.halted === 'gate-pending') {
     const runDir = path.join(deps.config.workDir, 'runs', result.runId)
@@ -244,7 +224,7 @@ function printUsage(): void {
   console.log(
     [
       'usage:',
-      '  afk-runner start <taskFile> [--depth S|M|L]   drive a fresh think-half run to park',
+      '  afk-runner start <taskFile> [--depth S|M|L] [--execute]   drive a fresh run to park (armed: plan + execute)',
       '  afk-runner status <runId>                     print the folded full-state summary',
       '  afk-runner resume <runId>                     re-enter an interrupted or parked run',
       '  afk-runner stop <runId>                       calm-stop a live run; abort a dead one',

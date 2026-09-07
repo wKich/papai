@@ -110,7 +110,7 @@ export function processLine(
   prevLine: string,
   itemIds: Set<string>,
   blockerIds: Set<string>,
-  _gateMode: 'early' | 'final' | 'escalation' | undefined,
+  _gateMode: 'early' | 'final' | 'escalation' | 'release' | undefined,
 ): void {
   if (DECIDED_BY_LINE_RE.test(line)) return
   if (APPROVE_DIRECTIVE_RE.test(line)) {
