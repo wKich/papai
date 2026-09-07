@@ -62,6 +62,30 @@ async function answeringTick(runDir: () => string): Promise<void> {
   }
 }
 
+/**
+ * One deterministic poll tick for armed runs (U3 D8): answer any pending
+ * gate file with APPROVE — the final and the release grammars read it alike.
+ */
+async function approvingTick(runDir: () => string): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, 1)
+  })
+  const logPath = path.join(runDir(), 'events.ndjson')
+  if (!existsSync(logPath)) return
+  const events = readEvents(logPath)
+  const pending = gateEvents(events, 'presented').length > gateEvents(events, 'answered').length
+  if (!pending) return
+  const last = gateEvents(events, 'presented').at(-1)
+  const version = last !== undefined && last.type === 'gate' ? last.version : 1
+  const gateMd = path.join(runDir(), `gate-${version}.md`)
+  if (existsSync(gateMd)) {
+    const md = fs.readFileSync(gateMd, 'utf8')
+    if (!md.includes('## Gate response')) {
+      fs.writeFileSync(gateMd, `${md}\n## Gate response\n\nAPPROVE\n`)
+    }
+  }
+}
+
 /** A kill -9 leaves every scratch file on disk — only the log truncates. */
 function copyScratchFiles(fromDir: string, toDir: string): void {
   for (const entry of fs.readdirSync(fromDir)) {
@@ -71,8 +95,13 @@ function copyScratchFiles(fromDir: string, toDir: string): void {
 }
 
 /** Resume with a bounded, self-answering foreground waiter. */
-async function resumeToCompletion(deps: Parameters<typeof resumeRun>[0], runId: string, runDir: string): Promise<void> {
-  const result = await resumeRun({ ...deps, gateWait: { tick: () => answeringTick(() => runDir) } }, runId)
+async function resumeToCompletion(
+  deps: Parameters<typeof resumeRun>[0],
+  runId: string,
+  runDir: string,
+  tick: (runDir: () => string) => Promise<void> = answeringTick,
+): Promise<void> {
+  const result = await resumeRun({ ...deps, gateWait: { tick: () => tick(() => runDir) } }, runId)
   expect(result.halted).toBe('final')
 }
 
@@ -101,6 +130,67 @@ describe('resume equivalence — every prefix converges to the uninterrupted ter
       const prefixDeps = { ...pipeline.deps, config: { ...pipeline.deps.config, workDir } }
 
       await resumeToCompletion(prefixDeps, uninterrupted.runId, runDir)
+
+      const logPath = path.join(runDir, 'events.ndjson')
+      expect(finalValueOf(logPath)).toBe('completed')
+      expect(memoOf(path.join(runDir, 'state.json'))).toEqual(expectedMemo)
+      fs.rmSync(workDir, { recursive: true, force: true })
+    }
+  })
+})
+
+const ARMED_TASKS_MD = ['## 1. Walk', '', '- [ ] 1.1 first item', '- [ ] 1.2 second item', ''].join('\n')
+
+/** The stage enters of one stage in a log — the walk's bracket count. */
+function stageEntersOf(events: readonly SddEvent[], stage: string): readonly SddEvent[] {
+  return events.filter((event) => event.type === 'stage_enter' && event.stage === stage)
+}
+
+/**
+ * The armed drill (U3 D8): an execution run — final approve into the walk, a
+ * red verify boundary routing back into implement, the fix loop, the release
+ * gate approved to completion — resumes from EVERY event prefix to the same
+ * terminal and the same memo. The crash windows heal through the owed-answer
+ * and owed-exit recoveries; the answer ledgers (verify log, tasks.md
+ * checkboxes) ride the copied scratch files, last line deciding what is owed.
+ */
+describe('resume equivalence — armed execution run (U3 D8)', () => {
+  it("a fresh copy resumed from each of the armed run's event prefixes reaches the same final state and memo", async () => {
+    const pipeline = makeFakePipeline({
+      artifactOverrides: { 'decompose-tasks.json': ARMED_TASKS_MD },
+      sidecarOverrides: {
+        'implement-t1.json': JSON.stringify({ files_written: ['src/one.ts'] }),
+        'implement-t2.json': JSON.stringify({ files_written: ['src/two.ts'] }),
+      },
+      checkExitCodes: [0, 0, 0, 1],
+      checkStdouts: ['', '', '', 'src/old.ts:31:7 expects two to be three\n'],
+    })
+    const started = await startRun(pipeline.deps, { taskText: TASK_TEXT, execute: true })
+    expect(started.halted).toBe('gate-pending')
+    const originalRunDir = pipeline.runDirOf(started.runId)
+    fs.writeFileSync(
+      path.join(originalRunDir, 'gate-1.md'),
+      '<!-- gate-1.md -->\n\n## Final gate\n\n## Gate response\n\nAPPROVE\n',
+    )
+    await resumeToCompletion(pipeline.deps, started.runId, originalRunDir, approvingTick)
+    const events = readEvents(path.join(originalRunDir, 'events.ndjson'))
+    expect(finalValueOf(path.join(originalRunDir, 'events.ndjson'))).toBe('completed')
+    // the uninterrupted run walked the red-verify fix loop: verify entered
+    // twice, the culprit item re-spawned once for the fix
+    expect(stageEntersOf(events, 'verify')).toHaveLength(2)
+    expect(pipeline.spawnPrompts['implement-t2.json']).toHaveLength(2)
+    const expectedMemo = memoOf(path.join(originalRunDir, 'state.json'))
+    expect(expectedMemo.status).toBe('completed')
+    for (let cut = 0; cut <= events.length; cut += 1) {
+      const workDir = fs.mkdtempSync(path.join(path.dirname(originalRunDir), 'resume-prefix-'))
+      const runDir = path.join(workDir, 'runs', started.runId)
+      fs.mkdirSync(runDir, { recursive: true })
+      copyScratchFiles(originalRunDir, runDir)
+      const prefix = events.slice(0, cut)
+      fs.writeFileSync(path.join(runDir, 'events.ndjson'), `${prefix.map((e) => JSON.stringify(e)).join('\n')}\n`)
+      const prefixDeps = { ...pipeline.deps, config: { ...pipeline.deps.config, workDir } }
+
+      await resumeToCompletion(prefixDeps, started.runId, runDir, approvingTick)
 
       const logPath = path.join(runDir, 'events.ndjson')
       expect(finalValueOf(logPath)).toBe('completed')

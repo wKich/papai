@@ -22,10 +22,9 @@ import {
   AgentDoneEvent,
 } from './agent-noise-schemas.js'
 
-export const StageIdSchema = z.enum(['intake', 'draft', 'review', 'decompose', 'atomicity', 'gate'])
-export type StageId = z.infer<typeof StageIdSchema>
-
-export const STAGE_ORDER: readonly StageId[] = ['intake', 'draft', 'review', 'decompose', 'atomicity', 'gate']
+export { ExecutionEvent, TaskEvent, GateModeSchema, StageIdSchema, STAGE_ORDER } from './execution-schemas.js'
+export type { GateMode, StageId } from './execution-schemas.js'
+import { ExecutionEvent, GateModeSchema, StageIdSchema, TaskEvent } from './execution-schemas.js'
 
 /** Declared failure kinds (C6 D1 taxonomy): exhaustion, structural precondition, agent-transport infra. */
 export const FailureKindSchema = z.enum(['exhausted', 'precondition', 'infra'])
@@ -145,7 +144,7 @@ const GateEvent = z.object({
   altitude: z.literal('L2'),
   type: z.literal('gate'),
   action: z.enum(['presented', 'answered', 'rearmed']),
-  mode: z.enum(['early', 'final', 'plan', 'escalation']),
+  mode: GateModeSchema,
   version: z.number().int().positive(),
   /** Explicit settle outcome (C4); historical answered events carry none. */
   outcome: GateOutcomeSchema.optional(),
@@ -231,6 +230,8 @@ const EVENT_VARIANTS = [
   PlanEvent,
   ChildSpawnedEvent,
   ChildDoneEvent,
+  ExecutionEvent,
+  TaskEvent,
   HumanEditsEvent,
   ResumeEvent,
   RunAbortEvent,
@@ -263,6 +264,8 @@ export const SddEventSchema = z.discriminatedUnion('type', [
   PlanEvent.extend(StampShape),
   ChildSpawnedEvent.extend(StampShape),
   ChildDoneEvent.extend(StampShape),
+  ExecutionEvent.extend(StampShape),
+  TaskEvent.extend(StampShape),
   HumanEditsEvent.extend(StampShape),
   ResumeEvent.extend(StampShape),
   RunAbortEvent.extend(StampShape),

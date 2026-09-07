@@ -58,12 +58,18 @@ const FINAL_VALUES: Readonly<Record<string, string | Record<string, string>>> = 
   'sdd-runner-decomposition-2nd': 'intake',
   'tests-consolidation': 'completed',
   'abort-at-final-synthetic.ndjson': 'aborted',
+  'armed-approval-synthetic.ndjson': 'implement',
+  'attempt-bound-exhaustion-synthetic.ndjson': AWAITING,
   'children-plan-synthetic.ndjson': 'start',
   'escalation-abort-synthetic.ndjson': 'aborted',
   'escalation-approve-cycle-synthetic.ndjson': 'completed',
   'escalation-extend-cycle-synthetic.ndjson': 'completed',
+  'execution-crash-windows-synthetic.ndjson': 'implement',
   'extend-at-final-cycle-synthetic.ndjson': 'completed',
   'precondition-escalation-synthetic.ndjson': 'completed',
+  'red-verify-fix-loop-synthetic.ndjson': AWAITING,
+  'release-approval-synthetic.ndjson': 'completed',
+  'release-veto-synthetic.ndjson': 'completed',
   'resume-artifact-skip-gate.ndjson': AWAITING,
   's-depth-calm-stop-resume.ndjson': 'review',
   's-final-tail-synthetic.ndjson': AWAITING,
@@ -71,6 +77,7 @@ const FINAL_VALUES: Readonly<Record<string, string | Record<string, string>>> = 
   'steer-extend-round.ndjson': 'review',
   'tail-crash-resume-healed-synthetic.ndjson': AWAITING,
   'tail-crash-resume-synthetic.ndjson': AWAITING,
+  'task-walk-synthetic.ndjson': 'implement',
   'under-budget-retry-synthetic.ndjson': 'completed',
   'veto-at-final-cycle-synthetic.ndjson': 'completed',
   'veto-revision-synthetic.ndjson': 'draft',
@@ -87,10 +94,21 @@ const REPLAY_FIELDS = [
   'children',
 ] as const satisfies readonly (keyof ReplayState)[]
 
+/**
+ * The legacy stage vocabulary (U3 D8): the execution stages are kernel-only
+ * map entries — pending in every historical log — so the parity comparison
+ * normalizes to the legacy stages, exactly as it excludes the scratch tally.
+ */
+const LEGACY_STAGE_IDS = ['intake', 'draft', 'review', 'decompose', 'atomicity', 'gate'] as const
+
+function legacyStagesOf(stages: KernelContext['stages']): Record<string, unknown> {
+  return Object.fromEntries(LEGACY_STAGE_IDS.map((id) => [id, stages[id] ?? 'pending']))
+}
+
 /** Project machine context onto the legacy ReplayState fields; the scratch tally is deliberately excluded (residue is not a parity field). */
 function projectedFields(context: KernelContext): Record<(typeof REPLAY_FIELDS)[number], unknown> {
   return {
-    stages: context.stages,
+    stages: legacyStagesOf(context.stages),
     depth: context.depth,
     round: context.round,
     perRound: context.perRound,
@@ -147,7 +165,7 @@ describe('golden-replay parity: graph v0 vs legacy fold', () => {
     })
   }
 
-  it('holds all twenty-seven fixtures from the C1+C4+C5+C6 corpus plus the log-fidelity scenario', () => {
-    expect(collectFixtures()).toHaveLength(27)
+  it('holds all thirty-four fixtures from the C1+C4+C5+C6+U3 corpus plus the log-fidelity scenario', () => {
+    expect(collectFixtures()).toHaveLength(34)
   })
 })

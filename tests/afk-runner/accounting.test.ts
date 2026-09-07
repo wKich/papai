@@ -16,7 +16,8 @@ import {
   summarizeWorkDir,
 } from '../../afk-runner/src/accounting.js'
 import type { RunAccountingInput } from '../../afk-runner/src/accounting.js'
-import type { AgentUsage, SddEvent } from '../../afk-runner/src/events.js'
+import type { AgentUsage, EventInput, SddEvent } from '../../afk-runner/src/events.js'
+import { stampEvent } from '../../afk-runner/src/events.js'
 
 const tmpDirs: string[] = []
 
@@ -239,6 +240,117 @@ describe('aggregate (pure core)', () => {
     ]
     const report = renderRunsReport(aggregate(corpus))
     expect(report).toContain('cost: ≥ $0.00 (2 unpriced)')
+  })
+})
+
+/** An armed run's foldable prelude: the S think tail up to the approved final gate (U3 D9 exec rows). */
+const EXEC_PRELUDE: readonly EventInput[] = [
+  { altitude: 'L2', type: 'execution', action: 'armed' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'intake' },
+  { altitude: 'L2', type: 'depth', profile: 'S', rationale: 'one module', source: 'estimator' },
+  { altitude: 'L2', type: 'stage_exit', stage: 'intake' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'draft' },
+  { altitude: 'L2', type: 'stage_exit', stage: 'draft' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'review' },
+  { altitude: 'L2', type: 'round_open', round: 1, cap: 3 },
+  {
+    altitude: 'L2',
+    type: 'convergence',
+    round: 1,
+    verdict: 'converged',
+    counts: { blocker: 0, material: 0, nitpick: 0 },
+  },
+  { altitude: 'L2', type: 'round_close', round: 1, cap: 3 },
+  { altitude: 'L2', type: 'stage_exit', stage: 'review' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'decompose' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'gate' },
+  { altitude: 'L2', type: 'gate', action: 'presented', mode: 'final', version: 1 },
+  { altitude: 'L2', type: 'auto_decision', rule: 'none', decision: 'gate', evidenceDigest: 'x', gateVersion: 1 },
+  { altitude: 'L2', type: 'stage_exit', stage: 'decompose' },
+  { altitude: 'L2', type: 'stage_exit', stage: 'gate' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'implement' },
+  { altitude: 'L2', type: 'gate', action: 'answered', mode: 'final', version: 1, outcome: 'approve' },
+]
+
+/** Stamp inputs into foldable events at controlled timestamps. */
+function walkEvents(inputs: readonly EventInput[]): readonly SddEvent[] {
+  return inputs.map((input, index) => stampEvent(input, seq + index + 1, at(index)))
+}
+
+const MID_WALK: readonly EventInput[] = [
+  ...EXEC_PRELUDE,
+  { altitude: 'L2', type: 'task', action: 'started', id: '1' },
+  { altitude: 'L2', type: 'task', action: 'done', id: '1' },
+  { altitude: 'L2', type: 'task', action: 'started', id: '2' },
+  { altitude: 'L2', type: 'task', action: 'done', id: '2' },
+  { altitude: 'L2', type: 'task', action: 'started', id: '3' },
+]
+
+const VERIFY_ACTIVE: readonly EventInput[] = [
+  ...MID_WALK,
+  { altitude: 'L2', type: 'task', action: 'done', id: '3' },
+  { altitude: 'L2', type: 'stage_exit', stage: 'implement' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'verify' },
+]
+
+const RELEASE_PARKED: readonly EventInput[] = [
+  ...VERIFY_ACTIVE,
+  { altitude: 'L2', type: 'stage_exit', stage: 'verify' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'release' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'gate' },
+  { altitude: 'L2', type: 'gate', action: 'presented', mode: 'release', version: 2 },
+  { altitude: 'L2', type: 'auto_decision', rule: 'none', decision: 'gate', evidenceDigest: 'x', gateVersion: 2 },
+  { altitude: 'L2', type: 'stage_exit', stage: 'release' },
+]
+
+describe('execution rows (U3 D9 — exec status from the fold)', () => {
+  it('renders exec:implement d/total from the fold, beating the parked-at-final memo', () => {
+    const { rows } = aggregate([
+      roster({
+        runId: 'exec-run',
+        status: 'running',
+        gate: { mode: 'final', version: 1 },
+        events: walkEvents(MID_WALK),
+      }),
+    ])
+    expect(rows[0]?.status).toBe('exec:implement 2/3')
+  })
+
+  it('renders the bare stage when the walk has no task records yet (the post-mover crash window)', () => {
+    const { rows } = aggregate([
+      roster({
+        runId: 'crash-run',
+        status: 'running',
+        gate: { mode: 'final', version: 1 },
+        events: walkEvents(EXEC_PRELUDE),
+      }),
+    ])
+    expect(rows[0]?.status).toBe('exec:implement')
+  })
+
+  it('renders exec:verify with done-over-total while the boundary runs', () => {
+    const { rows } = aggregate([
+      roster({ runId: 'verify-run', status: 'running', gate: null, events: walkEvents(VERIFY_ACTIVE) }),
+    ])
+    expect(rows[0]?.status).toBe('exec:verify 3/3')
+  })
+
+  it('an unanswered gate park renders gate:<mode> v<version> — the release presentation included', () => {
+    const { rows } = aggregate([
+      roster({ runId: 'release-run', status: 'running', gate: null, events: walkEvents(RELEASE_PARKED) }),
+    ])
+    expect(rows[0]?.status).toBe('gate:release v2')
+  })
+
+  it('a terminal execution run keeps its terminal status — exec never outlives the walk', () => {
+    const completed: readonly EventInput[] = [
+      ...RELEASE_PARKED,
+      { altitude: 'L2', type: 'gate', action: 'answered', mode: 'release', version: 2, outcome: 'approve' },
+    ]
+    const { rows } = aggregate([
+      roster({ runId: 'done-run', status: 'completed', gate: null, events: walkEvents(completed) }),
+    ])
+    expect(rows[0]?.status).toBe('completed')
   })
 })
 

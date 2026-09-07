@@ -3,7 +3,6 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
-import fs from 'node:fs'
 import path from 'node:path'
 
 import type { SpawnFn } from '../../../review-loop/src/agent-runner.js'
@@ -16,12 +15,13 @@ import type { OpenSpecDriver } from '../openspec-driver.js'
 import { runAtomicity } from '../work/atomicity.js'
 import { runDecompose, runsAtomicity } from '../work/decompose.js'
 import { runDraft } from '../work/draft.js'
-import { parseGateResponse } from '../work/gate-model.js'
-import { expectedContentFor } from '../work/gate-settle.js'
 import { runIntake } from '../work/intake.js'
 import { presentFinalGate } from '../work/present-final.js'
 import { reviewOutcomeOf, runReviewWork } from '../work/review.js'
-import { runVetoUpdater, updateAssumptionsFromVetoes } from '../work/veto-updater.js'
+import type { RunCheckFn } from '../work/run-check.js'
+import { runVetoRevision } from '../work/veto-revision.js'
+import { GATE_AWAITING_MODULE, agentSeamsOf, sidecarDirOf } from './pipeline-agent.js'
+import { implementModule, releaseModule, verifyModule } from './pipeline-execution.js'
 
 export interface PipelineWorkDeps {
   readonly spawn: SpawnFn
@@ -32,6 +32,8 @@ export interface PipelineWorkDeps {
   readonly stdout?: (line: string) => void
   /** Calm-stop seam consulted by the review loop between rounds. */
   readonly stop?: { readonly stopRequested: () => boolean }
+  /** Command runner for the execution-half checks (per-task affected check, verify boundary); defaults to Bun. */
+  readonly runCheck?: RunCheckFn
 }
 
 export interface PipelineRunInput {
@@ -109,70 +111,7 @@ function agentOf(deps: PipelineWorkDeps, io: WorkIO): AgentLayerDeps {
   }
 }
 
-/**
- * The veto-updater revision round (C4 D8, D6): read the vetoes from the
- * settled gate file — per-item and whole-gate alike — fold the item vetoes
- * back into the resolver sidecar, and run one resolver pass that applies
- * the redirects to the existing artifacts. The no-op path requires an
- * empty item-veto list AND no gate-level veto: a settled outcome of veto
- * must never skip revision silently.
- */
-async function runVetoRevision(deps: PipelineWorkDeps, input: PipelineRunInput, io: WorkIO): Promise<void> {
-  const runDir = io.runDir
-  const sidecarDir = path.join(runDir, 'sidecars')
-  const version = io.context.gate?.version ?? 1
-  const round = io.context.round?.current ?? 1
-  const gateMode = io.context.gate?.mode === 'early' ? 'early' : 'final'
-  const md = await fs.promises.readFile(path.join(runDir, `gate-${version}.md`), 'utf8')
-  const expected = await expectedContentFor(sidecarDir, round, gateMode)
-  const response = parseGateResponse(md, expected)
-  if (response.vetoes.length === 0 && response.gateVetoRedirect === null) return
-  await updateAssumptionsFromVetoes(sidecarDir, round, response.vetoes)
-  await runVetoUpdater(
-    {
-      driver: deps.driver,
-      agent: {
-        spawn: deps.spawn,
-        config: deps.config,
-        execGit: deps.execGit,
-        emit: (event) => {
-          io.append(event)
-        },
-      },
-      runDir,
-      sidecarDir,
-      cwd: deps.config.repoRoot,
-    },
-    {
-      changeName: input.changeName,
-      round,
-      vetoes: response.vetoes,
-      ...(response.gateVetoRedirect === null ? {} : { gateRedirect: response.gateVetoRedirect }),
-    },
-  )
-}
-
 const START_MODULE: StateModule = { work: null, outcomeOf: () => 'boot', successors: { boot: { enter: 'intake' } } }
-const GATE_AWAITING_MODULE: StateModule = {
-  work: null,
-  outcomeOf: () => 'awaiting',
-  successors: { awaiting: { park: 'gate-pending' } },
-}
-
-function sidecarDirOf(io: WorkIO): string {
-  return path.join(io.runDir, 'sidecars')
-}
-
-function agentSeamsOf(deps: PipelineWorkDeps, io: WorkIO): AgentLayerDeps {
-  return {
-    spawn: deps.spawn,
-    config: deps.config,
-    execGit: deps.execGit,
-    emit: (event: EventInput): void => {
-      io.append(event)
-    },
-  }
-}
 
 function intakeModule(deps: PipelineWorkDeps, input: PipelineRunInput): StateModule {
   return {
@@ -274,7 +213,7 @@ function atomicityModule(deps: PipelineWorkDeps, input: PipelineRunInput): State
   }
 }
 
-export function createPipelineWorkFor(deps: PipelineWorkDeps, input: PipelineRunInput): WorkFor {
+export function createPipelineWorkFor(deps: PipelineWorkDeps, input: PipelineRunInput, runDir: string): WorkFor {
   return (state): StateModule | null => {
     if (state === 'start') return START_MODULE
     if (state === 'intake') return intakeModule(deps, input)
@@ -282,6 +221,9 @@ export function createPipelineWorkFor(deps: PipelineWorkDeps, input: PipelineRun
     if (state === 'review') return reviewModule(deps, input)
     if (state === 'decompose') return decomposeModule(deps, input)
     if (state === 'atomicity') return atomicityModule(deps, input)
+    if (state === 'implement') return implementModule(deps, input, runDir)
+    if (state === 'verify') return verifyModule(deps, runDir)
+    if (state === 'release') return releaseModule(deps, input)
     if (state === 'gate.awaiting') return GATE_AWAITING_MODULE
     return null
   }
@@ -291,7 +233,8 @@ export function createPipelineWorkFor(deps: PipelineWorkDeps, input: PipelineRun
 export function workForOf(
   deps: Omit<PipelineWorkDeps, 'stop'> & { readonly stop?: StopSeam },
   input: { readonly taskText: string; readonly changeName: string; readonly depthOverride?: DepthProfile },
+  runDir: string,
 ): WorkFor {
   const { stop, ...rest } = deps
-  return createPipelineWorkFor({ ...rest, ...(stop === undefined ? {} : { stop }) }, input)
+  return createPipelineWorkFor({ ...rest, ...(stop === undefined ? {} : { stop }) }, input, runDir)
 }

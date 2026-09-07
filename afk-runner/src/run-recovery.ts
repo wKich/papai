@@ -187,6 +187,34 @@ function isEnterOf(stage: string): (event: SddEvent) => boolean {
   return (event) => event.type === 'stage_enter' && event.stage === stage
 }
 
+/**
+ * The reversed armed-approve window (U3 D3): the implement mover landed but
+ * the answered event never did — the crash window between the settle's mover
+ * and its answer (the only answer-after-mover ordering; every other outcome
+ * answers first, so their windows heal through owed movers). A
+ * presented-unanswered FINAL gate with the machine already in an execution
+ * state owes exactly the approve answer.
+ */
+export function owedAnswerOf(context: KernelContext, position: string): readonly EventInput[] {
+  // Only implement is a mover target while a final gate stands unanswered (the
+  // armed approve); verify/release movers exist only for escalation retries,
+  // whose mode check below already excludes them.
+  if (position !== 'implement') return []
+  const gate = context.gate
+  if (gate === null || gate.answered) return []
+  if (gate.mode !== 'final') return []
+  return [
+    {
+      altitude: 'L2' as const,
+      type: 'gate' as const,
+      action: 'answered' as const,
+      mode: 'final',
+      version: gate.version,
+      outcome: 'approve' as const,
+    },
+  ]
+}
+
 export interface FoldedRun {
   readonly context: ReturnType<typeof refoldedContext>
   readonly position: string
@@ -234,6 +262,12 @@ export async function applyOwedRecovery(
   if (owed.length > 0) {
     const boundary = createAppendBoundary(pipelineMachine, logPath, { now: deps.now })
     for (const event of owed) boundary.append(event)
+    current = foldAgain()
+  }
+  const owedAnswer = owedAnswerOf(current.context, current.position)
+  if (owedAnswer.length > 0) {
+    const boundary = createAppendBoundary(pipelineMachine, logPath, { now: deps.now })
+    for (const event of owedAnswer) boundary.append(event)
     current = foldAgain()
   }
   return current

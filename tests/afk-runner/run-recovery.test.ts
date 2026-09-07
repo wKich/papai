@@ -11,7 +11,7 @@ import type { EventInput, SddEvent } from '../../afk-runner/src/events.js'
 import { readEvents, stampEvent } from '../../afk-runner/src/events.js'
 import { initialKernelContext } from '../../afk-runner/src/kernel/machine.js'
 import type { KernelContext } from '../../afk-runner/src/kernel/machine.js'
-import { owedStageExitsOf } from '../../afk-runner/src/run-recovery.js'
+import { owedAnswerOf, owedStageExitsOf } from '../../afk-runner/src/run-recovery.js'
 import { resumeRun } from '../../afk-runner/src/run-resume.js'
 import { startRun } from '../../afk-runner/src/run.js'
 import { makeFakePipeline, TASK_TEXT } from './fixtures/fake-pipeline.js'
@@ -180,7 +180,7 @@ function baseStages(): Record<string, 'pending' | 'active' | 'done'> {
 }
 
 function contextOf(overrides: {
-  gate?: { mode: 'early' | 'final' | 'plan' | 'escalation'; version: number; answered: boolean } | null
+  gate?: { mode: 'early' | 'final' | 'plan' | 'escalation' | 'release'; version: number; answered: boolean } | null
   gateOutcome?: 'approve' | 'veto' | 'extend' | 'abort' | null
   stages?: Record<string, 'pending' | 'active' | 'done'>
 }): KernelContext {
@@ -285,3 +285,31 @@ function fakeClock(): { readonly tick: () => Promise<void>; readonly release: ()
     },
   }
 }
+
+describe('owedAnswerOf — the reversed armed-approve crash window (U3 D3)', () => {
+  it('a presented-unanswered final gate with the machine already in implement owes the approve answer', () => {
+    const context = contextOf({
+      gate: { mode: 'final', version: 1, answered: false },
+      stages: { ...baseStages(), gate: 'done', implement: 'active' },
+    })
+    expect(owedAnswerOf(context, 'implement')).toEqual([
+      { altitude: 'L2', type: 'gate', action: 'answered', mode: 'final', version: 1, outcome: 'approve' },
+    ])
+  })
+
+  it('no owed answer outside the window: awaiting position, answered gates, unarmed stages, release vetoes', () => {
+    const unanswered = contextOf({ gate: { mode: 'final', version: 1, answered: false } })
+    expect(owedAnswerOf(unanswered, 'gate.awaiting')).toEqual([])
+    const answered = contextOf({ gate: { mode: 'final', version: 1, answered: true }, gateOutcome: 'approve' })
+    expect(owedAnswerOf(answered, 'implement')).toEqual([])
+    const releaseWindow = contextOf({
+      gate: { mode: 'release', version: 2, answered: false },
+      stages: { ...baseStages(), gate: 'done', implement: 'active' },
+    })
+    // A release-veto answer lands BEFORE its mover, so a mover-without-answer
+    // window cannot exist there — nothing is owed.
+    expect(owedAnswerOf(releaseWindow, 'implement')).toEqual([])
+    expect(owedAnswerOf(unanswered, 'verify')).toEqual([])
+    expect(owedAnswerOf(contextOf({ gate: null }), 'implement')).toEqual([])
+  })
+})

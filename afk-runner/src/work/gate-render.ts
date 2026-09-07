@@ -6,10 +6,13 @@
 import type { DigestRecord } from '../legacy-fold.js'
 import type { ConcernRecord } from './concern-model.js'
 import { formatDigestBody } from './digest-format.js'
+import { gateTitle, grammarLines, renderDecisions } from './gate-decisions.js'
 import type { ChangeDigest } from './gate-digest-extract.js'
 import type { GateAssumption, GateBlocker, GateDigestInput, GateFinding } from './gate-model.js'
+import type { ExecutionDigest } from './gate-model.js'
 
 export type { GateDigestInput }
+export { decisionConsequences, renderDecisions } from './gate-decisions.js'
 
 function formatTrajectoryBlock(records: readonly DigestRecord[]): string {
   if (records.length === 0) return ''
@@ -52,7 +55,11 @@ function costMarker(input: GateDigestInput): string {
  * the early gate shows "Open MATERIAL findings at cap" and the final gate shows
  * "Nitpicks (informational)"). Missing fields render one-line placeholders.
  */
-export function renderChangeDigest(digest: ChangeDigest, mode: 'early' | 'final', hasAssumptions: boolean): string[] {
+export function renderChangeDigest(
+  digest: ChangeDigest,
+  mode: 'early' | 'final' | 'release',
+  hasAssumptions: boolean,
+): string[] {
   const what = digest.what ?? NO_WHY
   const why = digest.why ?? NO_WHY
   const touches = digest.touches !== null && digest.touches.length > 0 ? digest.touches.join(', ') : NO_IMPACT
@@ -74,15 +81,9 @@ export function writeGateDigest(input: GateDigestInput): string {
   const lines: string[] = [
     `<!-- gate-${input.version}.md -->`,
     '',
-    input.mode === 'early'
-      ? `## Early gate (cap hit) — change ${input.changeName}`
-      : `## Final gate — change ${input.changeName}`,
+    gateTitle(input.mode, input.changeName),
     '',
-    'Check every assumption box to approve. Leave a box unchecked to veto (optional `→ <redirect>` beneath).',
-    'Answer a cap-hit blocker with `→ <answer>` beneath it, or `→ OVERRIDE` to override.',
-    'Write `APPROVE` on its own line to approve the change as a whole, or `VETO: <redirect>` to veto it as a whole.',
-    'A response with no decision signal is rejected — prose alone settles nothing.',
-    'Write `ABORT` on its own line to abort.',
+    ...grammarLines(input.mode),
     '',
     ...renderDecisions(input.mode),
     '',
@@ -93,50 +94,22 @@ export function writeGateDigest(input: GateDigestInput): string {
     '',
     `### Cost / duration · $${input.costUsd.toFixed(2)} · ${Math.round(input.durationMs / 1000)}s · ${costMarker(input)}`,
   ]
+  if (input.executionDigest !== undefined) {
+    lines.push('', ...renderExecutionDigest(input.executionDigest))
+  }
   appendGateSections(lines, input, ranked)
   return lines.join('\n')
 }
 
-export interface DecisionConsequences {
-  readonly approve: string
-  readonly veto: string
-  readonly extend: string | null
-  readonly abort: string
-}
-
-/**
- * Single source for each gate decision's downstream effect, consumed by both
- * the gate-file `### Decisions` block and the interactive session's decision
- * menu — the two front-ends cannot drift apart (Decision 6).
- */
-export function decisionConsequences(mode: 'early' | 'final'): DecisionConsequences {
-  const approve =
-    mode === 'early'
-      ? 'continues to task decomposition, atomicity checking, and a final gate'
-      : 'completes the run with the full artifact set'
-  return {
-    approve,
-    veto: 'runs one resolver pass on the redirects, then re-gates',
-    extend: mode === 'early' ? 'runs one more review round, then re-gates' : null,
-    abort: 'ends the run without completing',
-  }
-}
-
-/**
- * Render the `### Decisions` block: every decision line names its downstream
- * effect, so no approval is consequence-blind. At an early (cap-hit) gate
- * approval continues the pipeline into decomposition, atomicity checking, and
- * a final gate; at the final gate approval completes the run.
- */
-export function renderDecisions(mode: 'early' | 'final'): string[] {
-  const c = decisionConsequences(mode)
+/** The release gate's execution digest (U3 D7): the walk, the boundary rounds, the run's own commits. */
+export function renderExecutionDigest(digest: ExecutionDigest): string[] {
   return [
-    '### Decisions',
+    '### Execution digest',
     '',
-    `- **approve** (\`APPROVE\`, or every box checked) — ${c.approve}`,
-    '- **veto** (leave a box unchecked, or `VETO: <redirect>` for the whole change) — runs one resolver pass on the redirects, then re-gates',
-    ...(c.extend === null ? [] : [`- **extend** (\`→ RUN 1 MORE\`) — ${c.extend} (early-gate only)`]),
-    '- **abort** (`ABORT` on its own line) — ends the run without completing; the only early exit that spends nothing further',
+    `- Tasks: ${String(digest.tasksDone)}/${String(digest.tasksTotal)} done`,
+    ...digest.verifyOutcomes.map((outcome) => `- ${outcome.log}: ${outcome.verdict}`),
+    `- commits: ${String(digest.commits.length)}`,
+    ...digest.commits.map((subject) => `  - ${subject}`),
   ]
 }
 

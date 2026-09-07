@@ -11,6 +11,7 @@ import { readEvents } from '../../../../afk-runner/src/events.js'
 import { pipelineMachine } from '../../../../afk-runner/src/graph/pipeline.js'
 import { foldEvents } from '../../../../afk-runner/src/kernel/fold.js'
 import { createReplayFolder, replayEvents } from '../../../../afk-runner/src/legacy-fold.js'
+import { owedAnswerOf } from '../../../../afk-runner/src/run-recovery.js'
 
 const SCENARIO_ROOT = import.meta.dir
 
@@ -59,15 +60,21 @@ function hasRoundEvent(
 }
 
 describe('scenario corpus inventory', () => {
-  it('holds exactly the seventeen recorded scenario fixtures', () => {
+  it('holds exactly the twenty-four recorded scenario fixtures', () => {
     expect(scenarioFiles()).toEqual([
       'abort-at-final-synthetic.ndjson',
+      'armed-approval-synthetic.ndjson',
+      'attempt-bound-exhaustion-synthetic.ndjson',
       'children-plan-synthetic.ndjson',
       'escalation-abort-synthetic.ndjson',
       'escalation-approve-cycle-synthetic.ndjson',
       'escalation-extend-cycle-synthetic.ndjson',
+      'execution-crash-windows-synthetic.ndjson',
       'extend-at-final-cycle-synthetic.ndjson',
       'precondition-escalation-synthetic.ndjson',
+      'red-verify-fix-loop-synthetic.ndjson',
+      'release-approval-synthetic.ndjson',
+      'release-veto-synthetic.ndjson',
       'resume-artifact-skip-gate.ndjson',
       's-depth-calm-stop-resume.ndjson',
       's-final-tail-synthetic.ndjson',
@@ -75,6 +82,7 @@ describe('scenario corpus inventory', () => {
       'steer-extend-round.ndjson',
       'tail-crash-resume-healed-synthetic.ndjson',
       'tail-crash-resume-synthetic.ndjson',
+      'task-walk-synthetic.ndjson',
       'under-budget-retry-synthetic.ndjson',
       'veto-at-final-cycle-synthetic.ndjson',
       'veto-revision-synthetic.ndjson',
@@ -291,5 +299,102 @@ describe('scenario corpus inventory', () => {
       withoutResume.fold(event)
     }
     expect(withoutResume.state).toEqual(state)
+  })
+
+  it('armed-approval-synthetic: the armed final-approve ordering — exits, mover, then the answer lands with implement active', () => {
+    const events = readEvents(logOf('armed-approval-synthetic.ndjson'))
+    expect(events).toHaveLength(19)
+    expect(events[15]).toMatchObject({ type: 'stage_exit', stage: 'decompose' })
+    expect(events[16]).toMatchObject({ type: 'stage_exit', stage: 'gate' })
+    expect(events[17]).toMatchObject({ type: 'stage_enter', stage: 'implement' })
+    expect(events[18]).toMatchObject({ type: 'gate', action: 'answered', outcome: 'approve', version: 1 })
+    const kernel = foldEvents(pipelineMachine, events).snapshot
+    expect(kernel.value).toBe('implement')
+    expect(kernel.context.stages['implement']).toBe('active')
+    expect(kernel.context.executionArmed).toBe(true)
+    expect(kernel.context.tasks).toEqual({})
+  })
+
+  it('task-walk-synthetic: the mid-walk kill — implement active, one item done, one started-not-done', () => {
+    const events = readEvents(logOf('task-walk-synthetic.ndjson'))
+    expect(events).toHaveLength(22)
+    expect(stageEvents(events, 'stage_enter', 'verify')).toHaveLength(0)
+    const kernel = foldEvents(pipelineMachine, events).snapshot
+    expect(kernel.value).toBe('implement')
+    expect(kernel.context.stages['implement']).toBe('active')
+    expect(kernel.context.tasks).toEqual({
+      '1': { status: 'done', attempts: 1 },
+      '2': { status: 'running', attempts: 1 },
+    })
+  })
+
+  it('red-verify-fix-loop-synthetic: verify red routes back into implement, the fix re-walks, verify re-runs, release parks', () => {
+    const events = readEvents(logOf('red-verify-fix-loop-synthetic.ndjson'))
+    expect(events).toHaveLength(37)
+    expect(events.filter((event) => event.type === 'stage_failed')).toEqual([])
+    expect(stageEvents(events, 'stage_enter', 'verify')).toHaveLength(2)
+    expect(stageEvents(events, 'stage_enter', 'implement')).toHaveLength(2)
+    // the fix re-started the culprit item: attempts rose to 2, done last-wins
+    const kernel = foldEvents(pipelineMachine, events).snapshot
+    expect(kernel.value).toEqual({ gate: 'awaiting' })
+    expect(kernel.context.gate).toEqual({ mode: 'release', version: 2, answered: false })
+    expect(kernel.context.tasks).toEqual({
+      '1': { status: 'done', attempts: 1 },
+      '2': { status: 'done', attempts: 2 },
+    })
+  })
+
+  it('attempt-bound-exhaustion-synthetic: two attempts fail, the bound halts twice, escalation presents interstitially from implement', () => {
+    const events = readEvents(logOf('attempt-bound-exhaustion-synthetic.ndjson'))
+    expect(events).toHaveLength(27)
+    expect(events.filter((event) => event.type === 'stage_failed')).toHaveLength(2)
+    // interstitial presentation: the only gate entry is the final gate's
+    // (seq 13) — the escalation presentation added no stage_enter(gate)
+    expect(stageEvents(events, 'stage_enter', 'gate').map((event) => event.seq)).toEqual([13])
+    expect(escalationPresentations(events)).toHaveLength(1)
+    // the failed bracket stays open — implement never exited
+    expect(stageEvents(events, 'stage_exit', 'implement')).toHaveLength(0)
+    const kernel = foldEvents(pipelineMachine, events).snapshot
+    expect(kernel.value).toEqual({ gate: 'awaiting' })
+    expect(kernel.context.failures).toEqual({ implement: 2 })
+    expect(kernel.context.stages['implement']).toBe('active')
+    expect(kernel.context.tasks).toEqual({ '1': { status: 'failed', attempts: 2 } })
+  })
+
+  it('release-approval-synthetic: exit-then-answer at the release gate completes with no implement mover', () => {
+    const events = readEvents(logOf('release-approval-synthetic.ndjson'))
+    expect(events).toHaveLength(31)
+    expect(events[29]).toMatchObject({ type: 'stage_exit', stage: 'gate' })
+    expect(events[30]).toMatchObject({ type: 'gate', action: 'answered', outcome: 'approve', mode: 'release' })
+    expect(stageEvents(events, 'stage_enter', 'implement')).toHaveLength(1)
+    const kernel = foldEvents(pipelineMachine, events).snapshot
+    expect(kernel.value).toBe('completed')
+    expect(kernel.status).toBe('done')
+    expect(kernel.context.tasks).toEqual({ '1': { status: 'done', attempts: 1 } })
+  })
+
+  it('release-veto-synthetic: the veto answers first, the mover re-enters implement, the re-release approves at v3', () => {
+    const events = readEvents(logOf('release-veto-synthetic.ndjson'))
+    expect(events).toHaveLength(44)
+    expect(events[29]).toMatchObject({ type: 'gate', action: 'answered', outcome: 'veto', version: 2 })
+    expect(events[30]).toMatchObject({ type: 'stage_exit', stage: 'gate' })
+    expect(events[31]).toMatchObject({ type: 'stage_enter', stage: 'implement' })
+    expect(gateVersionsOf(events, 'presented')).toEqual([1, 2, 3])
+    const kernel = foldEvents(pipelineMachine, events).snapshot
+    expect(kernel.value).toBe('completed')
+    // the re-targeted item re-started: attempts rose to 2
+    expect(kernel.context.tasks).toEqual({ '1': { status: 'done', attempts: 2 } })
+  })
+
+  it('execution-crash-windows-synthetic: the reversed window — mover landed, answer missing — owes exactly the approve answer', () => {
+    const events = readEvents(logOf('execution-crash-windows-synthetic.ndjson'))
+    expect(events).toHaveLength(18)
+    expect(events.at(-1)).toMatchObject({ type: 'stage_enter', stage: 'implement' })
+    const kernel = foldEvents(pipelineMachine, events).snapshot
+    expect(kernel.value).toBe('implement')
+    expect(kernel.context.gate).toEqual({ mode: 'final', version: 1, answered: false })
+    expect(owedAnswerOf(kernel.context, 'implement')).toEqual([
+      { altitude: 'L2', type: 'gate', action: 'answered', mode: 'final', version: 1, outcome: 'approve' },
+    ])
   })
 })
