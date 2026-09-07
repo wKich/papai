@@ -58,6 +58,9 @@ bun test:mutate --threshold=0.6
 bun test:mutate:file src/foo.ts --threshold=0.6
 bun test:mutate:changed --base=origin/master --threshold=0.6
 
+# Seed floors for exactly the listed files (scoped seed — no gate verdict):
+bun test:mutate:file src/foo.ts --update-baseline
+
 # Show raw Stryker output while still writing paired JSON reports:
 bun test:mutate:file src/foo.ts --verbose
 ```
@@ -120,6 +123,10 @@ For each source file, `pairedRun` resolves the test set in this priority:
    - `client/debug/x.ts` -> `tests/client/debug/x.test.ts`
    - `plugins/task-provider-kaneo/foo.ts` -> `tests/plugins/task-provider-kaneo/foo.test.ts`
    - `review-loop/src/foo.ts` -> `tests/review-loop/foo.test.ts`
+   - `afk-runner/src/foo.ts` -> `tests/afk-runner/foo.test.ts`
+   - `opencode-agent/src/foo.ts` -> `tests/opencode-agent/foo.test.ts` — flat: the whole
+     `src/` subtree strips, so `opencode-agent/src/phases/implement-steps.ts` also maps to
+     `tests/opencode-agent/implement-steps.test.ts`
 
 A source with no covering test, no override, and no companion is skipped with
 a warning — fix it by adding a companion test, registering a cross-cutting
@@ -200,26 +207,36 @@ The master `mutation-baseline` seed job is unchanged and still runs single-proce
 
 `test:mutate:changed` selects a changed file only when `isGateableImplFile`
 (`.hooks/tdd/test-resolver.mjs`) accepts it, which means an implementation source under `src/`,
-`client/` or `plugins/`. `stryker.config.json`'s `mutate` globs do not narrow this further — the
+`client/`, `plugins/`, `review-loop/src/`, `afk-runner/src/` or `opencode-agent/src/` — the last
+one excluding its `index.ts` barrel, like every other gated tree.
+`stryker.config.json`'s `mutate` globs do not narrow this further — the
 paired runner overwrites `mutate` with the single target file — so that predicate is the gate's
 only scoping authority.
 
 Everything else is internal infrastructure or tooling and is deliberately **not** gated per file:
-`scripts/`, `opencode-agent/`, `mutation-improve/`, `review-loop/`, `sdd-runner/`. They keep their
+`scripts/`, `mutation-improve/`, and every workspace path outside the `src/` roots above (docs,
+workflow config, barrels). They keep their
 suites under `tests/` and run in CI like any other test; what they do not get is a per-file
 mutation floor. The reason is cost — measured over the 32 first-parent commits before this rule
-landed, 118 of the gate's 141 selected targets (84%) were `sdd-runner/src/` or `review-loop/src/`,
-at roughly 107s per file.
+landed, 118 of the gate's 141 selected targets (84%) were workspace sources, at roughly 107s per
+file — which is also why a workspace `src/` root re-enters the gate only as a deliberate widening
+that ships its floors in the same commit: `opencode-agent/src/` was added exactly that way (see
+**Scoped seed** below).
 
 Two consequences worth stating, because both look like bugs otherwise:
 
 - **A branch that touches only non-gateable roots selects zero targets and passes.** That is the
-  correct verdict, not a lost measurement. The plan job emits an empty shard matrix and the gate
-  renders its verdict from carried-over scores.
+  correct verdict, not a lost measurement — a `scripts/`- or `mutation-improve/`-only branch, or
+  one that edits only docs, earns it. The plan job emits an empty shard matrix and the gate
+  renders its verdict from carried-over scores. An `opencode-agent/src/`-only branch does not:
+  the workspace is a gateable root, so its files are selected, measured and judged against their
+  floors like any other product code.
 - **Non-gateable is not unmappable.** `suggestTestPath` / `findTestFile` / `resolveImplPath` and
-  `coverage-map.ts`'s `samePackageTestDir` still map `review-loop/src/` and `sdd-runner/src/` to
-  their `tests/` directories, because `bun run test:affected` and the score fingerprint depend on
-  those mappings. Narrowing the gate must never narrow the mappers.
+  `coverage-map.ts`'s `samePackageTestDir` still map workspaces the gate does not measure, because
+  `bun run test:affected` and the score fingerprint depend on
+  those mappings. Narrowing the gate must never narrow the mappers. The coding-agent workspace
+  maps **flat**, not mirrored — `opencode-agent/src/phases/implement-steps.ts` resolves
+  `tests/opencode-agent/implement-steps.test.ts` — matching where its tests actually live.
 
 The same predicate gates the Write/Edit TDD hook checks, so the two surfaces always agree on what
 "gateable" means.
@@ -360,6 +377,40 @@ Re-generate the baseline from scratch (discards history) by deleting
 `scripts/mutation/baseline.json` and running `bun test:mutate --update-baseline`
 (a full run; its `ratchetMerge` drops keys no longer in scope, which is what you
 want when rebuilding).
+
+### Scoped seed for a newly gated root (`test:mutate:file --update-baseline`)
+
+Widening the gate to a new root needs one seeding run that measures the entire new scope fresh,
+before the widened scope judges its first change. No other command does that:
+`test:mutate:changed --update-baseline` measures only the branch diff (the new root's files are
+unchanged on master), and full regeneration is prohibitive. So `test:mutate:file` accepts
+`--update-baseline`: it measures exactly the listed files with reuse disabled, merges them into
+`baseline.json` via `seedMerge`, writes the scores snapshot, and exits 0 — a seed, not a gate, so
+no threshold verdict applies. The seed that floored the coding-agent workspace:
+
+```bash
+bun test:mutate:file $(git ls-files ':(glob)opencode-agent/src/**/*.ts' \
+  ':(exclude,glob)opencode-agent/src/**/index.ts' \
+  ':(exclude,glob)opencode-agent/src/**/constants.ts') --update-baseline
+```
+
+Two pathspec properties are load-bearing: the positive pattern needs the `:(glob)` magic — under
+git's default matching it requires a subdirectory below `src/` and silently drops the top-level
+sources — and the excludes must be tree-scoped **and** globbed, because an unanchored
+`:(exclude)**/index.ts` zeroes the entire selection. An empty selection exits 2 on this
+entrypoint, deliberately: here it is always a pathspec bug, never a green seed.
+
+**Chunking.** The paired runner measures its file list sequentially, and a fresh workspace scope
+is hours of wall clock — past any CI job ceiling. Split the list into ≈30–60-minute chunks and run
+them one after another: `seedMerge` is per-key max and idempotent, so chunks compose and retries
+never conflict, and `--update-baseline` implies `--no-score-cache`, so every chunk's floors come
+from fresh measurement. Errored or skipped files record no floor and stay retryable — repeat until
+every file in the new scope has one, then land the widening (predicate, globs, mappers) and the
+seeded `baseline.json` as a single commit, so the widened scope never exists without its floors.
+One artifact does not compose: `runUpdateBaseline` rewrites `reports/paired/scores.json` with only
+that run's `perFile`, so after N chunks the snapshot holds just the last chunk's files. The floors
+in `baseline.json` are the record of truth; the snapshot feeds only the fresh-base re-seed replay
+path and must not be read as the chunk-complete set.
 
 ### Migration (record shape — lazy, no reseed required)
 

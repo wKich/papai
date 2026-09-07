@@ -189,7 +189,9 @@ const scanTestFiles = (projectRoot: string): string[] => {
  * `src/chat/mattermost/file-helpers.ts` this returns `tests/chat/mattermost`; for `src/history.ts`
  * it returns `tests` (top-level); for `plugins/foo/bar.ts` → `tests/plugins/foo`;
  * for `review-loop/src/x.ts` → `tests/review-loop`;
- * for `client/a/b.ts` → `tests/client/a`.
+ * for `client/a/b.ts` → `tests/client/a`;
+ * for `opencode-agent/src/x.ts` (any depth) → `tests/opencode-agent` (flat — the workspace's
+ * `src/` subtree strips away, mirroring the hook's `suggestTestPath`).
  */
 const samePackageTestDir = (srcRel: string): string => {
   const forward = srcRel.replace(/\\/gu, '/')
@@ -203,6 +205,13 @@ const samePackageTestDir = (srcRel: string): string => {
   if (forward.startsWith('review-loop/src/')) {
     const withoutPrefix = forward.replace(/^review-loop\/src\//u, '')
     return path.join('tests', 'review-loop', dirOf(withoutPrefix))
+  }
+  // Flat across the src/ subtree: the workspace's 70 test files live in tests/opencode-agent/
+  // with no mirrored subdirectories, so every workspace source maps to the single package dir.
+  // Must sit ahead of the src/ handling — the generic fallback would drag every top-level test
+  // into workspace candidate universes.
+  if (forward.startsWith('opencode-agent/src/')) {
+    return path.join('tests', 'opencode-agent')
   }
   if (forward.startsWith('src/')) {
     const withoutSrc = forward.replace(/^src\//u, '')

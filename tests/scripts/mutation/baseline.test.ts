@@ -457,3 +457,88 @@ describe('resolveRatchet verdict classification', () => {
     })
   })
 })
+
+describe('committed baseline covers the widened workspace scope', () => {
+  const REPO_ROOT = path.join(import.meta.dir, '../../..')
+
+  // Scoped files the seed measured fresh but Stryker produced no mutants for
+  // (type-only modules: interfaces, type aliases and two numeric constants).
+  // `buildBaselineFromPerFile` records nothing for scored === 0 by design ("a
+  // 0 score from 'no mutants' is not a real coverage signal"), and
+  // `resolveRatchet` skips such files on every later run, so no floor can
+  // exist for them and none is needed — if one ever gains runtime code, its
+  // first gated change is measured and judged by the gate's no-floor rules.
+  // Keyed, not weakened away: each entry must stay scoped and stay floorless,
+  // so a file that gains a measured floor fails here until its entry is
+  // retired in the same change.
+  const ZERO_MUTANT_WORKSPACE_SOURCES: readonly string[] = [
+    'opencode-agent/src/config-shape.ts',
+    'opencode-agent/src/phase-context.ts',
+    'opencode-agent/src/run-result.ts',
+    'opencode-agent/src/state-version.ts',
+  ]
+
+  // Scoped-set walk and baseline load live outside the test bodies
+  // (no-conditional-in-test) — same arrangement as check.test.ts's live
+  // derivations for the shell-agreement pin.
+  const scopedWorkspaceProductFiles = (repoRoot: string): readonly string[] => {
+    const scoped: string[] = []
+    const walk = (dir: string): void => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const abs = path.join(dir, entry.name)
+        if (entry.isDirectory()) walk(abs)
+        else if (entry.name.endsWith('.ts') && entry.name !== 'index.ts' && entry.name !== 'constants.ts') {
+          scoped.push(path.relative(repoRoot, abs))
+        }
+      }
+    }
+    walk(path.join(repoRoot, 'opencode-agent/src'))
+    return scoped
+  }
+
+  const committedBaseline = (): BaselineMap =>
+    loadBaseline(path.join(REPO_ROOT, 'scripts/mutation/baseline.json')) ?? {}
+
+  // Row classification lives outside the test bodies (no-conditional-in-test):
+  // a scoped file is covered when it has a floor or is keyed as a zero-mutant
+  // exception; the row keeps both flags so a failure prints the side that
+  // broke.
+  const classifyScopedCoverage = (
+    scoped: readonly string[],
+    baseline: BaselineMap,
+  ): readonly { readonly file: string; readonly floored: boolean; readonly covered: boolean }[] =>
+    scoped.map((file) => {
+      const floored = baseline[file] !== undefined
+      return {
+        file,
+        floored,
+        covered: floored || ZERO_MUTANT_WORKSPACE_SOURCES.includes(file),
+      }
+    })
+
+  test('every opencode-agent/src product file has a baseline entry from the scoped seed', () => {
+    const scoped = scopedWorkspaceProductFiles(REPO_ROOT)
+    expect(scoped.length).toBeGreaterThan(0)
+    const baseline = committedBaseline()
+    const rows = classifyScopedCoverage(scoped, baseline)
+    const missing = rows.filter((row) => !row.covered).map((row) => row.file)
+    expect(missing).toEqual([])
+    for (const row of rows.filter((entry) => entry.floored)) {
+      expect(isBaselineMap({ [row.file]: baseline[row.file] })).toBe(true)
+    }
+  })
+
+  test('each keyed zero-mutant exception is still scoped and still floorless', () => {
+    const scoped = scopedWorkspaceProductFiles(REPO_ROOT)
+    const baseline = committedBaseline()
+    for (const file of ZERO_MUTANT_WORKSPACE_SOURCES) {
+      expect(scoped.includes(file), `${file}: exception recorded but no longer a scoped product file — retire it`).toBe(
+        true,
+      )
+      expect(
+        baseline[file],
+        `${file}: gained a measured floor — retire its exception in the same change`,
+      ).toBeUndefined()
+    }
+  })
+})
