@@ -20,7 +20,6 @@ import {
   RunnerConfigSchema,
   slugify,
 } from '../../afk-runner/src/config.js'
-
 import { assertEach, type Row } from '../utils/grouped-assertions.js'
 
 const tmpDirs: string[] = []
@@ -111,7 +110,8 @@ describe('resolveRunnerConfig (config ladder)', () => {
     })
     const rows: readonly RungRow[] = [
       {
-        label: 'present file at <repoRoot>/.afk-runner/config.json is wholesale-authoritative — its five keys govern, env never consulted',
+        label:
+          'present file at <repoRoot>/.afk-runner/config.json is wholesale-authoritative — its five keys govern, env never consulted',
         root: fileRoot,
         env: { AFK_RUNNER_MODEL: 'env-model' },
         expected: {
