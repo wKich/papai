@@ -1,4 +1,496 @@
 {
+  "afk-runner/src/accounting.ts": {
+    "score": 0.7529411764705882,
+    "killed": 128,
+    "timeout": 0,
+    "scored": 170
+  },
+  "afk-runner/src/agent-layer.ts": {
+    "score": 0.8503937007874016,
+    "killed": 106,
+    "timeout": 2,
+    "scored": 127
+  },
+  "afk-runner/src/agent-reporter.ts": {
+    "score": 0.6712328767123288,
+    "killed": 49,
+    "timeout": 0,
+    "scored": 73
+  },
+  "afk-runner/src/agent-schemas.ts": {
+    "score": 0.42857142857142855,
+    "killed": 33,
+    "timeout": 0,
+    "scored": 77
+  },
+  "afk-runner/src/agent-seam.ts": {
+    "score": 0.72,
+    "killed": 18,
+    "timeout": 0,
+    "scored": 25
+  },
+  "afk-runner/src/analyze-corpus.ts": {
+    "score": 0.8024691358024691,
+    "killed": 65,
+    "timeout": 0,
+    "scored": 81
+  },
+  "afk-runner/src/analyze-findings.ts": {
+    "score": 0.8586572438162544,
+    "killed": 242,
+    "timeout": 1,
+    "scored": 283
+  },
+  "afk-runner/src/analyze-gates.ts": {
+    "score": 0.6583333333333333,
+    "killed": 237,
+    "timeout": 0,
+    "scored": 360
+  },
+  "afk-runner/src/analyze-io.ts": {
+    "score": 0.7857142857142857,
+    "killed": 132,
+    "timeout": 0,
+    "scored": 168
+  },
+  "afk-runner/src/analyze-report.ts": {
+    "score": 0.2939189189189189,
+    "killed": 87,
+    "timeout": 0,
+    "scored": 296
+  },
+  "afk-runner/src/analyze-truth.ts": {
+    "score": 0.7910447761194029,
+    "killed": 53,
+    "timeout": 0,
+    "scored": 67
+  },
+  "afk-runner/src/analyze-usage.ts": {
+    "score": 0.9565217391304348,
+    "killed": 44,
+    "timeout": 0,
+    "scored": 46
+  },
+  "afk-runner/src/analyze.ts": {
+    "score": 0.9555555555555556,
+    "killed": 43,
+    "timeout": 0,
+    "scored": 45
+  },
+  "afk-runner/src/cli.ts": {
+    "score": 0.49696969696969695,
+    "killed": 164,
+    "timeout": 0,
+    "scored": 330
+  },
+  "afk-runner/src/config.ts": {
+    "score": 0.7288135593220338,
+    "killed": 86,
+    "timeout": 0,
+    "scored": 118
+  },
+  "afk-runner/src/drive/boundary.ts": {
+    "score": 0.7916666666666666,
+    "killed": 19,
+    "timeout": 0,
+    "scored": 24
+  },
+  "afk-runner/src/drive/failure-budget.ts": {
+    "score": 0.7321428571428571,
+    "killed": 41,
+    "timeout": 0,
+    "scored": 56
+  },
+  "afk-runner/src/drive/loop.ts": {
+    "score": 0.8120805369127517,
+    "killed": 121,
+    "timeout": 0,
+    "scored": 149
+  },
+  "afk-runner/src/drive/resume.ts": {
+    "score": 0.5,
+    "killed": 145,
+    "timeout": 0,
+    "scored": 290
+  },
+  "afk-runner/src/errors.ts": {
+    "score": 0,
+    "killed": 0,
+    "timeout": 0,
+    "scored": 2
+  },
+  "afk-runner/src/event-schemas.ts": {
+    "score": 0.7151898734177216,
+    "killed": 113,
+    "timeout": 0,
+    "scored": 158
+  },
+  "afk-runner/src/events.ts": {
+    "score": 0.9565217391304348,
+    "killed": 44,
+    "timeout": 0,
+    "scored": 46
+  },
+  "afk-runner/src/graph/pipeline-work.ts": {
+    "score": 0.42731277533039647,
+    "killed": 95,
+    "timeout": 2,
+    "scored": 227
+  },
+  "afk-runner/src/graph/pipeline.ts": {
+    "score": 1,
+    "killed": 4,
+    "timeout": 0,
+    "scored": 4
+  },
+  "afk-runner/src/kernel/fold.ts": {
+    "score": 0.9271523178807947,
+    "killed": 140,
+    "timeout": 0,
+    "scored": 151
+  },
+  "afk-runner/src/kernel/interpreter.ts": {
+    "score": 0.6075949367088608,
+    "killed": 48,
+    "timeout": 0,
+    "scored": 79
+  },
+  "afk-runner/src/kernel/machine.ts": {
+    "score": 0.8410041841004184,
+    "killed": 201,
+    "timeout": 0,
+    "scored": 239
+  },
+  "afk-runner/src/legacy-fold.ts": {
+    "score": 0.9607843137254902,
+    "killed": 147,
+    "timeout": 0,
+    "scored": 153
+  },
+  "afk-runner/src/memo-project.ts": {
+    "score": 0.7086614173228346,
+    "killed": 89,
+    "timeout": 1,
+    "scored": 127
+  },
+  "afk-runner/src/openspec-driver.ts": {
+    "score": 0.7567567567567568,
+    "killed": 56,
+    "timeout": 0,
+    "scored": 74
+  },
+  "afk-runner/src/run-index.ts": {
+    "score": 0.391304347826087,
+    "killed": 27,
+    "timeout": 0,
+    "scored": 69
+  },
+  "afk-runner/src/run-lite.ts": {
+    "score": 0.36538461538461536,
+    "killed": 19,
+    "timeout": 0,
+    "scored": 52
+  },
+  "afk-runner/src/run-recovery.ts": {
+    "score": 0.49079754601226994,
+    "killed": 80,
+    "timeout": 0,
+    "scored": 163
+  },
+  "afk-runner/src/run-resume.ts": {
+    "score": 0.6126126126126126,
+    "killed": 68,
+    "timeout": 0,
+    "scored": 111
+  },
+  "afk-runner/src/run-state.ts": {
+    "score": 0.9159663865546218,
+    "killed": 109,
+    "timeout": 0,
+    "scored": 119
+  },
+  "afk-runner/src/run.ts": {
+    "score": 0.7297297297297297,
+    "killed": 27,
+    "timeout": 0,
+    "scored": 37
+  },
+  "afk-runner/src/session-id.ts": {
+    "score": 0.7647058823529411,
+    "killed": 13,
+    "timeout": 0,
+    "scored": 17
+  },
+  "afk-runner/src/session-ledger.ts": {
+    "score": 0.9153846153846154,
+    "killed": 119,
+    "timeout": 0,
+    "scored": 130
+  },
+  "afk-runner/src/stop-controller.ts": {
+    "score": 0.925,
+    "killed": 111,
+    "timeout": 0,
+    "scored": 120
+  },
+  "afk-runner/src/work/artifact-consistency.ts": {
+    "score": 0.7391304347826086,
+    "killed": 102,
+    "timeout": 0,
+    "scored": 138
+  },
+  "afk-runner/src/work/assumption-blast.ts": {
+    "score": 0.7843137254901961,
+    "killed": 40,
+    "timeout": 0,
+    "scored": 51
+  },
+  "afk-runner/src/work/atomicity.ts": {
+    "score": 0.8163265306122449,
+    "killed": 38,
+    "timeout": 2,
+    "scored": 49
+  },
+  "afk-runner/src/work/auto-policy.ts": {
+    "score": 0.76,
+    "killed": 171,
+    "timeout": 0,
+    "scored": 225
+  },
+  "afk-runner/src/work/concern-model.ts": {
+    "score": 0.775,
+    "killed": 93,
+    "timeout": 0,
+    "scored": 120
+  },
+  "afk-runner/src/work/decompose.ts": {
+    "score": 0.7551020408163265,
+    "killed": 35,
+    "timeout": 2,
+    "scored": 49
+  },
+  "afk-runner/src/work/draft.ts": {
+    "score": 0.5408163265306123,
+    "killed": 50,
+    "timeout": 3,
+    "scored": 98
+  },
+  "afk-runner/src/work/early-gate.ts": {
+    "score": 0.45714285714285713,
+    "killed": 16,
+    "timeout": 0,
+    "scored": 35
+  },
+  "afk-runner/src/work/gate-answers.ts": {
+    "score": 0.8313253012048193,
+    "killed": 138,
+    "timeout": 0,
+    "scored": 166
+  },
+  "afk-runner/src/work/gate-claims.ts": {
+    "score": 0.7297297297297297,
+    "killed": 54,
+    "timeout": 0,
+    "scored": 74
+  },
+  "afk-runner/src/work/gate-digest-extract.ts": {
+    "score": 0.6,
+    "killed": 90,
+    "timeout": 0,
+    "scored": 150
+  },
+  "afk-runner/src/work/gate-expected.ts": {
+    "score": 0.5735294117647058,
+    "killed": 39,
+    "timeout": 0,
+    "scored": 68
+  },
+  "afk-runner/src/work/gate-expiry.ts": {
+    "score": 0.3389830508474576,
+    "killed": 40,
+    "timeout": 0,
+    "scored": 118
+  },
+  "afk-runner/src/work/gate-files.ts": {
+    "score": 0.6705882352941176,
+    "killed": 57,
+    "timeout": 0,
+    "scored": 85
+  },
+  "afk-runner/src/work/gate-integrity.ts": {
+    "score": 0.8088235294117647,
+    "killed": 55,
+    "timeout": 0,
+    "scored": 68
+  },
+  "afk-runner/src/work/gate-model.ts": {
+    "score": 0.8571428571428571,
+    "killed": 126,
+    "timeout": 0,
+    "scored": 147
+  },
+  "afk-runner/src/work/gate-parse-lines.ts": {
+    "score": 0.20297029702970298,
+    "killed": 41,
+    "timeout": 0,
+    "scored": 202
+  },
+  "afk-runner/src/work/gate-prelude.ts": {
+    "score": 0.7166666666666667,
+    "killed": 86,
+    "timeout": 0,
+    "scored": 120
+  },
+  "afk-runner/src/work/gate-render.ts": {
+    "score": 0.39436619718309857,
+    "killed": 112,
+    "timeout": 0,
+    "scored": 284
+  },
+  "afk-runner/src/work/gate-settle.ts": {
+    "score": 0.7245762711864406,
+    "killed": 171,
+    "timeout": 0,
+    "scored": 236
+  },
+  "afk-runner/src/work/gate-signals.ts": {
+    "score": 0.7433628318584071,
+    "killed": 84,
+    "timeout": 0,
+    "scored": 113
+  },
+  "afk-runner/src/work/gate-waiter.ts": {
+    "score": 0.6296296296296297,
+    "killed": 85,
+    "timeout": 0,
+    "scored": 135
+  },
+  "afk-runner/src/work/intake.ts": {
+    "score": 0.7755102040816326,
+    "killed": 76,
+    "timeout": 0,
+    "scored": 98
+  },
+  "afk-runner/src/work/materialize.ts": {
+    "score": 0.8466666666666667,
+    "killed": 127,
+    "timeout": 0,
+    "scored": 150
+  },
+  "afk-runner/src/work/present-escalation.ts": {
+    "score": 0.7191011235955056,
+    "killed": 64,
+    "timeout": 0,
+    "scored": 89
+  },
+  "afk-runner/src/work/present-final.ts": {
+    "score": 0.47368421052631576,
+    "killed": 27,
+    "timeout": 0,
+    "scored": 57
+  },
+  "afk-runner/src/work/report.ts": {
+    "score": 0.6032786885245902,
+    "killed": 184,
+    "timeout": 0,
+    "scored": 305
+  },
+  "afk-runner/src/work/response-error.ts": {
+    "score": 0.8421052631578947,
+    "killed": 16,
+    "timeout": 0,
+    "scored": 19
+  },
+  "afk-runner/src/work/review-loop.ts": {
+    "score": 0.8524590163934426,
+    "killed": 52,
+    "timeout": 0,
+    "scored": 61
+  },
+  "afk-runner/src/work/review-model.ts": {
+    "score": 0.9215686274509803,
+    "killed": 188,
+    "timeout": 0,
+    "scored": 204
+  },
+  "afk-runner/src/work/review-prompt.ts": {
+    "score": 0.2028985507246377,
+    "killed": 14,
+    "timeout": 0,
+    "scored": 69
+  },
+  "afk-runner/src/work/review-round.ts": {
+    "score": 0.5,
+    "killed": 19,
+    "timeout": 0,
+    "scored": 38
+  },
+  "afk-runner/src/work/review.ts": {
+    "score": 0.11382113821138211,
+    "killed": 14,
+    "timeout": 0,
+    "scored": 123
+  },
+  "afk-runner/src/work/steer.ts": {
+    "score": 0.2230769230769231,
+    "killed": 29,
+    "timeout": 0,
+    "scored": 130
+  },
+  "afk-runner/src/work/veto-updater.ts": {
+    "score": 0.43781094527363185,
+    "killed": 88,
+    "timeout": 0,
+    "scored": 201
+  },
+  "afk-runner/src/work/waiter-probe.ts": {
+    "score": 0.875,
+    "killed": 35,
+    "timeout": 0,
+    "scored": 40
+  },
+  "afk-runner/src/work/waiter-steer.ts": {
+    "score": 0.3615819209039548,
+    "killed": 64,
+    "timeout": 0,
+    "scored": 177
+  },
+  "client/settings/byok-provider-fetchers.ts": {
+    "score": 0.75,
+    "killed": 18,
+    "timeout": 0,
+    "scored": 24
+  },
+  "client/settings/fetcher-schemas-llm-providers.ts": {
+    "score": 0.38333333333333336,
+    "killed": 23,
+    "timeout": 0,
+    "scored": 60
+  },
+  "client/settings/fetchers.ts": {
+    "score": 0.6587677725118484,
+    "killed": 139,
+    "timeout": 0,
+    "scored": 211
+  },
+  "client/settings/llm-model-metadata-fetchers.ts": {
+    "score": 1,
+    "killed": 20,
+    "timeout": 0,
+    "scored": 20
+  },
+  "client/stories/msw/scenarios.ts": {
+    "score": 1,
+    "killed": 96,
+    "timeout": 0,
+    "scored": 96
+  },
+  "client/stories/msw/settings-handlers-metadata.ts": {
+    "score": 0.34615384615384615,
+    "killed": 9,
+    "timeout": 0,
+    "scored": 26
+  },
   "plugins/task-provider-github/classify-error.ts": 0.744,
   "plugins/task-provider-github/constants.ts": 1,
   "plugins/task-provider-github/due-date.ts": 1,
@@ -27,7 +519,18 @@
   "plugins/task-provider-kaneo/add-task-relation.ts": 0,
   "plugins/task-provider-kaneo/api-error.ts": 0,
   "plugins/task-provider-kaneo/classify-error.ts": 0.9103448275862069,
-  "plugins/task-provider-kaneo/column-resource.ts": 0.12941176470588237,
+  "plugins/task-provider-kaneo/client.ts": {
+    "score": 0.6639344262295082,
+    "killed": 81,
+    "timeout": 0,
+    "scored": 122
+  },
+  "plugins/task-provider-kaneo/column-resource.ts": {
+    "score": 0.16091954022988506,
+    "killed": 14,
+    "timeout": 0,
+    "scored": 87
+  },
   "plugins/task-provider-kaneo/comment-resource.ts": 0.4807692307692308,
   "plugins/task-provider-kaneo/create-column.ts": 0.1111111111111111,
   "plugins/task-provider-kaneo/create-label.ts": 0,
@@ -78,7 +581,12 @@
   "plugins/task-provider-kaneo/schemas/update-project.ts": 1,
   "plugins/task-provider-kaneo/search-tasks.ts": 0.8163265306122449,
   "plugins/task-provider-kaneo/task-relations.ts": 0.47058823529411764,
-  "plugins/task-provider-kaneo/task-resource.ts": 0.4489795918367347,
+  "plugins/task-provider-kaneo/task-resource.ts": {
+    "score": 0.4517766497461929,
+    "killed": 89,
+    "timeout": 0,
+    "scored": 197
+  },
   "plugins/task-provider-kaneo/task-status.ts": 0.875,
   "plugins/task-provider-kaneo/task-update-helpers.ts": 0.4246575342465753,
   "plugins/task-provider-kaneo/update-column.ts": 0.09523809523809523,
@@ -147,22 +655,134 @@
   "plugins/task-provider-youtrack/schemas/work-item.ts": 1,
   "plugins/task-provider-youtrack/task-helpers.ts": 0.5,
   "plugins/task-provider-youtrack/validate-config.ts": 1,
+  "review-loop/src/agent-command.ts": {
+    "score": 0.8523489932885906,
+    "killed": 127,
+    "timeout": 0,
+    "scored": 149
+  },
+  "review-loop/src/agent-runner.ts": {
+    "score": 0.7867647058823529,
+    "killed": 107,
+    "timeout": 0,
+    "scored": 136
+  },
+  "review-loop/src/build-checker.ts": {
+    "score": 0.7857142857142857,
+    "killed": 55,
+    "timeout": 0,
+    "scored": 70
+  },
+  "review-loop/src/cli-errors.ts": {
+    "score": 0.8103448275862069,
+    "killed": 47,
+    "timeout": 0,
+    "scored": 58
+  },
+  "src/analytics/provider-scope-factory.ts": {
+    "score": 0.6571428571428571,
+    "killed": 69,
+    "timeout": 0,
+    "scored": 105
+  },
+  "src/analytics/rekey/copy-children.ts": {
+    "score": 0.8969072164948454,
+    "killed": 87,
+    "timeout": 0,
+    "scored": 97
+  },
+  "src/announcements/humanize.ts": {
+    "score": 0.9369369369369369,
+    "killed": 104,
+    "timeout": 0,
+    "scored": 111
+  },
+  "src/byok-llm/blob-codec.ts": {
+    "score": 1,
+    "killed": 72,
+    "timeout": 0,
+    "scored": 72
+  },
   "src/coding-sessions/configure.ts": 0.6666666666666666,
+  "src/completion/verified-completion.ts": {
+    "score": 0.788135593220339,
+    "killed": 93,
+    "timeout": 0,
+    "scored": 118
+  },
   "src/config.ts": 0.6535433070866141,
-  "src/conversation.ts": 0.6231884057971014,
+  "src/context-vault/summarizer.ts": {
+    "score": 0.6153846153846154,
+    "killed": 108,
+    "timeout": 4,
+    "scored": 182
+  },
+  "src/conversation.ts": {
+    "score": 0.6231884057971014,
+    "killed": 86,
+    "timeout": 0,
+    "scored": 138
+  },
   "src/db/deferred-schema.ts": 0.40540540540540543,
-  "src/db/index.ts": 0.027777777777777776,
+  "src/db/index.ts": {
+    "score": 0.027777777777777776,
+    "killed": 1,
+    "timeout": 0,
+    "scored": 36
+  },
+  "src/db/llm-providers-schema.ts": {
+    "score": 0.06896551724137931,
+    "killed": 2,
+    "timeout": 0,
+    "scored": 29
+  },
   "src/db/migrations/081_alert_task_instance_pin.ts": 0.85,
   "src/db/migrations/082_alert_activity_cursor.ts": 0.8,
+  "src/db/migrations/083_llm_provider_base_refs.ts": {
+    "score": 0.8571428571428571,
+    "killed": 24,
+    "timeout": 0,
+    "scored": 28
+  },
   "src/debug/llm-trace-collector.ts": {
     "score": 0.8461538461538461,
     "killed": 143,
     "timeout": 0,
     "scored": 169
   },
+  "src/debug/settings-api-router.ts": {
+    "score": 0.5170940170940171,
+    "killed": 121,
+    "timeout": 0,
+    "scored": 234
+  },
   "src/debug/settings/admin/instances-routes.ts": 0.6261127596439169,
+  "src/debug/settings/admin/llm-providers-routes.ts": {
+    "score": 0.6859504132231405,
+    "killed": 166,
+    "timeout": 0,
+    "scored": 242
+  },
+  "src/debug/settings/byok-field-response.ts": {
+    "score": 0.8085106382978723,
+    "killed": 38,
+    "timeout": 0,
+    "scored": 47
+  },
+  "src/debug/settings/byok-routes.ts": {
+    "score": 0.7853658536585366,
+    "killed": 161,
+    "timeout": 0,
+    "scored": 205
+  },
   "src/debug/settings/context-task-instance-routes.ts": 0.5808823529411765,
   "src/debug/settings/group-routes.ts": 0.6975476839237057,
+  "src/debug/settings/llm-model-metadata-routes.ts": {
+    "score": 0.68,
+    "killed": 17,
+    "timeout": 0,
+    "scored": 25
+  },
   "src/deferred-prompts/activity-gating.ts": 1,
   "src/deferred-prompts/alerts.ts": 0.5974842767295597,
   "src/deferred-prompts/condition-eval.ts": 0.8547717842323651,
@@ -180,12 +800,23 @@
     "timeout": 0,
     "scored": 77
   },
-  "src/deferred-prompts/proactive-llm-helpers.ts": 0.6952380952380952,
-  "src/deferred-prompts/proactive-llm.ts": {
-    "score": 0.7560975609756098,
-    "killed": 31,
+  "src/deferred-prompts/proactive-llm-config.ts": {
+    "score": 0.625,
+    "killed": 20,
     "timeout": 0,
-    "scored": 41
+    "scored": 32
+  },
+  "src/deferred-prompts/proactive-llm-helpers.ts": {
+    "score": 0.6952380952380952,
+    "killed": 73,
+    "timeout": 0,
+    "scored": 105
+  },
+  "src/deferred-prompts/proactive-llm.ts": {
+    "score": 0.7619047619047619,
+    "killed": 32,
+    "timeout": 0,
+    "scored": 42
   },
   "src/deferred-prompts/proof-checks-observe.ts": {
     "score": 0.668918918918919,
@@ -215,13 +846,49 @@
   "src/deferred-prompts/snapshots.ts": 0.8125,
   "src/deferred-prompts/tool-handlers.ts": 0.9675090252707581,
   "src/deferred-prompts/types.ts": 0.8309859154929577,
+  "src/embeddings.ts": {
+    "score": 0.65625,
+    "killed": 63,
+    "timeout": 0,
+    "scored": 96
+  },
   "src/errors.ts": 0.9875776397515528,
   "src/history.ts": 0.9891304347826086,
+  "src/index.ts": {
+    "score": 0.5735294117647058,
+    "killed": 39,
+    "timeout": 0,
+    "scored": 68
+  },
+  "src/llm-model-builder.ts": {
+    "score": 0.8275862068965517,
+    "killed": 24,
+    "timeout": 0,
+    "scored": 29
+  },
   "src/llm-orchestrator-events.ts": {
-    "score": 0.5507246376811594,
+    "score": 0.6031746031746031,
     "killed": 38,
     "timeout": 0,
-    "scored": 69
+    "scored": 63
+  },
+  "src/llm-orchestrator-invoke.ts": {
+    "score": 0.71,
+    "killed": 70,
+    "timeout": 1,
+    "scored": 100
+  },
+  "src/llm-orchestrator-send.ts": {
+    "score": 0.75,
+    "killed": 51,
+    "timeout": 0,
+    "scored": 68
+  },
+  "src/llm-orchestrator-support.ts": {
+    "score": 0.5714285714285714,
+    "killed": 56,
+    "timeout": 0,
+    "scored": 98
   },
   "src/llm-orchestrator-tool-events.ts": {
     "score": 0.7156862745098039,
@@ -235,7 +902,73 @@
     "timeout": 0,
     "scored": 46
   },
+  "src/llm-orchestrator.ts": {
+    "score": 0.7105263157894737,
+    "killed": 54,
+    "timeout": 0,
+    "scored": 76
+  },
+  "src/llm-providers/env-bootstrap.ts": {
+    "score": 0.5853658536585366,
+    "killed": 48,
+    "timeout": 0,
+    "scored": 82
+  },
+  "src/llm-providers/resolver.ts": {
+    "score": 0.8305084745762712,
+    "killed": 98,
+    "timeout": 0,
+    "scored": 118
+  },
+  "src/llm-providers/store.ts": {
+    "score": 0.6111111111111112,
+    "killed": 132,
+    "timeout": 0,
+    "scored": 216
+  },
+  "src/long-term-memory/capture.ts": {
+    "score": 0.484375,
+    "killed": 31,
+    "timeout": 0,
+    "scored": 64
+  },
+  "src/long-term-memory/promotion.ts": {
+    "score": 0.391304347826087,
+    "killed": 36,
+    "timeout": 0,
+    "scored": 92
+  },
+  "src/long-term-memory/runner.ts": {
+    "score": 0.3761467889908257,
+    "killed": 41,
+    "timeout": 0,
+    "scored": 109
+  },
   "src/memory.ts": 0.6538461538461539,
+  "src/model-context.ts": {
+    "score": 0.6310679611650486,
+    "killed": 65,
+    "timeout": 0,
+    "scored": 103
+  },
+  "src/models-dev/client.ts": {
+    "score": 0.7524752475247525,
+    "killed": 76,
+    "timeout": 0,
+    "scored": 101
+  },
+  "src/models-dev/provider-id.ts": {
+    "score": 0.7254901960784313,
+    "killed": 37,
+    "timeout": 0,
+    "scored": 51
+  },
+  "src/models-dev/resolve.ts": {
+    "score": 0.9069767441860465,
+    "killed": 78,
+    "timeout": 0,
+    "scored": 86
+  },
   "src/plugins/discovery-import-scan.ts": 0.9032258064516129,
   "src/plugins/discovery-imports.ts": 0.8823529411764706,
   "src/plugins/discovery-paths.ts": 0.6746987951807228,
@@ -255,9 +988,32 @@
     "timeout": 0,
     "scored": 121
   },
-  "src/recurring.ts": 0.6271186440677966,
+  "src/recurring-run-state.ts": {
+    "score": 0.375,
+    "killed": 12,
+    "timeout": 0,
+    "scored": 32
+  },
+  "src/recurring.ts": {
+    "score": 0.634703196347032,
+    "killed": 139,
+    "timeout": 0,
+    "scored": 219
+  },
   "src/runtime/production-background.ts": 0.9423076923076923,
   "src/runtime/production-extensions.ts": 0,
+  "src/scheduler-recurring.ts": {
+    "score": 0.5089285714285714,
+    "killed": 57,
+    "timeout": 0,
+    "scored": 112
+  },
+  "src/scheduler.ts": {
+    "score": 0.5704697986577181,
+    "killed": 85,
+    "timeout": 0,
+    "scored": 149
+  },
   "src/tools/add-comment-reaction.ts": 0.4666666666666667,
   "src/tools/add-comment.ts": 0.5384615384615384,
   "src/tools/add-project-member.ts": 0.5,
@@ -276,7 +1032,12 @@
   "src/tools/compaction/expand-result.ts": 0.5789473684210527,
   "src/tools/compaction/result-store.ts": 0.7796610169491526,
   "src/tools/compaction/size-gate.ts": 0.8333333333333334,
-  "src/tools/compaction/summarizer.ts": 0.5,
+  "src/tools/compaction/summarizer.ts": {
+    "score": 0.5,
+    "killed": 20,
+    "timeout": 0,
+    "scored": 40
+  },
   "src/tools/compaction/types.ts": 0.9473684210526315,
   "src/tools/compaction/wrap-compaction.ts": 0.5238095238095238,
   "src/tools/completion-hook.ts": 0.5230769230769231,
@@ -309,10 +1070,26 @@
     "scored": 145
   },
   "src/tools/disclosure/core.ts": 1,
-  "src/tools/disclosure/embedding-tool-retriever.ts": 0.8309859154929577,
-  "src/tools/disclosure/load-tool.ts": 0.47619047619047616,
+  "src/tools/disclosure/embedding-tool-retriever.ts": {
+    "score": 0.855072463768116,
+    "killed": 117,
+    "timeout": 1,
+    "scored": 138
+  },
+  "src/tools/disclosure/load-tool.ts": {
+    "score": 0.6896551724137931,
+    "killed": 20,
+    "timeout": 0,
+    "scored": 29
+  },
   "src/tools/disclosure/prepare-step.ts": 0.8679245283018868,
   "src/tools/disclosure/registry.ts": 0.9142857142857143,
+  "src/tools/disclosure/repair-tool-call.ts": {
+    "score": 0.8181818181818182,
+    "killed": 18,
+    "timeout": 0,
+    "scored": 22
+  },
   "src/tools/disclosure/search-tools.ts": 0.6041666666666666,
   "src/tools/disclosure/tool-brief.ts": 0.7906976744186046,
   "src/tools/disclosure/tool-retriever.ts": 0.9361702127659575,
@@ -346,7 +1123,12 @@
   "src/tools/list-watchers.ts": 0.5,
   "src/tools/list-work.ts": 0.48148148148148145,
   "src/tools/log-work.ts": 0.36363636363636365,
-  "src/tools/lookup-group-history.ts": 0.5,
+  "src/tools/lookup-group-history.ts": {
+    "score": 0.5,
+    "killed": 33,
+    "timeout": 0,
+    "scored": 66
+  },
   "src/tools/memory.ts": 0.4700854700854701,
   "src/tools/pause-recurring-task.ts": 0.56,
   "src/tools/permission-gate.ts": 0.9682539682539683,
@@ -421,5 +1203,11 @@
     "timeout": 0,
     "scored": 57
   },
-  "src/utils/fetch.ts": 0
+  "src/utils/fetch.ts": 0,
+  "src/web/distill.ts": {
+    "score": 0.5350877192982456,
+    "killed": 61,
+    "timeout": 0,
+    "scored": 114
+  }
 }

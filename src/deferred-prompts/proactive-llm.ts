@@ -19,7 +19,9 @@ import { collectTurnMessages } from '../llm-orchestrator-messages.js'
 import { handleToolCallFinish } from '../llm-orchestrator-support.js'
 import { adaptToolExecutionEnd } from '../llm-orchestrator-tool-events.js'
 import { logger } from '../logger.js'
+import type { ModelMetadata } from '../models-dev/resolve.js'
 import { createDisclosurePrepareStep } from '../tools/disclosure/prepare-step.js'
+import { createRepairToolCall } from '../tools/disclosure/repair-tool-call.js'
 import { buildToolsContextRecord } from '../tools/wrap-tool-execution.js'
 import { getContextLanguage } from '../utils/config-language.js'
 import { getLlmConfig, type LlmConfig } from './proactive-llm-config.js'
@@ -48,7 +50,7 @@ export type DeferredExecutionContext = {
 export interface ProactiveLlmDeps {
   generateText: typeof generateText
   stepCountIs: typeof isStepCount
-  buildModel: (config: { apiKey: string; baseURL: string }, modelId: string) => LanguageModel
+  buildModel: (config: { apiKey: string; baseURL: string }, modelId: string, metadata: ModelMetadata) => LanguageModel
   /** Scope factory seam: production resolves from the active analytics runtime; tests inject fakes. */
   resolveScope?: (input: ProactiveScopeInput) => ProviderRequestScope
 }
@@ -56,7 +58,8 @@ export interface ProactiveLlmDeps {
 const defaultProactiveLlmDeps: ProactiveLlmDeps = {
   generateText: (...args) => generateText(...args),
   stepCountIs: (...args) => isStepCount(...args),
-  buildModel: (config, modelId) => buildChatModel(config.apiKey, config.baseURL, modelId),
+  buildModel: (config, modelId, metadata) =>
+    buildChatModel(config.apiKey, config.baseURL, modelId, undefined, metadata),
 }
 type DispatchExecutionArgs = ProactiveLlmDispatchArgs<Partial<ProactiveLlmDeps>, BuildProviderFn>
 export type { BuildProviderFn }
@@ -161,6 +164,26 @@ const generateWithTrace = async (
   }
 }
 
+const buildFullGenerationBaseOptions = (
+  prepared: FullGenerationInput,
+  deps: ProactiveLlmDeps,
+  model: LanguageModel,
+  turnId: string,
+): Parameters<ProactiveLlmDeps['generateText']>[0] => {
+  return {
+    model,
+    ...hoistSystemMessages(prepared.systemPrompt, prepared.messages),
+    tools: prepared.tools,
+    stopWhen: deps.stepCountIs(25),
+    timeout: 1_200_000,
+    prepareStep: createDisclosurePrepareStep(prepared.disclosure, prepared.storageContextId, turnId),
+    repairToolCall: createRepairToolCall(prepared.disclosure, prepared.storageContextId),
+    onToolExecutionEnd: (event) => {
+      handleToolCallFinish(prepared.storageContextId, undefined, { ...adaptToolExecutionEnd(event), turnId })
+    },
+  }
+}
+
 const runScopedGeneration = async (args: ScopedGenerationArgs): Promise<string> => {
   const { execCtx, config, configContextId, deps, model, scope } = args
   const { createdByUserId } = execCtx
@@ -181,17 +204,7 @@ const runScopedGeneration = async (args: ScopedGenerationArgs): Promise<string> 
   // Keyed toolsContext record: every name in the final ToolSet maps to the
   // same immutable scope (see llm-orchestrator-invoke.ts for the Object.assign
   // intersection rationale).
-  const baseOptions: Parameters<ProactiveLlmDeps['generateText']>[0] = {
-    model,
-    ...hoistSystemMessages(prepared.systemPrompt, prepared.messages),
-    tools,
-    stopWhen: deps.stepCountIs(25),
-    timeout: 1_200_000,
-    prepareStep: createDisclosurePrepareStep(prepared.disclosure, prepared.storageContextId, turnId),
-    onToolExecutionEnd: (event) => {
-      handleToolCallFinish(prepared.storageContextId, undefined, { ...adaptToolExecutionEnd(event), turnId })
-    },
-  }
+  const baseOptions = buildFullGenerationBaseOptions(prepared, deps, model, turnId)
   const result = await generateWithTrace(execCtx, config, prepared, deps, scope, turnId, baseOptions)
   const previousHistory = getCachedHistory(prepared.storageContextId)
   const assistantMessages = collectTurnMessages(result)
@@ -224,7 +237,7 @@ function runFullGeneration(
   deps: ProactiveLlmDeps,
 ): Promise<string> {
   const { createdByUserId } = execCtx
-  const model = deps.buildModel(config, config.mainModel)
+  const model = deps.buildModel(config, config.mainModel, config.metadata)
   // One independent immutable proactive scope per execution, established before
   // descriptor construction. Never reuses a normal-turn or prior-owner scope.
   const scope = (deps.resolveScope ?? resolveProactiveProviderRequestScope)({
