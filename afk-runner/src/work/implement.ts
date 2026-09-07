@@ -37,7 +37,9 @@ export interface ImplementInput {
 }
 
 /** The implementer's report: the touched paths the per-task affected check narrows to. */
-export const ImplementerReportSchema = z.object({ files_written: z.array(z.string().min(1)).min(1) })
+export const ImplementerReportSchema = z.object({
+  files_written: z.array(z.string().min(1)).min(1),
+})
 
 /** The first item the walk still owes: unchecked in tasks.md and without a folded done record. */
 export function firstOwedItem(items: readonly TaskItem[], tasks: KernelContext['tasks']): TaskItem | null {
@@ -61,7 +63,11 @@ export function implementOutcomeOf(
 function spawnPromptOf(
   deps: ImplementDeps,
   input: ImplementInput,
-  target: { readonly item: TaskItem; readonly failingTail: string | null; readonly cause: 'verify' | 'veto' | 'fresh' },
+  target: {
+    readonly item: TaskItem
+    readonly failingTail: string | null
+    readonly cause: 'verify' | 'veto' | 'fresh'
+  },
   basename: string,
 ): string {
   const reportLine = `Write your JSON report to ${agentWritePath(deps.cwd, basename)}: {"files_written": [<paths relative to the repo root>]}`
@@ -101,6 +107,42 @@ async function runAffectedCheck(deps: ImplementDeps, io: WorkIO, item: TaskItem)
 }
 
 /**
+ * The change folder's parsed task items. A missing or unreadable tasks.md is
+ * a structural gap, not a code bug (walk-robustness F-P3): both strand the
+ * walk's pick, so the read-catch escalates as `StageHaltError{precondition}`
+ * with the restoration resume hint — mirroring `runAtomicity`'s exact shape.
+ */
+async function readTaskItems(cwd: string, changeName: string): Promise<readonly TaskItem[]> {
+  const tasksPath = path.join(cwd, 'openspec', 'changes', changeName, 'tasks.md')
+  let tasksMd: string
+  try {
+    tasksMd = await readFile(tasksPath, 'utf8')
+  } catch (error) {
+    throw new StageHaltError(
+      `implement cannot read ${tasksPath}: ${error instanceof Error ? error.message : String(error)}`,
+      'resume after the change folder is restored',
+      'precondition',
+    )
+  }
+  return parseTaskItems(tasksMd)
+}
+
+/** The target the bracket works: the first owed item fresh, or — nothing owed — the fix a red verdict or veto owes (D4/D5/D7). */
+function pickTargetOf(
+  deps: ImplementDeps,
+  items: readonly TaskItem[],
+  io: WorkIO,
+): Promise<{
+  readonly item: TaskItem
+  readonly failingTail: string | null
+  readonly cause: 'verify' | 'veto' | 'fresh'
+} | null> {
+  const owed = firstOwedItem(items, io.context.tasks)
+  if (owed !== null) return Promise.resolve({ item: owed, failingTail: null, cause: 'fresh' })
+  return fixTargetOf({ execGit: deps.agent.execGit, runDir: deps.runDir, cwd: deps.cwd }, items, io.context.tasks)
+}
+
+/**
  * One walked item per work bracket (U3 D4): append `task started`, spawn the
  * implementer (role `implementer`, label/round keyed by the item id so the
  * session-ledger continuation keys per task), run the per-task affected
@@ -113,21 +155,8 @@ async function runAffectedCheck(deps: ImplementDeps, io: WorkIO, item: TaskItem)
  */
 export async function runImplementWork(deps: ImplementDeps, input: ImplementInput, io: WorkIO): Promise<void> {
   const changeDir = path.join(deps.cwd, 'openspec', 'changes', input.changeName)
-  const tasksPath = path.join(changeDir, 'tasks.md')
-  let tasksMd: string
-  try {
-    tasksMd = await readFile(tasksPath, 'utf8')
-  } catch (error) {
-    throw new Error(`implement cannot read ${tasksPath}: ${error instanceof Error ? error.message : String(error)}`, {
-      cause: error,
-    })
-  }
-  const items = parseTaskItems(tasksMd)
-  const owed = firstOwedItem(items, io.context.tasks)
-  const target =
-    owed === null
-      ? await fixTargetOf({ execGit: deps.agent.execGit, runDir: deps.runDir, cwd: deps.cwd }, items, io.context.tasks)
-      : { item: owed, failingTail: null as string | null, cause: 'fresh' as const }
+  const items = await readTaskItems(deps.cwd, input.changeName)
+  const target = await pickTargetOf(deps, items, io)
   if (target === null) return
   const priorAttempts = io.context.tasks[target.item.id]?.attempts ?? 0
   if (priorAttempts >= TASK_FIX_ATTEMPTS) {
@@ -137,7 +166,12 @@ export async function runImplementWork(deps: ImplementDeps, input: ImplementInpu
     )
   }
   const basename = `implement-t${target.item.id}.json`
-  io.append({ altitude: 'L2', type: 'task', action: 'started', id: target.item.id })
+  io.append({
+    altitude: 'L2',
+    type: 'task',
+    action: 'started',
+    id: target.item.id,
+  })
   await runStageAgent(deps.agent, {
     role: 'implementer',
     changeName: input.changeName,
@@ -156,7 +190,12 @@ export async function runImplementWork(deps: ImplementDeps, input: ImplementInpu
   })
   if ((await runAffectedCheck(deps, io, target.item)) === 'red') return
   await commitTaskSlice({ execGit: deps.agent.execGit, cwd: deps.cwd, changeDir }, target.item)
-  io.append({ altitude: 'L2', type: 'task', action: 'done', id: target.item.id })
+  io.append({
+    altitude: 'L2',
+    type: 'task',
+    action: 'done',
+    id: target.item.id,
+  })
   if (target.cause !== 'fresh') await answerFixedVerdict(deps, target.item.id, target.cause)
 }
 
