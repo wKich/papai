@@ -12,6 +12,9 @@ import type { RunnerConfig } from '../config.js'
 import type { SddEvent } from '../events.js'
 import { readEvents } from '../events.js'
 import { loadRunState } from '../run-state.js'
+import type { VerifyOutcomeLine } from './gate-model.js'
+import { executionBlockLines } from './report-execution.js'
+import { verifyOutcomeLines } from './verify.js'
 
 export interface ChangeDirSummary {
   readonly tasksDone: number
@@ -22,6 +25,8 @@ export interface ChangeDirSummary {
 export interface ReportInput {
   readonly readEvents: () => readonly SddEvent[]
   readonly readChangeDir: () => Promise<ChangeDirSummary>
+  /** U3 D9: the run dir's verify-log verdicts — the execution facts block's boundary line. */
+  readonly readVerifyOutcomes: () => readonly VerifyOutcomeLine[]
   readonly execGit: ExecGitFn
   readonly runId: string
   readonly changeName: string
@@ -175,6 +180,7 @@ export async function buildReport(input: ReportInput): Promise<string> {
   const events = input.readEvents()
   const facts = factsFrom(events)
   const gains = collectGains(events)
+  const execution = executionBlockLines(events, input.readVerifyOutcomes())
   const change = await input.readChangeDir()
   const commits = await commitsLine(input)
   const lines: string[] = []
@@ -191,6 +197,7 @@ export async function buildReport(input: ReportInput): Promise<string> {
     '',
     `### Tasks`,
     `${change.tasksDone}/${change.tasksTotal} tasks complete`,
+    ...(execution.length > 0 ? ['', '### Execution', ...execution] : []),
     '',
     ...(gains.avoidedByRule.size > 0 || gains.acceptItemsByRule.size > 0 ? [...gainsLines(gains), ''] : []),
     `### Commits on ${input.branch}`,
@@ -253,9 +260,11 @@ export async function buildRunReport(
 ): Promise<string> {
   const state = await loadRunState(deps.config.workDir, runId)
   const branch = await discoverBranch(deps.execGit, deps.config.repoRoot)
+  const runDir = path.join(deps.config.workDir, 'runs', runId)
   return buildReport({
-    readEvents: () => readEvents(path.join(deps.config.workDir, 'runs', runId, 'events.ndjson')),
+    readEvents: () => readEvents(path.join(runDir, 'events.ndjson')),
     readChangeDir: () => readChangeSummary(deps.config.repoRoot, state.changeName),
+    readVerifyOutcomes: () => verifyOutcomeLines(runDir),
     execGit: deps.execGit,
     runId,
     changeName: state.changeName,

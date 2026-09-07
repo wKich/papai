@@ -81,10 +81,13 @@ export async function readReviewResultFromSidecars(
 export async function expectedContentFor(
   sidecarDir: string,
   round: number,
-  gateMode: 'early' | 'final' | 'escalation',
+  gateMode: 'early' | 'final' | 'escalation' | 'release',
   perRound: readonly DigestRecord[] = [],
 ): Promise<ExpectedGateContent> {
   if (gateMode === 'escalation') return escalationExpectedContent()
+  // A release gate (U3 D7) presents no review items — its content is the
+  // execution digest, decided by verb lines alone.
+  if (gateMode === 'release') return { assumptions: [], blockers: [], gateMode: 'release' }
   const assumptions = await gatherAssumptions(sidecarDir, round)
   const capHitFired = gateMode === 'early'
   const raw = await readReviewResultFromSidecars(sidecarDir, round, capHitFired ? 'cap-hit' : 'converged')

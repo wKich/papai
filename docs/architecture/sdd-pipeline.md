@@ -21,6 +21,11 @@ The `sdd-runner/` workspace automates the outer loop of spec-driven development:
 
 ```
 INTAKE → DRAFT → REVIEW LOOP → DECOMPOSE → ATOMICITY → GATE → (exit)
+                                              │ armed (start --execute)
+                                              ▼
+                                   IMPLEMENT → VERIFY → RELEASE gate → (exit)
+                                              ▲          │
+                                              └── red ←──┘
 ```
 
 - **Intake**: depth classification (S/M/L), change scaffolding via `openspec new change`.
@@ -29,6 +34,7 @@ INTAKE → DRAFT → REVIEW LOOP → DECOMPOSE → ATOMICITY → GATE → (exit)
 - **Decompose**: tasks.md generation.
 - **Atomicity**: split/merge tasks (skipped at S).
 - **Gate**: single human gate with checkbox protocol.
+- **Implement/Verify/Release** (armed runs only, U3): the sequential tasks.md walk — one implementer spawn per item, per-task affected check, runner-made slice commits — then the compiled verification boundary (red routes back into implement as a normal outcome with the log as fix context), then a `release`-mode gate presenting the execution digest. Full mechanics in [`afk-runner.md`](afk-runner.md) ("Execution half since U3"); unarmed runs never enter these states (they stay pending and final approval completes as before).
 
 ### Admission vs division
 

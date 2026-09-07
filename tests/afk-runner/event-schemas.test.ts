@@ -19,18 +19,42 @@ import { pipelineMachine } from '../../afk-runner/src/graph/pipeline.js'
 import { foldEvents } from '../../afk-runner/src/kernel/fold.js'
 import { autoExtendsUsedOf } from '../../afk-runner/src/work/gate-prelude.js'
 
-const usage = { inputTokens: 120, outputTokens: 45, reasoningTokens: 8, costUsd: 0.4, wallMs: 900 }
+const usage = {
+  inputTokens: 120,
+  outputTokens: 45,
+  reasoningTokens: 8,
+  costUsd: 0.4,
+  wallMs: 900,
+}
 
 describe('EventInputSchema variants', () => {
   it('accepts one member per altitude tier', () => {
     expect(
-      EventInputSchema.parse({ altitude: 'L0', type: 'tool_use', agent: 'skeptic-1', tool: 'read_file' }),
+      EventInputSchema.parse({
+        altitude: 'L0',
+        type: 'tool_use',
+        agent: 'skeptic-1',
+        tool: 'read_file',
+      }),
     ).toMatchObject({ altitude: 'L0', type: 'tool_use' })
-    expect(EventInputSchema.parse({ altitude: 'L1', type: 'killed', agent: 'x', cause: 'timeout' })).toMatchObject({
+    expect(
+      EventInputSchema.parse({
+        altitude: 'L1',
+        type: 'killed',
+        agent: 'x',
+        cause: 'timeout',
+      }),
+    ).toMatchObject({
       type: 'killed',
       cause: 'timeout',
     })
-    expect(EventInputSchema.parse({ altitude: 'L2', type: 'stage_exit', stage: 'gate' })).toMatchObject({
+    expect(
+      EventInputSchema.parse({
+        altitude: 'L2',
+        type: 'stage_exit',
+        stage: 'gate',
+      }),
+    ).toMatchObject({
       type: 'stage_exit',
       stage: 'gate',
     })
@@ -38,13 +62,31 @@ describe('EventInputSchema variants', () => {
 
   it("parses a gate event carrying the 'plan' mode", () => {
     expect(
-      EventInputSchema.parse({ altitude: 'L2', type: 'gate', action: 'presented', mode: 'plan', version: 3 }),
+      EventInputSchema.parse({
+        altitude: 'L2',
+        type: 'gate',
+        action: 'presented',
+        mode: 'plan',
+        version: 3,
+      }),
     ).toMatchObject({ mode: 'plan', version: 3 })
   })
 
   it('rejects unknown event types, altitudes, and negative costs', () => {
-    expect(EventInputSchema.safeParse({ altitude: 'L2', type: 'teleport', stage: 'gate' }).success).toBe(false)
-    expect(EventInputSchema.safeParse({ altitude: 'L9', type: 'stage_enter', stage: 'gate' }).success).toBe(false)
+    expect(
+      EventInputSchema.safeParse({
+        altitude: 'L2',
+        type: 'teleport',
+        stage: 'gate',
+      }).success,
+    ).toBe(false)
+    expect(
+      EventInputSchema.safeParse({
+        altitude: 'L9',
+        type: 'stage_enter',
+        stage: 'gate',
+      }).success,
+    ).toBe(false)
     expect(
       EventInputSchema.safeParse({
         altitude: 'L0',
@@ -149,7 +191,13 @@ describe('EventInputSchema variants', () => {
 
 describe('SddEventSchema stamp contract', () => {
   it('rejects the unstamped event input shape', () => {
-    expect(SddEventSchema.safeParse({ altitude: 'L2', type: 'stage_enter', stage: 'intake' }).success).toBe(false)
+    expect(
+      SddEventSchema.safeParse({
+        altitude: 'L2',
+        type: 'stage_enter',
+        stage: 'intake',
+      }).success,
+    ).toBe(false)
   })
 
   it('round-trips a stamped variant and rejects a non-positive seq', () => {
@@ -161,7 +209,11 @@ describe('SddEventSchema stamp contract', () => {
       seq: 4,
       ts: '2026-08-23T08:00:00.000Z',
     })
-    expect(stamped).toMatchObject({ type: 'resume', path: 'stage-rebuild', seq: 4 })
+    expect(stamped).toMatchObject({
+      type: 'resume',
+      path: 'stage-rebuild',
+      seq: 4,
+    })
     expect(
       SddEventSchema.safeParse({
         altitude: 'L2',
@@ -181,7 +233,13 @@ describe('supporting schemas', () => {
   })
 
   it('AgentUsageSchema rejects negative counters', () => {
-    expect(AgentUsageSchema.parse({ ...usage, cachedReadTokens: 3, cachedWriteTokens: 1 })).toMatchObject({
+    expect(
+      AgentUsageSchema.parse({
+        ...usage,
+        cachedReadTokens: 3,
+        cachedWriteTokens: 1,
+      }),
+    ).toMatchObject({
       cachedReadTokens: 3,
       cachedWriteTokens: 1,
     })
@@ -195,16 +253,34 @@ describe('convergence event open counts', () => {
 
   it('stamps a convergence event carrying both count sets', () => {
     const stamped = stampEvent(
-      { altitude: 'L2', type: 'convergence', round: 2, verdict: 'open', counts: raised, open },
+      {
+        altitude: 'L2',
+        type: 'convergence',
+        round: 2,
+        verdict: 'open',
+        counts: raised,
+        open,
+      },
       4,
       't',
     )
-    expect(stamped).toMatchObject({ type: 'convergence', counts: raised, open })
+    expect(stamped).toMatchObject({
+      type: 'convergence',
+      counts: raised,
+      open,
+    })
   })
 
   it('accepts the needs-review verdict the split introduced', () => {
     const stamped = stampEvent(
-      { altitude: 'L2', type: 'convergence', round: 1, verdict: 'needs-review', counts: raised, open },
+      {
+        altitude: 'L2',
+        type: 'convergence',
+        round: 1,
+        verdict: 'needs-review',
+        counts: raised,
+        open,
+      },
       1,
       't',
     )
@@ -213,7 +289,13 @@ describe('convergence event open counts', () => {
 
   it('parses a pre-change convergence line that carries no open set', () => {
     const stamped = stampEvent(
-      { altitude: 'L2', type: 'convergence', round: 1, verdict: 'open', counts: raised },
+      {
+        altitude: 'L2',
+        type: 'convergence',
+        round: 1,
+        verdict: 'open',
+        counts: raised,
+      },
       1,
       't',
     )
@@ -228,8 +310,19 @@ describe('convergence event open counts', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sdd-evschema-'))
     try {
       const log = path.join(dir, 'events.ndjson')
-      appendEvent(log, { altitude: 'L2', type: 'convergence', round: 1, verdict: 'converged', counts: raised, open })
-      expect(readEvents(log)[0]).toMatchObject({ type: 'convergence', counts: raised, open })
+      appendEvent(log, {
+        altitude: 'L2',
+        type: 'convergence',
+        round: 1,
+        verdict: 'converged',
+        counts: raised,
+        open,
+      })
+      expect(readEvents(log)[0]).toMatchObject({
+        type: 'convergence',
+        counts: raised,
+        open,
+      })
     } finally {
       fs.rmSync(dir, { recursive: true, force: true })
     }
@@ -245,15 +338,27 @@ describe('convergence event open counts', () => {
     }
     // A resolution kind the enum does not carry must still be rejected, so the
     // narrowness this change relies on cannot be widened by accident later.
-    const widened = { altitude: 'L2', type: 'finding', action: 'edited', id: 'F1', round: 1 }
+    const widened = {
+      altitude: 'L2',
+      type: 'finding',
+      action: 'edited',
+      id: 'F1',
+      round: 1,
+    }
     expect(EventInputSchema.safeParse(widened).success).toBe(false)
   })
 })
 
 describe('loop-memory additive fields (D5)', () => {
   it('a finding event carries an optional fingerprint; the action enum is unchanged', () => {
-    const stamped = EventInputSchema.parse({ ...baseFindingEvent(), fingerprint: 'id names never proposal scope' })
-    expect(stamped).toMatchObject({ type: 'finding', fingerprint: 'id names never proposal scope' })
+    const stamped = EventInputSchema.parse({
+      ...baseFindingEvent(),
+      fingerprint: 'id names never proposal scope',
+    })
+    expect(stamped).toMatchObject({
+      type: 'finding',
+      fingerprint: 'id names never proposal scope',
+    })
     expect(EventInputSchema.parse(baseFindingEvent())).not.toHaveProperty('fingerprint')
     expect(EventInputSchema.safeParse({ ...baseFindingEvent(), action: 'merged' }).success).toBe(false)
   })
@@ -266,12 +371,118 @@ describe('loop-memory additive fields (D5)', () => {
       verdict: 'open',
       counts: { blocker: 0, material: 1, nitpick: 0 },
     } as const
-    expect(EventInputSchema.parse({ ...base, concerns: ['id names never proposal scope'] })).toMatchObject({
+    expect(
+      EventInputSchema.parse({
+        ...base,
+        concerns: ['id names never proposal scope'],
+      }),
+    ).toMatchObject({
       type: 'convergence',
       concerns: ['id names never proposal scope'],
     })
     expect(EventInputSchema.parse(base)).not.toHaveProperty('concerns')
     expect(EventInputSchema.safeParse({ ...base, concerns: [] }).success).toBe(true)
+  })
+})
+
+describe('execution-half additive vocabulary', () => {
+  it('parses the execution armed fact event and rejects unknown actions', () => {
+    expect(
+      EventInputSchema.parse({
+        altitude: 'L2',
+        type: 'execution',
+        action: 'armed',
+      }),
+    ).toMatchObject({
+      type: 'execution',
+      action: 'armed',
+    })
+    expect(
+      EventInputSchema.safeParse({
+        altitude: 'L2',
+        type: 'execution',
+        action: 'disarmed',
+      }).success,
+    ).toBe(false)
+  })
+
+  it('parses task events for every walk action and rejects the rest', () => {
+    for (const action of ['started', 'done', 'failed'] as const) {
+      expect(
+        EventInputSchema.parse({
+          altitude: 'L2',
+          type: 'task',
+          action,
+          id: '1',
+        }),
+      ).toMatchObject({ type: 'task', action, id: '1' })
+    }
+    expect(
+      EventInputSchema.parse({
+        altitude: 'L2',
+        type: 'task',
+        action: 'failed',
+        id: '2',
+        detail: 'verify red',
+      }),
+    ).toMatchObject({ detail: 'verify red' })
+    expect(
+      EventInputSchema.safeParse({
+        altitude: 'L2',
+        type: 'task',
+        action: 'skipped',
+        id: '1',
+      }).success,
+    ).toBe(false)
+    expect(
+      EventInputSchema.safeParse({
+        altitude: 'L2',
+        type: 'task',
+        action: 'done',
+        id: '',
+      }).success,
+    ).toBe(false)
+  })
+
+  it('widens StageId with the execution stages and keeps STAGE_ORDER aligned', () => {
+    for (const stage of ['implement', 'verify', 'release'] as const) {
+      expect(StageIdSchema.parse(stage)).toBe(stage)
+    }
+    expect(STAGE_ORDER).toEqual([...StageIdSchema.options])
+    expect(STAGE_ORDER).toContain('implement')
+  })
+
+  it("parses a gate event carrying the 'release' mode", () => {
+    expect(
+      EventInputSchema.parse({
+        altitude: 'L2',
+        type: 'gate',
+        action: 'presented',
+        mode: 'release',
+        version: 2,
+      }),
+    ).toMatchObject({ mode: 'release', version: 2 })
+  })
+
+  it('round-trips a stamped execution event through append and read', async () => {
+    const { appendEvent, readEvents } = await import('../../afk-runner/src/events.js')
+    const os = await import('node:os')
+    const path = await import('node:path')
+    const fs = await import('node:fs')
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sdd-evexec-'))
+    try {
+      const log = path.join(dir, 'events.ndjson')
+      appendEvent(log, { altitude: 'L2', type: 'execution', action: 'armed' })
+      appendEvent(log, {
+        altitude: 'L2',
+        type: 'task',
+        action: 'done',
+        id: '1',
+      })
+      expect(readEvents(log).map((event) => event.type)).toEqual(['execution', 'task'])
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 

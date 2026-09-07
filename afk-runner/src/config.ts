@@ -18,6 +18,7 @@ export const AgentRoleSchema = z.enum([
   'decomposer',
   'atomicity',
   'planner',
+  'implementer',
 ])
 export type AgentRole = z.infer<typeof AgentRoleSchema>
 
@@ -39,6 +40,9 @@ export const INACTIVITY_TIMEOUT_MS = 600_000
 
 /** Structural plan-replan passes the planner agent gets before failing the run (D6). */
 export const PLAN_REPLAN_PASSES = 1
+
+/** Per-item fix attempts before implement declares exhaustion (U3 D4; a third `started` for one id refuses). */
+export const TASK_FIX_ATTEMPTS = 2
 
 const REMOVED_KEY_POINTERS: Readonly<Record<string, string>> = {
   autonomy: "replace with the top-level 'budget' and 'deadline' keys",

@@ -46,7 +46,7 @@ export function peekSteer(runDir: string): SteerLanding | null {
  */
 export function translateSteer(
   directive: SteerLanding,
-  gateMode: 'early' | 'final' | 'escalation',
+  gateMode: 'early' | 'final' | 'escalation' | 'release',
 ): { readonly outcome: SteerLanding; readonly warn: string | null } {
   if (directive.kind === 'unknown') {
     return {
@@ -54,7 +54,7 @@ export function translateSteer(
       warn: `steer: unrecognized steer directive "${directive.line}" — consumed; expected abort, extend, or veto [<id>=]<redirect>`,
     }
   }
-  if (directive.kind === 'extend' && gateMode === 'final') {
+  if (directive.kind === 'extend' && (gateMode === 'final' || gateMode === 'release')) {
     return { outcome: directive, warn: 'steer: extend is not valid at a final gate — skipped' }
   }
   if (directive.kind === 'veto' && gateMode === 'escalation') {

@@ -9,6 +9,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { FindingSchema } from '../../afk-runner/src/agent-schemas.js'
+import { analyzeRun } from '../../afk-runner/src/analyze-corpus.js'
 import { buildCorpusReport } from '../../afk-runner/src/analyze-corpus.js'
 import {
   classChurn,
@@ -160,6 +161,18 @@ function at(offsetMs: number): string {
 
 function stageEnterLine(stage: string, seq: number, ts: string): string {
   return JSON.stringify({ altitude: 'L2', type: 'stage_enter', stage, seq, ts })
+}
+
+function stageExitLine(stage: string, seq: number, ts: string): string {
+  return JSON.stringify({ altitude: 'L2', type: 'stage_exit', stage, seq, ts })
+}
+
+function executionArmedLine(seq: number, ts: string): string {
+  return JSON.stringify({ altitude: 'L2', type: 'execution', action: 'armed', seq, ts })
+}
+
+function taskLine(action: string, id: string, seq: number, ts: string): string {
+  return JSON.stringify({ altitude: 'L2', type: 'task', action, id, seq, ts })
 }
 
 function roundOpenLine(round: number, cap: number, seq: number, ts: string): string {
@@ -1071,6 +1084,85 @@ describe('analyze-truth — the ground-truth join', () => {
     ])
     expect(truth).toHaveLength(1)
     expect(truth[0]).toMatchObject({ commits: 0, onMainBranch: false })
+  })
+})
+
+describe('analyze — armed execution run (U3 D9 — kernel-fold-based, no change needed)', () => {
+  it('folds an execution-run fixture with no errors and reduced coverage where metrics lack data', async () => {
+    const workDir = makeDir('afk-exec-run-')
+    writeRun(workDir, 'exec-run', {
+      state: null,
+      events: [
+        executionArmedLine(1, T0),
+        stageEnterLine('intake', 2, T0),
+        stageExitLine('intake', 3, T0),
+        stageEnterLine('draft', 4, T0),
+        stageExitLine('draft', 5, T0),
+        stageEnterLine('review', 6, T0),
+        roundOpenLine(1, 3, 7, T0),
+        convergenceLine(1, 'converged', { blocker: 0, material: 0, nitpick: 0 }, 8, at(1_000)),
+        stageExitLine('review', 9, at(2_000)),
+        stageEnterLine('decompose', 10, at(3_000)),
+        stageEnterLine('gate', 11, at(4_000)),
+        gateLine('presented', 'final', 1, 12, at(4_000)),
+        autoDecisionLine('none', 'gate', 1, 13, at(4_000)),
+        stageExitLine('decompose', 14, at(5_000)),
+        stageExitLine('gate', 15, at(5_000)),
+        stageEnterLine('implement', 16, at(5_000)),
+        gateLine('answered', 'final', 1, 17, at(5_000), 'approve'),
+        taskLine('started', '1', 18, at(6_000)),
+        taskLine('done', '1', 19, at(7_000)),
+        stageExitLine('implement', 20, at(8_000)),
+        stageEnterLine('verify', 21, at(8_000)),
+        stageExitLine('verify', 22, at(9_000)),
+        stageEnterLine('release', 23, at(9_000)),
+        stageEnterLine('gate', 24, at(9_000)),
+        gateLine('presented', 'release', 2, 25, at(9_000)),
+        autoDecisionLine('none', 'gate', 2, 26, at(9_000)),
+        stageExitLine('release', 27, at(9_000)),
+        stageExitLine('gate', 28, at(10_000)),
+        gateLine('answered', 'release', 2, 29, at(10_000), 'approve'),
+      ],
+    })
+    const bundle = await loadRunBundle(nodeAnalyzeFs(), workDir, 'exec-run')
+    const analysis = analyzeRun(bundle, NOW)
+    // the fold itself handled every execution event — no errors, clean audit
+    expect(analysis.eraContaminated).toBe(false)
+    // full coverage where the log carries the data
+    expect(analysis.trajectory).toEqual({
+      status: 'known',
+      value: [
+        {
+          round: 1,
+          counts: { blocker: 0, material: 0, nitpick: 0 },
+          open: { blocker: 0, material: 0, nitpick: 0 },
+          concerns: [],
+          resolved: 0,
+          dismissed: 0,
+          verdict: 'converged',
+        },
+      ],
+    })
+    expect(analysis.gates).toMatchObject({
+      status: 'known',
+      value: {
+        answered: [
+          { version: 1, mode: 'final', settledBy: 'human', rule: null },
+          { version: 2, mode: 'release', settledBy: 'human', rule: null },
+        ],
+        neverAnswered: [],
+      },
+    })
+    expect(analysis.retries).toEqual({ status: 'known', value: {} })
+    expect(analysis.stageFailures).toEqual({ status: 'known', value: {} })
+    // reduced coverage where the run lacks the data — unknown with a reason, never an error
+    expect(analysis.duplicateIdRate).toEqual({ status: 'unknown', reason: 'no resolutions sidecars' })
+    expect(analysis.lensOverlapRate).toEqual({ status: 'unknown', reason: 'no skeptic findings sidecars' })
+    expect(analysis.resolverActionMix).toEqual({ status: 'unknown', reason: 'no resolutions sidecars' })
+    expect(analysis.concernPersistence).toEqual({ status: 'unknown', reason: 'no findings sidecars' })
+    expect(analysis.r2Eligibility).toEqual({ status: 'unknown', reason: 'no cap-hit convergence pairs' })
+    expect(analysis.usage.costKnown).toBe(true)
+    expect(analysis.usage.byRole).toEqual({})
   })
 })
 

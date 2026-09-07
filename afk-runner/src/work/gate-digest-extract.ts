@@ -9,6 +9,7 @@ import path from 'node:path'
 
 import type { GateAssumption } from './gate-model.js'
 import { ResolverOutputSchema } from './review-loop.js'
+import { parseTaskItems } from './tasks-md.js'
 
 /**
  * Change digest extracted from existing change artifacts. Rendered in the gate
@@ -99,17 +100,8 @@ async function readFileSafe(filePath: string): Promise<string> {
 }
 
 function countTaskCheckboxes(tasksMd: string): { done: number; total: number } {
-  let done = 0
-  let total = 0
-  for (const line of tasksMd.split('\n')) {
-    const checked = /^\s*- \[x\]/iu.test(line)
-    const unchecked = /^\s*- \[ \]/iu.test(line)
-    if (checked || unchecked) {
-      total += 1
-      if (checked) done += 1
-    }
-  }
-  return { done, total }
+  const items = parseTaskItems(tasksMd)
+  return { done: items.filter((item) => item.checked).length, total: items.length }
 }
 
 /**

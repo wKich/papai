@@ -31,7 +31,7 @@ export const PersistedRunStateSchema = z.object({
   round: z.number().int().nonnegative(),
   roundCap: z.number().int().positive().optional(),
   gate: z
-    .object({ mode: z.enum(['early', 'final', 'plan', 'escalation']), version: z.number().int().positive() })
+    .object({ mode: z.enum(['early', 'final', 'plan', 'escalation', 'release']), version: z.number().int().positive() })
     .nullable(),
   status: z.enum(['running', 'completed', 'aborted', 'failed', 'stopped']),
   /**
@@ -53,6 +53,17 @@ export const PersistedRunStateSchema = z.object({
     .optional(),
   children: z
     .record(z.string(), z.object({ status: z.enum(['pending', 'running', 'done', 'failed']) }))
+    .nullable()
+    .optional(),
+  /**
+   * U3 D9: the execution walk's task records projected from the fold —
+   * optional so memos persisted before execution parse unchanged.
+   */
+  tasks: z
+    .record(
+      z.string(),
+      z.object({ status: z.enum(['running', 'done', 'failed']), attempts: z.number().int().positive() }),
+    )
     .nullable()
     .optional(),
 })

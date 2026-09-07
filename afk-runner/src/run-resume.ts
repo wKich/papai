@@ -159,7 +159,7 @@ async function resumeInputs(deps: RunDeps, runId: string, runDir: string, logPat
   )
   const changeName = await changeNameOf(deps, runId, runDir)
   const taskText = await readFile(path.join(runDir, 'task.md'), 'utf8')
-  const workFor = workForOf(deps, { taskText, changeName })
+  const workFor = workForOf(deps, { taskText, changeName }, runDir)
   const parked = parkedReasonOf(foldedAfterRecovery.context, foldedAfterRecovery.position, workFor)
   return { folded: foldedAfterRecovery, taskText, changeName, workFor, parked }
 }

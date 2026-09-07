@@ -298,6 +298,7 @@ const realWorkFor = createPipelineWorkFor(
     config: { repoRoot: '/repo', workDir: '/work', model: 'm', budget: 5 },
   },
   { taskText: 'task', changeName: 'c' },
+  '/work/runs/probe',
 )
 
 describe('resume decision — pure function of folded context + session ledger (design D6)', () => {

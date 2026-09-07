@@ -428,7 +428,7 @@ describe('drive loop — pipeline intake wiring', () => {
     const logPath = path.join(runDir, 'events.ndjson')
     const result = await drive(
       { machine: pipelineMachine, logPath },
-      workForOf(pipeline.deps, { taskText: TASK_TEXT, changeName: 'add-thing', depthOverride: 'S' }),
+      workForOf(pipeline.deps, { taskText: TASK_TEXT, changeName: 'add-thing', depthOverride: 'S' }, runDir),
     )
     expect(result.parked).toBe('final')
     expect(pipeline.stdoutLines).toContain(

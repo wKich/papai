@@ -35,9 +35,23 @@ export interface GateBlocker {
 
 export type GateFinding = GateBlocker
 
+/** One verify boundary round's outcome, as the release digest reports it (U3 D7). */
+export interface VerifyOutcomeLine {
+  readonly log: string
+  readonly verdict: string
+}
+
+/** The execution digest a release gate carries (U3 D7): walk, boundary, commits. */
+export interface ExecutionDigest {
+  readonly tasksDone: number
+  readonly tasksTotal: number
+  readonly verifyOutcomes: readonly VerifyOutcomeLine[]
+  readonly commits: readonly string[]
+}
+
 export interface GateDigestInput {
   readonly version: number
-  readonly mode: 'early' | 'final'
+  readonly mode: 'early' | 'final' | 'release'
   readonly changeName: string
   readonly runId: string
   readonly assumptions: readonly GateAssumption[]
@@ -56,6 +70,8 @@ export interface GateDigestInput {
    * (loop-memory D6); optional so non-thrash gates omit it.
    */
   readonly concernHistory?: readonly ConcernRecord[]
+  /** The execution digest a release gate carries (U3 D7); omitted by every other mode. */
+  readonly executionDigest?: ExecutionDigest
 }
 
 export interface GateVeto {
@@ -92,9 +108,10 @@ export interface ExpectedGateContent {
   /**
    * Gate presentation mode. The `→ RUN 1 MORE` extend directive is accepted
    * only at an early (cap-hit) gate; at a final gate (or when unspecified) it
-   * is rejected with a clear error.
+   * is rejected with a clear error. At a release gate extend is rejected
+   * outright (U3 D7) — there is no review round to re-open.
    */
-  readonly gateMode?: 'early' | 'final' | 'escalation'
+  readonly gateMode?: 'early' | 'final' | 'escalation' | 'release'
 }
 
 /** The gate-level veto branch (D1 precedence): wholesale rejection owes no ack and no per-item accounting. */
@@ -132,19 +149,27 @@ function assertDecisionSignal(state: ParseState): void {
   }
 }
 
+/** The extend response (U3 D7: rejected outright at a release gate — there is no review round to re-open). */
+function extendResponse(expected: ExpectedGateContent): GateResponse {
+  if (expected.gateMode === 'release') {
+    throw new Error(
+      'gate response: extend is not valid at a release gate — approve completes, veto redirects implement, abort ends',
+    )
+  }
+  return {
+    approved: false,
+    abort: false,
+    override: false,
+    extend: true,
+    vetoes: [],
+    answers: [],
+    gateVetoRedirect: null,
+  }
+}
+
 function finalizeResponse(state: ParseState, expected: ExpectedGateContent): GateResponse {
   if (state.gateVeto) return gateVetoResponse(state, expected)
-  if (state.extend) {
-    return {
-      approved: false,
-      abort: false,
-      override: false,
-      extend: true,
-      vetoes: [],
-      answers: [],
-      gateVetoRedirect: null,
-    }
-  }
+  if (state.extend) return extendResponse(expected)
   if (expected.requiredAck !== undefined && !state.checked.has(expected.requiredAck)) {
     throw new Error(
       `gate response: required ack ${expected.requiredAck} not checked — check the trajectory-reviewed box to proceed`,

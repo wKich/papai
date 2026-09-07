@@ -6,135 +6,25 @@
 import { assign, initialTransition, setup, transition } from 'xstate'
 import type { ExecutableActionsFrom, SnapshotFrom } from 'xstate'
 
-import type {
-  AutoDecisionKind,
-  AutoDecisionRule,
-  DepthProfile,
-  FailureKind,
-  FindingCounts,
-  GateOutcome,
-} from '../events.js'
-import type { AutoDecisionRecord, DigestRecord } from '../legacy-fold.js'
 import { digestRecordOf } from '../legacy-fold.js'
+import type { AutoDecisionRecord } from '../legacy-fold.js'
+import type { KernelContext, KernelEvent, RoundTally, StageStatus, TallyCounts } from './types.js'
 
-export type StageStatus = 'pending' | 'active' | 'done'
+export type {
+  ChildRecord,
+  ChildStatus,
+  GateRecord,
+  KernelContext,
+  KernelEvent,
+  RoundStatus,
+  RoundTally,
+  StageStatus,
+  TaskRecord,
+  TaskStatus,
+  TallyCounts,
+} from './types.js'
+export { initialKernelContext } from './types.js'
 
-export interface RoundStatus {
-  readonly current: number
-  readonly cap: number
-}
-
-export interface GateRecord {
-  readonly mode: 'early' | 'final' | 'plan' | 'escalation'
-  readonly version: number
-  readonly answered: boolean
-}
-
-export type ChildStatus = 'pending' | 'running' | 'done' | 'failed'
-
-export interface ChildRecord {
-  readonly status: ChildStatus
-}
-
-/** Scratch tally accumulator: findings counted per round until the round's convergence flushes them. */
-export interface TallyCounts {
-  readonly resolved: number
-  readonly dismissed: number
-}
-
-export type RoundTally = Readonly<Record<number, TallyCounts>>
-
-export interface KernelContext {
-  readonly stages: Readonly<Record<string, StageStatus>>
-  readonly depth: DepthProfile | null
-  readonly round: RoundStatus | null
-  readonly perRound: readonly DigestRecord[]
-  readonly lastVerdict: DigestRecord | null
-  readonly gate: GateRecord | null
-  readonly autoDecisions: readonly AutoDecisionRecord[]
-  readonly children: Readonly<Record<string, ChildRecord>>
-  readonly tally: RoundTally
-  /**
-   * Non-projected gate residue (C4, like the tally — never a parity field):
-   * the latest explicit answered outcome and the presented deadline stamp,
-   * null on historical logs and re-cleared by every presentation.
-   */
-  readonly gateOutcome: GateOutcome | null
-  readonly gateDeadlineAt: string | null
-  /** Whether this gate version's deadline was already re-armed once (D4). */
-  readonly gateDeadlineReArmed: boolean
-  /**
-   * Non-projected failure residue (C6 D2, like the tally): per-stage
-   * consecutive declared-failure counts, cleared by that stage's exit and by
-   * escalation-extend — never a parity field.
-   */
-  readonly failures: Readonly<Record<string, number>>
-  /** The last declared failure kind per stage (C6 D3) — precondition escalates immediately. */
-  readonly failureKinds: Readonly<Record<string, FailureKind>>
-}
-
-export function initialKernelContext(stages: Readonly<Record<string, StageStatus>>): KernelContext {
-  return {
-    stages,
-    depth: null,
-    round: null,
-    perRound: [],
-    lastVerdict: null,
-    gate: null,
-    autoDecisions: [],
-    children: {},
-    tally: {},
-    gateOutcome: null,
-    gateDeadlineAt: null,
-    gateDeadlineReArmed: false,
-    failures: {},
-    failureKinds: {},
-  }
-}
-
-export type KernelEvent =
-  | { readonly type: 'stage.enter'; readonly stage: string }
-  | { readonly type: 'stage.exit'; readonly stage: string }
-  | { readonly type: 'stage.failed'; readonly stage: string; readonly kind: FailureKind }
-  | { readonly type: 'depth'; readonly profile: DepthProfile }
-  | { readonly type: 'round.open'; readonly round: number; readonly cap: number }
-  | { readonly type: 'round.close'; readonly round: number; readonly cap: number }
-  | {
-      readonly type: 'finding'
-      readonly action: 'filed' | 'classified' | 'resolved' | 'dismissed'
-      readonly round: number
-    }
-  | {
-      readonly type: 'convergence'
-      readonly round: number
-      readonly verdict: 'converged' | 'needs-review' | 'open'
-      readonly counts: FindingCounts
-      /** Only what a human must settle; absent on a pre-split line, folding as `counts`. */
-      readonly open?: FindingCounts
-      /** Thrashing concern cluster ids (loop-memory D5); absent lines fold as `[]`. */
-      readonly concerns?: readonly string[]
-    }
-  | {
-      readonly type: 'gate.presented'
-      readonly mode: GateRecord['mode']
-      readonly version: number
-      readonly deadlineAt?: string
-    }
-  | { readonly type: 'gate.answered'; readonly outcome?: GateOutcome }
-  | { readonly type: 'gate.rearmed'; readonly version: number; readonly deadlineAt: string }
-  | {
-      readonly type: 'auto.decision'
-      readonly rule: AutoDecisionRule
-      readonly decision: AutoDecisionKind
-      readonly evidenceDigest: string
-      readonly gateVersion: number
-      readonly seq: number
-      readonly ts: string
-    }
-  | { readonly type: 'plan' }
-  | { readonly type: 'run.abort' }
-  | { readonly type: 'child.spawned'; readonly child: string }
-  | { readonly type: 'child.done'; readonly child: string; readonly outcome: 'done' | 'failed' }
 export const kernelSetup = setup({
   guards: {
     isStage: ({ event }: { event: KernelEvent }, params: { stage: string }) =>
@@ -246,6 +136,27 @@ export const kernelSetup = setup({
       if (event.type !== 'child.done') return {}
       return { children: { ...context.children, [event.child]: { status: event.outcome } } }
     }),
+    armExecution: assign(() => ({ executionArmed: true })),
+    startTask: assign(({ context, event }) => {
+      if (event.type !== 'task.started') return {}
+      const prior = context.tasks[event.id]
+      return {
+        tasks: {
+          ...context.tasks,
+          [event.id]: { status: 'running', attempts: (prior?.attempts ?? 0) + 1 },
+        },
+      }
+    }),
+    finishTask: assign(({ context, event }) => {
+      if (event.type !== 'task.done' && event.type !== 'task.failed') return {}
+      const prior = context.tasks[event.id]
+      return {
+        tasks: {
+          ...context.tasks,
+          [event.id]: { status: event.type === 'task.done' ? 'done' : 'failed', attempts: prior?.attempts ?? 1 },
+        },
+      }
+    }),
     emit: (_args, _params: { event: KernelEvent }): undefined => undefined,
     schedule: (_args, _params: { work: { kind: string } }): undefined => undefined,
   },
@@ -280,6 +191,10 @@ export const kernelRootHandlers: NonNullable<KernelMachineConfig['on']> = {
   plan: { actions: ['resetChildren'] },
   'child.spawned': { actions: ['spawnChild'] },
   'child.done': { actions: ['finishChild'] },
+  'execution.armed': { actions: ['armExecution'] },
+  'task.started': { actions: ['startTask'] },
+  'task.done': { actions: ['finishTask'] },
+  'task.failed': { actions: ['finishTask'] },
 }
 
 export function createKernelMachine(config: Parameters<typeof kernelSetup.createMachine>[0]): KernelMachine {

@@ -34,6 +34,8 @@ function contextOf(overrides: Partial<KernelContext> = {}): KernelContext {
     gateDeadlineReArmed: false,
     failures: {},
     failureKinds: {},
+    executionArmed: false,
+    tasks: {},
     ...overrides,
   } as KernelContext
 }

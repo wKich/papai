@@ -223,7 +223,24 @@ describe('afk-runner cli start args (parseStartArgs)', () => {
   })
 
   it('keeps the usage error on a missing task file', () => {
-    expect(() => parseStartArgs([])).toThrow('usage: afk-runner start <taskFile> [--depth S|M|L]')
+    expect(() => parseStartArgs([])).toThrow('usage: afk-runner start <taskFile> [--depth S|M|L] [--execute]')
+  })
+
+  it('parses the boolean --execute flag alone and beside --depth (U3 D1)', () => {
+    expect(parseStartArgs(['task.md', '--execute'])).toEqual({ taskFile: 'task.md', execute: true })
+    expect(parseStartArgs(['task.md', '--depth', 'S', '--execute'])).toEqual({
+      taskFile: 'task.md',
+      depthOverride: 'S',
+      execute: true,
+    })
+    expect(parseStartArgs(['task.md'])).toEqual({ taskFile: 'task.md' })
+  })
+
+  it('rejects unexpected tokens and value-taking misspellings of the execute flag', () => {
+    expect(() => parseStartArgs(['task.md', '--execute', 'yes'])).toThrow(
+      "unexpected start argument 'yes' (usage: afk-runner start <taskFile> [--depth S|M|L] [--execute])",
+    )
+    expect(() => parseStartArgs(['task.md', '--exec'])).toThrow(/unexpected start argument/u)
   })
 })
 
@@ -268,9 +285,9 @@ describe('sdd-auto command doc flag pin', () => {
   it('every documented flag parses through the start argument parsing with its documented value form', () => {
     const doc = fs.readFileSync(new URL('../../.claude/commands/sdd-auto.md', import.meta.url), 'utf8')
     const flags = documentedFlags(doc)
-    // Today's inventory is exactly --depth; a doc that adds or renames a flag
-    // fails here until the pin (and parser) consciously follow.
-    expect(flags.map((entry) => entry.flag)).toEqual(['--depth'])
+    // Today's inventory is exactly --depth and --execute (U3); a doc that adds
+    // or renames a flag fails here until the pin (and parser) consciously follow.
+    expect(flags.map((entry) => entry.flag)).toEqual(['--depth', '--execute'])
     for (const entry of flags) {
       expect(acceptedByStartParsing(entry)).toBe(true)
     }

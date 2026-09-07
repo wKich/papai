@@ -7,8 +7,11 @@ import path from 'node:path'
 
 import pLimit from 'p-limit'
 
+import { flattenPosition } from './drive/loop.js'
 import type { SddEvent } from './events.js'
 import { readEvents } from './events.js'
+import { pipelineMachine } from './graph/pipeline.js'
+import { foldEvents } from './kernel/fold.js'
 import { readAllRunStates } from './run-index.js'
 import type { PersistedLite } from './run-lite.js'
 import { usageTotalsOf } from './work/gate-signals.js'
@@ -93,6 +96,36 @@ function statusOf(row: PersistedLite): string {
   return row.gate === null ? row.status : `gate:${row.gate.mode} v${row.gate.version}`
 }
 
+/** The execution states whose live drive renders as `exec:<stage>` (U3 D9). */
+const EXECUTION_STAGES = new Set(['implement', 'verify', 'release'])
+
+/** Tasks recorded done over records total — the `exec` row's progress numbers. */
+function taskProgressOf(tasks: Readonly<Record<string, { readonly status: string }>>): string {
+  const ids = Object.keys(tasks)
+  if (ids.length === 0) return ''
+  let done = 0
+  for (const id of ids) {
+    const record = tasks[id]
+    if (record !== undefined && record.status === 'done') done += 1
+  }
+  return ` ${done}/${ids.length}`
+}
+
+/**
+ * The fold-derived status (U3 D9): an unanswered gate renders its park
+ * (`gate:<mode> v<version>` — fresher than a memo written at an earlier
+ * park), a run driving an execution stage renders `exec:<stage>` with task
+ * progress, anything else falls back to the memo's own rendering.
+ */
+function foldStatusOf(events: readonly SddEvent[]): string | null {
+  const snapshot = foldEvents(pipelineMachine, events).snapshot
+  const gate = snapshot.context.gate
+  if (gate !== null && !gate.answered) return `gate:${gate.mode} v${gate.version}`
+  const position = flattenPosition(snapshot.value)
+  if (!EXECUTION_STAGES.has(position)) return null
+  return `exec:${position}${taskProgressOf(snapshot.context.tasks)}`
+}
+
 /** Wall from log timestamps (D3): last event ts − first event ts — fresh for live runs. */
 function wallMsOf(events: readonly SddEvent[]): number | null {
   if (events.length === 0) return null
@@ -103,11 +136,11 @@ function wallMsOf(events: readonly SddEvent[]): number | null {
 }
 
 /** The rendered row shape shared by every accountRun outcome (tokens/wall null on a degraded row). */
-function rowOf(input: RunAccountingInput, tokens: number | null, wallMs: number | null): AccountedRow {
+function rowOf(input: RunAccountingInput, tokens: number | null, wallMs: number | null, status: string): AccountedRow {
   return {
     runId: input.runId,
     identity: identityOf(input.runId, input.changeName),
-    status: statusOf(input),
+    status,
     tokens,
     wallMs,
     updatedAt: input.updatedAt,
@@ -122,13 +155,13 @@ function accountRun(input: RunAccountingInput): {
   readonly unpriced: 0 | 1
 } {
   if (input.events === null) {
-    return { row: rowOf(input, null, null), dwellMs: 0, costUsd: 0, unpriced: 1 }
+    return { row: rowOf(input, null, null, statusOf(input)), dwellMs: 0, costUsd: 0, unpriced: 1 }
   }
   let dwellMs = 0
   for (const dwell of gateDwellsMs(input.events)) dwellMs += dwell
   const usage = usageTotalsOf(input.events)
   return {
-    row: rowOf(input, usage.tokens, wallMsOf(input.events)),
+    row: rowOf(input, usage.tokens, wallMsOf(input.events), foldStatusOf(input.events) ?? statusOf(input)),
     dwellMs,
     costUsd: usage.costUsd,
     unpriced: usage.costKnown ? 0 : 1,

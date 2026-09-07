@@ -9,7 +9,6 @@ export * from './agent-schemas.js'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 
-import { parsePorcelainPaths } from '../../mutation-improve/src/diff-guard.js'
 import { agentWritePath, runAgent } from '../../review-loop/src/agent-runner.js'
 import type { AgentUsage, SpawnFn } from '../../review-loop/src/agent-runner.js'
 import { createAgentReporter } from './agent-reporter.js'
@@ -23,6 +22,8 @@ import {
   settleSessionAttempt,
   transcriptPathFor,
 } from './session-ledger.js'
+import { changeFolderPrefix, guardWorkingTree, snapshotWorkingTree } from './write-guard.js'
+import type { WriteGuard } from './write-guard.js'
 
 export interface AgentLayerDeps {
   readonly spawn: SpawnFn
@@ -55,6 +56,13 @@ export interface RunStageAgentOptions<T> {
    * precedence explicit id > seam lookup > fresh.
    */
   readonly continueSessionId?: string
+  /**
+   * Write guard mode (U3 D6): absent = the narrow change-folder guard every
+   * think-half seam keeps (byte-identical behavior). The implementer seam
+   * declares the widened mode — source-tree writes pass, sibling change
+   * folders stay protected.
+   */
+  readonly guard?: WriteGuard
 }
 
 export interface AgentRunInfo<T> {
@@ -63,55 +71,10 @@ export interface AgentRunInfo<T> {
   readonly attempts: number
 }
 
-export class DiffGuardViolationError extends Error {
-  readonly violations: readonly string[]
-  readonly allowedPrefix: string
-
-  constructor(violations: readonly string[], allowedPrefix: string) {
-    super(`agent edited files outside the change folder ${allowedPrefix}: ${violations.join(', ')}`)
-    this.name = 'DiffGuardViolationError'
-    this.violations = violations
-    this.allowedPrefix = allowedPrefix
-  }
-}
-
 export { AgentValidationError } from './errors.js'
 import { AgentValidationError } from './errors.js'
 
 const MAX_VALIDATION_ATTEMPTS = 2
-
-function parseDirty(stdout: string): string[] {
-  return stdout
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .flatMap(parsePorcelainPaths)
-    .filter((entry) => entry.length > 0)
-}
-
-async function snapshotWorkingTree(execGit: ExecGitFn, cwd: string): Promise<Set<string>> {
-  const { stdout } = await execGit(cwd, ['status', '--porcelain', '--untracked-files=all'])
-  return new Set(parseDirty(stdout))
-}
-
-/**
- * The write set an agent of this run may dirty: exactly its own change folder
- * (`openspec/changes/<changeName>/`, trailing slash load-bearing — it is what
- * makes a prefix-sharing sibling a violation). No tree-wide fallback branch:
- * `changeName` is required on every spawn seam and validated by construction
- * (openspec scaffolds it before any later stage can spawn). If a spawn seam
- * without a change name ever emerges, re-widen explicitly in that seam's terms
- * and re-pin the guard tests — do not resurrect a silent tree-wide default.
- */
-async function guardWorkingTree(
-  execGit: ExecGitFn,
-  cwd: string,
-  before: Set<string>,
-  allowedPrefix: string,
-): Promise<void> {
-  const after = await snapshotWorkingTree(execGit, cwd)
-  const violations = [...after].filter((entry) => !before.has(entry) && !entry.startsWith(allowedPrefix))
-  if (violations.length > 0) throw new DiffGuardViolationError(violations, allowedPrefix)
-}
 
 interface ContinuationSpawn {
   readonly sessionId: string
@@ -162,6 +125,36 @@ function ledgerHooks<T>(
   }
 }
 
+/** The spawn's write guard: the seam's explicit mode, defaulting to the narrow change-folder guard. */
+function writeGuardOf<T>(options: RunStageAgentOptions<T>): WriteGuard {
+  return options.guard ?? { allowedPrefix: changeFolderPrefix(options.changeName) }
+}
+
+interface SpawnContext {
+  readonly prompt: string
+  readonly model: string
+  readonly spawnInput: { label: string; role: string; round: number; model: string }
+  readonly ledgerAttempt: number
+  readonly sessionLedger: { recordSessionId: (id: string, preferred: number) => void }
+  readonly logPath: string
+}
+
+/** Build one attempt's spawn context: prompt, model, spawned event, ledger hooks, transcript path. */
+function prepareSpawnContext<T>(
+  deps: AgentLayerDeps,
+  options: RunStageAgentOptions<T>,
+  lastError: string | null,
+  continuation: ContinuationSpawn | null,
+): SpawnContext {
+  const prompt = spawnPrompt(options, lastError, continuation)
+  const model = modelFor(deps.config, options.role)
+  deps.emit({ altitude: 'L1', type: 'spawned', agent: options.label, role: options.role, model })
+  const { spawnInput, ledgerAttempt, sessionLedger } = ledgerHooks(options, model)
+  const logPath = transcriptPathFor(options.runDir, options.label, options.round, ledgerAttempt)
+  mkdirSync(path.dirname(logPath), { recursive: true })
+  return { prompt, model, spawnInput, ledgerAttempt, sessionLedger, logPath }
+}
+
 async function attemptStageAgent<T>(
   deps: AgentLayerDeps,
   options: RunStageAgentOptions<T>,
@@ -170,14 +163,14 @@ async function attemptStageAgent<T>(
   before: Set<string>,
   continuation: ContinuationSpawn | null = null,
 ): Promise<AgentRunInfo<T>> {
-  const prompt = spawnPrompt(options, lastError, continuation)
-  const model = modelFor(deps.config, options.role)
-  deps.emit({ altitude: 'L1', type: 'spawned', agent: options.label, role: options.role, model })
+  const { prompt, model, spawnInput, ledgerAttempt, sessionLedger, logPath } = prepareSpawnContext(
+    deps,
+    options,
+    lastError,
+    continuation,
+  )
   const absoluteOutput = path.join(options.sidecarDir, path.basename(options.outputPath))
   const reporter = createAgentReporter(options.label, deps.emit)
-  const { spawnInput, ledgerAttempt, sessionLedger } = ledgerHooks(options, model)
-  const logPath = transcriptPathFor(options.runDir, options.label, options.round, ledgerAttempt)
-  mkdirSync(path.dirname(logPath), { recursive: true })
   try {
     const result = await runSpawn(deps, options, {
       prompt,
@@ -190,7 +183,7 @@ async function attemptStageAgent<T>(
       continuation,
       attempt,
     })
-    await guardWorkingTree(deps.execGit, options.cwd, before, `openspec/changes/${options.changeName}/`)
+    await guardWorkingTree(deps.execGit, options.cwd, before, writeGuardOf(options))
     const parsed = options.outputSchema.safeParse(result.value)
     if (parsed.success) {
       deps.emit({ altitude: 'L1', type: 'done', agent: options.label, model, usage: result.usage })
