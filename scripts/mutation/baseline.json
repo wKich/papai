@@ -78,16 +78,16 @@
     "scored": 45
   },
   "afk-runner/src/cli.ts": {
-    "score": 0.49696969696969695,
-    "killed": 164,
+    "score": 0.5052631578947369,
+    "killed": 144,
     "timeout": 0,
-    "scored": 330
+    "scored": 285
   },
   "afk-runner/src/config.ts": {
-    "score": 0.7288135593220338,
-    "killed": 86,
+    "score": 0.7461538461538462,
+    "killed": 97,
     "timeout": 0,
-    "scored": 118
+    "scored": 130
   },
   "afk-runner/src/drive/boundary.ts": {
     "score": 0.7916666666666666,
