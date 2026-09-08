@@ -30,20 +30,6 @@ A run's detail view SHALL render an agent todos panel listing, per agent label t
 - **WHEN** the panel renders an agent's latest todo snapshot
 - **THEN** it shows when that snapshot was taken, without any extra fetch beyond the run-detail one
 
-### Requirement: Todo updates are live on the open detail
-
-While a run's detail view is open, receiving an SSE portfolio snapshot SHALL re-fetch the selected run's detail within a bounded time, so panel content — and every other detail field — stays current without user action. Re-fetches SHALL be throttled so a burst of snapshots cannot flood the server. The portfolio-over-SSE doctrine is unchanged: no todo content rides the portfolio snapshot.
-
-#### Scenario: Todo update reaches the open detail
-
-- **WHEN** the operator has a run's detail open and the running agent appends an `agent_todos` event
-- **THEN** the panel shows the new list within the sweep-and-fetch cadence, without any user action
-
-#### Scenario: Snapshot burst does not flood the server
-
-- **WHEN** several sweep cycles fire while the detail is open
-- **THEN** detail re-fetches are bounded by the throttle, not one per snapshot
-
 ### Requirement: Recent-events feed excludes todo telemetry
 
 The bounded recent-events feed SHALL NOT include `agent_todos` events; their content is rendered by the panel. The exclusion SHALL happen before the feed's bound is applied, so a todo burst cannot shrink the feed below its size — the feed stays full of the run's other activity. All other event types keep their current feed treatment.

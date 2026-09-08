@@ -19,7 +19,7 @@ Change A (`agent-todos-capture`) puts stage agents' todo lists into the run log 
 
 ### Modified Capabilities
 
-(none — the board's capability spec is not yet in `openspec/specs/`: `afk-runner-web-board` is complete but unarchived, so there is no main spec to delta against. The detail-liveness fix this change requires is admitted here, in this capability's spec, rather than as a board-spec modification — live todos are its forcing consumer, and the fix generalizes to every detail field.)
+- `afk-runner-web-board`: the detail view becomes live — an SSE snapshot re-fetches the open detail (throttled), instead of today's fetch-once behavior. `afk-runner-web-board` was archived before this change opened, so its main spec exists and this rides as a normal added requirement; live todos are the forcing consumer, and the fix generalizes to every detail field. The recent-events feed filter stays in `afk-runner-board-todos` because it is todo-specific (it exists only because the panel renders todo content), not a change to the feed's general contract.
 
 ## Non-goals
 
