@@ -25,4 +25,4 @@
 
 - [x] 5.1 Run full `bun test`, `bun run typecheck`, `bun run lint`; run `bun run test:mutate:changed` over the touched gateable files. Verify: all green
 - [x] 5.2 Update `docs/architecture/afk-runner.md`: the noise-schema line in Layout (new `agent_todos` L0 type) and the log-fidelity section's L0 taxonomy mention. Verify: docs read coherently with the spec
-- [ ] 5.3 Live confirmation pass: run one depth-S run against the repo's own runner (`afk-runner start` on a scratch task), then `rg agent_todos <runDir>/events.ndjson` shows captured snapshots riding real agent sessions. Verify: events present, folds tolerant, `afk-runner status` unchanged in shape
+- [x] 5.3 Live confirmation pass: run one depth-S run against the repo's own runner (`afk-runner start` on a scratch task), then `rg agent_todos <runDir>/events.ndjson` shows captured snapshots riding real agent sessions. Verify: events present, folds tolerant, `afk-runner status` unchanged in shape
