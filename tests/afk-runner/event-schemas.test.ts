@@ -486,6 +486,49 @@ describe('execution-half additive vocabulary', () => {
   })
 })
 
+describe('agent_todos noise event (agent-todos-capture)', () => {
+  const todos = [
+    { content: 'RED: add llm:verifier rows', status: 'in_progress' },
+    { content: 'GREEN: implementation', status: 'pending' },
+  ]
+
+  it('accepts a stamped L0 agent_todos event in the union and round-trips append/read', async () => {
+    const stamped = stampEvent({ altitude: 'L0', type: 'agent_todos', agent: 'implement-t2', todos }, 7, 't')
+    expect(stamped).toMatchObject({ altitude: 'L0', type: 'agent_todos', agent: 'implement-t2', todos })
+    const { appendEvent, readEvents } = await import('../../afk-runner/src/events.js')
+    const os = await import('node:os')
+    const path = await import('node:path')
+    const fs = await import('node:fs')
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sdd-evtodos-'))
+    try {
+      const log = path.join(dir, 'events.ndjson')
+      appendEvent(log, { altitude: 'L0', type: 'agent_todos', agent: 'implement-t2', todos })
+      appendEvent(log, { altitude: 'L0', type: 'tool_use', agent: 'implement-t2', tool: 'read' })
+      expect(readEvents(log)).toHaveLength(2)
+      expect(readEvents(log)[0]).toMatchObject({ type: 'agent_todos', agent: 'implement-t2', todos })
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects malformed todos items and a missing agent label', () => {
+    expect(EventInputSchema.safeParse({ altitude: 'L0', type: 'agent_todos', agent: 'a', todos }).success).toBe(true)
+    expect(
+      EventInputSchema.safeParse({
+        altitude: 'L0',
+        type: 'agent_todos',
+        agent: 'a',
+        todos: [{ content: 1, status: 'x' }],
+      }).success,
+    ).toBe(false)
+    expect(
+      EventInputSchema.safeParse({ altitude: 'L0', type: 'agent_todos', agent: 'a', todos: 'all done' }).success,
+    ).toBe(false)
+    expect(EventInputSchema.safeParse({ altitude: 'L0', type: 'agent_todos', todos }).success).toBe(false)
+    expect(EventInputSchema.safeParse({ altitude: 'L2', type: 'agent_todos', agent: 'a', todos }).success).toBe(false)
+  })
+})
+
 function baseFindingEvent(): {
   altitude: 'L2'
   type: 'finding'

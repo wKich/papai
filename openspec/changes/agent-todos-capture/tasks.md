@@ -8,8 +8,8 @@
 
 ## 2. afk-runner event type (TDD)
 
-- [ ] 2.1 Failing test in `tests/afk-runner/`: `agent_todos` schema validation — append- and read-time acceptance of a stamped `L0 agent_todos {agent, todos}` event in `agent-noise-schemas.ts` + the `event-schemas.ts` union. Verify: `bun test tests/afk-runner/`
-- [ ] 2.2 Declare `AgentTodosEvent` in `afk-runner/src/agent-noise-schemas.ts`, join the union in `afk-runner/src/event-schemas.ts`. Verify: `bun test tests/afk-runner/`
+- [x] 2.1 Failing test in `tests/afk-runner/`: `agent_todos` schema validation — append- and read-time acceptance of a stamped `L0 agent_todos {agent, todos}` event in `agent-noise-schemas.ts` + the `event-schemas.ts` union. Verify: `bun test tests/afk-runner/`
+- [x] 2.2 Declare `AgentTodosEvent` in `afk-runner/src/agent-noise-schemas.ts`, join the union in `afk-runner/src/event-schemas.ts`. Verify: `bun test tests/afk-runner/`
 
 ## 3. reporter mapping, dedup, bounds (TDD)
 
