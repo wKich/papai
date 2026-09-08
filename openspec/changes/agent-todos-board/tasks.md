@@ -7,8 +7,8 @@
 
 ## 2. Feed filter (TDD)
 
-- [ ] 2.1 Failing test in `tests/afk-runner/serve/run-detail.test.ts`: `recentEventsOf` excludes `agent_todos` and fills before it cuts — a tail dominated by todo events still yields `RECENT_EVENT_LIMIT` non-todo entries reaching past the exclusions (filter-then-slice, design D2); `tool_use`/`step_finish`/`spawned` keep their current feed treatment. Verify: `bun test tests/afk-runner/serve/`
-- [ ] 2.2 Implement the exclusion in `recentEventsOf` before the bound is applied. Verify: `bun test tests/afk-runner/serve/`
+- [x] 2.1 Failing test in `tests/afk-runner/serve/run-detail.test.ts`: `recentEventsOf` excludes `agent_todos` and fills before it cuts — a tail dominated by todo events still yields `RECENT_EVENT_LIMIT` non-todo entries reaching past the exclusions (filter-then-slice, design D2); `tool_use`/`step_finish`/`spawned` keep their current feed treatment. Verify: `bun test tests/afk-runner/serve/`
+- [x] 2.2 Implement the exclusion in `recentEventsOf` before the bound is applied. Verify: `bun test tests/afk-runner/serve/`
 
 ## 3. Board page: panel + live detail
 

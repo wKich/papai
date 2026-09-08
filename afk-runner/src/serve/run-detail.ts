@@ -120,7 +120,10 @@ function todosOf(events: readonly SddEvent[] | null): readonly AgentTodosEntry[]
 
 function recentEventsOf(events: readonly SddEvent[] | null): readonly RecentEvent[] {
   if (events === null) return []
-  return events.slice(-RECENT_EVENT_LIMIT).map((event) => ({
+  // The todos panel renders this telemetry (board-todos D2): excluded before
+  // the bound is applied, so a todo burst cannot shrink the feed below its size.
+  const feed = events.filter((event) => event.type !== 'agent_todos')
+  return feed.slice(-RECENT_EVENT_LIMIT).map((event) => ({
     seq: event.seq,
     ts: event.ts,
     summary: summarizeEvent(event),
