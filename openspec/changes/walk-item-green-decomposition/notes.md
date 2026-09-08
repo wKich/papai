@@ -343,6 +343,19 @@ to granularity:**
 ### Post-run verification (in the target)
 
 `openspec validate fix-the-response-delivery-path-verification-fallback-chunking
---strict` to run at close-out; target tree clean at `263b40feb` (13 commits);
-the product awaits the operator's merge decision (PR or direct) — out of the
-drill's scope.
+--strict` — **green** ("Change … is valid", 2026-09-08); target tree clean at
+`263b40feb` (13 commits); the product awaits the operator's merge decision (PR or
+direct) — out of the drill's scope.
+
+### Close-out incident (recorded for forensics, 2026-09-08 ~15:14–15:19 local)
+
+A parallel agent session working an unrelated change (`agent-todos-capture`) in
+THIS worktree ran two scratch depth-S runs and, while committing its own five
+commits, treated the drill's uncommitted harvest edits (oracle, README row, both
+tasks.md edits, the freshly copied lane) as "stray working-tree edits" and
+reverted them; the drill source in the target worktree and notes.md (untracked)
+were untouched. All edits were re-applied byte-identically, the full serial suite
+re-run green (18,025 tests, 0 fail — the pre-wipe run's report had honestly
+flagged STALE), and everything committed as `18696527f` with pre-commit checks
+4/4. Shared-host lesson: commit harvested evidence before tending anything else
+on a worktree another session can reach.
