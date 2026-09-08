@@ -285,11 +285,11 @@ describe('serve server — SSE pushes full snapshots', () => {
     const first = snapshotsOf(stream.text)[0]
     expect(first).toMatchObject({ totals: { gatePending: 1 } })
 
-    fs.appendFileSync(
-      path.join(workDir, 'runs', 'live-run', 'events.ndjson'),
-      `${stageExit('draft', 4, at(30 * 60_000))}\n`,
-    )
-    await stream.readUntil((text) => snapshotCount(text) >= 2, 5_000)
+    const appended = `${stageExit('draft', 4, at(30 * 60_000))}\n`
+    fs.appendFileSync(path.join(workDir, 'runs', 'live-run', 'events.ndjson'), appended)
+    // wait for the appended state itself (the event's ts surfaces as the card's
+    // lastActivity) — a bare snapshot count would race the pre-append sweep tick
+    await stream.readUntil((text) => text.includes(at(30 * 60_000)), 5_000)
     const second = snapshotsOf(stream.text)[1]
     expect(second).toMatchObject({
       totals: { runs: 3 },
@@ -311,7 +311,9 @@ describe('serve server — SSE pushes full snapshots', () => {
       gate: null,
       updatedAt: at(40 * 60_000),
     })
-    await stream.readUntil((text) => snapshotCount(text) >= 2, 5_000)
+    // wait for the new run's card itself — a bare snapshot count would race
+    // the sweep tick that ran before the run dir appeared
+    await stream.readUntil((text) => text.includes('run-new'), 5_000)
     const latest = snapshotsOf(stream.text).at(-1)
     expect(latest).toMatchObject({ totals: { runs: 4 } })
     expect(JSON.stringify(latest)).toContain('run-new')

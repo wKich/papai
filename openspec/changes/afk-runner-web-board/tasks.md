@@ -23,7 +23,7 @@
 
 ## 4. Verification
 
-- [ ] 4.1 `tests/afk-runner/serve-view-model.test.ts`, `serve-sweep.test.ts`, `serve-server.test.ts` (route + auth + SSE contract via injected deps)
-- [ ] 4.2 CLI verb-table + config-ladder tests updated for `serve` (inventory, ladder resolution, passive read-only)
-- [ ] 4.3 `bun run test:affected` in the loop; full `bun run test`, `bun run lint`, `bun run typecheck`, `bun security` before finishing
-- [ ] 4.4 Update `docs/architecture/afk-runner.md` with a board section (surface, auth, read-only doctrine) and the module layout entry
+- [x] 4.1 Projection/sweep/server suites under `tests/afk-runner/serve/` — `view-model.test.ts` (projection + fs shells), `sweep.test.ts`, `server.test.ts` (route + auth + SSE contract via injected deps), plus `fs-seam.test.ts` (the type-level pin) and `args.test.ts` (nested mirror layout: the TDD test-resolver pairs `afk-runner/src/serve/X.ts` with `tests/afk-runner/serve/X.test.ts`, so the mutation gate finds its companions — the originally sketched flat `serve-*.test.ts` names would pair with nothing)
+- [x] 4.2 CLI verb-table + config-ladder tests updated for `serve` (inventory, ladder resolution, passive read-only)
+- [x] 4.3 `bun run test:affected` in the loop; full `bun run test`, `bun run lint`, `bun run typecheck`, `bun security` before finishing
+- [x] 4.4 Update `docs/architecture/afk-runner.md` with a board section (surface, auth, read-only doctrine) and the module layout entry
