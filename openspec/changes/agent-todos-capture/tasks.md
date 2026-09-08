@@ -18,8 +18,8 @@
 
 ## 4. Fold tolerance pin (TDD)
 
-- [ ] 4.1 Failing test: kernel fold accounting counts `agent_todos` as tolerated with a snapshot identical to the same log without it; legacy fold replays it as a strict no-op (design D5). Verify: `bun test tests/afk-runner/kernel/ tests/afk-runner/legacy-fold.test.ts`
-- [ ] 4.2 Confirm no fold/code change is needed — the test passes against the existing tolerance. If it fails, stop and reconsider the design, do not map the type. Verify: same command
+- [x] 4.1 Failing test: kernel fold accounting counts `agent_todos` as tolerated with a snapshot identical to the same log without it; legacy fold replays it as a strict no-op (design D5). Verify: `bun test tests/afk-runner/kernel/ tests/afk-runner/legacy-fold.test.ts`
+- [x] 4.2 Confirm no fold/code change is needed — the test passes against the existing tolerance. If it fails, stop and reconsider the design, do not map the type. Verify: same command
 
 ## 5. Full verification and docs
 
