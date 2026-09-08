@@ -552,12 +552,12 @@ describe('sendMattermostDeferredMessage', () => {
   /** apiFetch double recording every post body; serves the DM-channel and mention-user lookups. */
   const makeDeferredApi = (): {
     apiFetch: (method: string, path: string, body: unknown) => Promise<unknown>
-    posts: Array<Record<string, unknown>>
+    posts: unknown[]
   } => {
-    const posts: Array<Record<string, unknown>> = []
+    const posts: unknown[] = []
     const apiFetch = (method: string, path: string, body: unknown): Promise<unknown> => {
       if (method === 'POST' && path === '/api/v4/posts') {
-        posts.push(body as Record<string, unknown>)
+        posts.push(body)
         return Promise.resolve({ id: `post-${String(posts.length - 1)}` })
       }
       if (method === 'POST' && path === '/api/v4/channels/direct') return Promise.resolve({ id: 'dm-chan' })
@@ -567,8 +567,9 @@ describe('sendMattermostDeferredMessage', () => {
     return { apiFetch, posts }
   }
 
-  const messageOf = (post: Record<string, unknown>): string => {
-    const message = post['message']
+  const messageOf = (post: unknown): string => {
+    assert(typeof post === 'object' && post !== null && 'message' in post)
+    const { message } = post
     assert(typeof message === 'string')
     return message
   }
@@ -656,22 +657,30 @@ describe('sendMattermostDeferredMessage', () => {
     return loaded
   }
 
-  test('a failed middle deferred chunk warns with channel id and chunk position, still sends later chunks, and rethrows', async () => {
-    const tracked = createTrackedLoggerMock()
-    const { sendMattermostDeferredChunks: send } = await loadDeferredChunkSend(tracked)
-    const chunkError = new Error('mattermost deferred send failed')
+  // Same describe-scope double shape as makeBehaviorPost above: the ?? fallback
+  // lives outside every test body, so the per-call behavior table stays a table.
+  const makeDeferredBehaviorPost = (
+    behaviors: ReadonlyArray<Promise<string>>,
+  ): { post: (message: string) => Promise<string>; sent: string[] } => {
     const sent: string[] = []
-    const behaviors = [
-      Promise.resolve('post-0'),
-      Promise.reject(chunkError),
-      Promise.resolve('post-2'),
-      Promise.resolve('post-3'),
-    ]
     const post = (message: string): Promise<string> => {
       const index = sent.length
       sent.push(message)
       return behaviors[index] ?? Promise.resolve(`post-${String(index)}`)
     }
+    return { post, sent }
+  }
+
+  test('a failed middle deferred chunk warns with channel id and chunk position, still sends later chunks, and rethrows', async () => {
+    const tracked = createTrackedLoggerMock()
+    const { sendMattermostDeferredChunks: send } = await loadDeferredChunkSend(tracked)
+    const chunkError = new Error('mattermost deferred send failed')
+    const { post, sent } = makeDeferredBehaviorPost([
+      Promise.resolve('post-0'),
+      Promise.reject(chunkError),
+      Promise.resolve('post-2'),
+      Promise.resolve('post-3'),
+    ])
     const paragraphs = ['fail-0', 'fail-1', 'fail-2', 'fail-3'].map((label) => `${label} ${'z'.repeat(9000)}`)
 
     const rejection = await send('chan-1', post, paragraphs.join('\n\n'), '@alice ').then(
