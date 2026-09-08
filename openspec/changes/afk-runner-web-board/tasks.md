@@ -9,9 +9,9 @@
 
 ## 2. Read-only fs seam + change sweep
 
-- [ ] 2.1 `serve/fs-seam.ts`: injected read-only seam (`readFile`/`readdir`/`stat` only) with a type-level test pinning write members absent
-- [ ] 2.2 `serve/sweep.ts`: pure "scan run dirs → changed run ids" over memoized (size, mtime) fingerprints; roster growth (new run dir) counted as a change
-- [ ] 2.3 Torn-tail handling in the sweep path rides `readEvents` tolerance — no new tolerance logic
+- [x] 2.1 `serve/fs-seam.ts`: injected read-only seam (`readFile`/`readdir`/`stat` only) with a type-level test pinning write members absent
+- [x] 2.2 `serve/sweep.ts`: pure "scan run dirs → changed run ids" over memoized (size, mtime) fingerprints; roster growth (new run dir) counted as a change
+- [x] 2.3 Torn-tail handling in the sweep path rides `readEvents` tolerance — no new tolerance logic
 
 ## 3. Serve verb
 
