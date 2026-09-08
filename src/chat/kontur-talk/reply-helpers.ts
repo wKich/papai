@@ -25,7 +25,7 @@ interface KonturTalkReplyHelpersParams {
  * leading boundary newlines are trimmed from each remainder before the next
  * split.
  */
-function chunkForKonturTalk(input: string, budget: number): string[] {
+export function chunkForKonturTalk(input: string, budget: number): string[] {
   const chunks: string[] = []
   let remainder = input
   while (remainder.length > budget) {
@@ -71,7 +71,7 @@ type KonturTalkChunkSend = (chunk: string) => Promise<void>
  * position, later chunks are still attempted, and the first error is rethrown after
  * the loop.
  */
-async function sendKonturTalkChunks(
+export async function sendKonturTalkChunks(
   roomId: string,
   chunks: readonly string[],
   sendChunk: KonturTalkChunkSend,

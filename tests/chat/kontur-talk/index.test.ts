@@ -4,6 +4,7 @@
 // See LICENSE in the project root for details.
 
 import { afterEach, describe, expect, test } from 'bun:test'
+import assert from 'node:assert/strict'
 
 import { KonturTalkChatProvider } from '../../../src/chat/kontur-talk/index.js'
 import type { DeferredDeliveryTarget, IncomingMessage } from '../../../src/chat/types.js'
@@ -180,6 +181,74 @@ describe('KonturTalkChatProvider', () => {
 
     const body = findObjectBody(capturedBodies)
     expect(body).toHaveProperty('thread_id', '$thread123')
+  })
+
+  describe('deferred sendMessage chunked delivery', () => {
+    const messageOf = (body: unknown): string => {
+      assert(typeof body === 'object' && body !== null && 'message' in body)
+      const { message } = body
+      assert(typeof message === 'string')
+      return message
+    }
+
+    function captureSendBodies(): unknown[] {
+      const capturedBodies: unknown[] = []
+      setMockFetch((_url: string, options?: RequestInit) => {
+        capturedBodies.push(parseBody(options))
+        return sentResponse()
+      })
+      return capturedBodies
+    }
+
+    test('over-limit deferred group delivery arrives as ordered in-limit chunks with the thread id preserved', async () => {
+      const capturedBodies = captureSendBodies()
+      const provider = createProvider()
+      const paragraphs = ['para-0', 'para-1', 'para-2', 'para-3', 'para-4', 'para-5'].map(
+        (label) => `${label} ${'x'.repeat(1500)}`,
+      )
+
+      await provider.sendMessage('kontur-main', THREAD_TARGET, paragraphs.join('\n\n'))
+
+      expect(capturedBodies).toHaveLength(3)
+      const messages = capturedBodies.map(messageOf)
+      for (const message of messages) {
+        expect(message.length).toBeLessThanOrEqual(4096)
+        expect(message.startsWith('\n')).toBe(false)
+      }
+      for (const body of capturedBodies) {
+        expect(body).toMatchObject({
+          room_id: '!room:host',
+          format: 'markdown',
+          thread_id: '$thread123',
+          mentions: [],
+        })
+      }
+      expect(messages[0]?.startsWith('para-0')).toBe(true)
+      expect(messages[0]?.includes('para-1')).toBe(true)
+      expect(messages[0]?.includes('para-2')).toBe(false)
+      expect(messages[1]?.startsWith('para-2')).toBe(true)
+      expect(messages[1]?.includes('para-3')).toBe(true)
+      expect(messages[1]?.includes('para-4')).toBe(false)
+      expect(messages[2]?.startsWith('para-4')).toBe(true)
+      expect(messages[2]?.includes('para-5')).toBe(true)
+    })
+
+    test('unbroken over-limit deferred group delivery is hard-cut at the limit with thread_id null preserved', async () => {
+      const capturedBodies = captureSendBodies()
+      const provider = createProvider()
+
+      await provider.sendMessage('kontur-main', GROUP_TARGET, 'z'.repeat(10000))
+
+      expect(capturedBodies.map(messageOf).map((message) => message.length)).toEqual([4096, 4096, 1808])
+      for (const body of capturedBodies) {
+        expect(body).toMatchObject({
+          room_id: '!room:host',
+          format: 'markdown',
+          thread_id: null,
+          mentions: [],
+        })
+      }
+    })
   })
 
   test('renderContext returns formatted context', () => {
