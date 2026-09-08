@@ -8,8 +8,8 @@ import type { Context } from 'grammy'
 import { InlineKeyboard } from 'grammy'
 
 import type { ButtonReplyOptions, DeferredDeliveryTarget, ReplyOptions } from '../types.js'
-import { formatLlmOutput } from './format.js'
 import { sendFormattedTelegramChunks } from './format-chunking.js'
+import { formatLlmOutput } from './format.js'
 
 type TelegramReplyParameters = { message_id: number } & Partial<{ message_thread_id: number }>
 
@@ -104,13 +104,6 @@ export function buildTelegramMentionPrefix(target: DeferredDeliveryTarget): Tele
   )
 
   return { text, entities: mentionData.entities }
-}
-
-export function shiftTelegramEntity(entity: TelegramEntity, offset: number): TelegramEntity {
-  return {
-    ...entity,
-    offset: entity.offset + offset,
-  }
 }
 
 const getTelegramMentionEntities = (entities: MessageEntity[] | undefined): MessageEntity[] => {

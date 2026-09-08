@@ -25,7 +25,7 @@ import { registerTelegramCommands } from './commands.js'
 import { renderTelegramContext } from './context-renderer.js'
 import { createTelegramFileFetcher } from './file-fetcher.js'
 import { extractFileCandidatesFromContext, extractFilesFromContext } from './file-helpers.js'
-import { formatLlmOutput } from './format.js'
+import { sendDeferredTelegramChunks } from './format-chunking.js'
 import { buildTelegramInteraction } from './interaction-helpers.js'
 import { getTelegramDisplayLabel, resolveTelegramGroupLabel, resolveTelegramUserLabel } from './label-helpers.js'
 import {
@@ -41,7 +41,6 @@ import {
   buildTelegramMentionPrefix,
   checkTelegramAdminStatus,
   getTelegramUsername,
-  shiftTelegramEntity,
   telegramIsBotMentioned,
 } from './reply-helpers.js'
 export type { TelegramBotFactory, TelegramBotLike } from './bot-factory.js'
@@ -140,17 +139,15 @@ export class TelegramChatProvider implements ChatProvider {
   async sendMessage(_platformInstanceId: string, target: DeferredDeliveryTarget, markdown: string): Promise<void> {
     const chatId = parseInt(target.contextId, 10)
     const mentionPrefix = buildTelegramMentionPrefix(target)
-    const formatted = formatLlmOutput(markdown)
-    const options: Parameters<typeof this.bot.api.sendMessage>[2] = {
-      entities: [
-        ...mentionPrefix.entities,
-        ...formatted.entities.map((entity) => shiftTelegramEntity(entity, mentionPrefix.text.length)),
-      ],
-    }
-    if (target.contextType === 'group' && target.threadId !== null) {
-      options.message_thread_id = parseInt(target.threadId, 10)
-    }
-    await this.bot.api.sendMessage(chatId, `${mentionPrefix.text}${formatted.text}`, options)
+    const threadId =
+      target.contextType === 'group' && target.threadId !== null ? parseInt(target.threadId, 10) : undefined
+    await sendDeferredTelegramChunks(
+      (text, options) => this.bot.api.sendMessage(chatId, text, options),
+      chatId,
+      markdown,
+      mentionPrefix,
+      threadId,
+    )
   }
   start(): Promise<void> {
     return new Promise<void>((resolve, reject) => {

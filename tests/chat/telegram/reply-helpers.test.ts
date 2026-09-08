@@ -387,16 +387,16 @@ describe('sendFormattedReply chunked delivery', () => {
   type ChunkSendModule = typeof import('../../../src/chat/telegram/format-chunking.js')
 
   const isChunkSendModule = (value: unknown): value is ChunkSendModule =>
-    typeof value === 'object' && value !== null && typeof Reflect.get(value, 'sendFormattedTelegramChunks') === 'function'
+    typeof value === 'object' &&
+    value !== null &&
+    typeof Reflect.get(value, 'sendFormattedTelegramChunks') === 'function'
 
   const loadChunkSend = async (tracked: TrackedLoggerMock): Promise<ChunkSendModule> => {
     void mock.module('../../../src/logger.js', () => ({
       getLogLevel: tracked.getLogLevel,
       logger: tracked.logger,
     }))
-    const loaded: unknown = await import(
-      `../../../src/chat/telegram/format-chunking.js?t=${crypto.randomUUID()}`
-    )
+    const loaded: unknown = await import(`../../../src/chat/telegram/format-chunking.js?t=${crypto.randomUUID()}`)
     if (!isChunkSendModule(loaded)) {
       throw new Error('format-chunking module did not export the expected shape')
     }
@@ -435,9 +435,7 @@ describe('sendFormattedReply chunked delivery', () => {
 
     expect(calls.length).toBe(4)
     expect(rejection).toBe(chunkError)
-    const warn = tracked
-      .getCallsByLevel('warn')
-      .find((call) => call.args[1] === 'Failed to send Telegram reply chunk')
+    const warn = tracked.getCallsByLevel('warn').find((call) => call.args[1] === 'Failed to send Telegram reply chunk')
     expect(warn).toBeDefined()
     assert(warn !== undefined)
     expect(warn.args[0]).toMatchObject({ chatId: 7, chunkIndex: 1, chunkCount: 4 })
@@ -472,12 +470,7 @@ describe('sendFormattedReply chunked delivery', () => {
     const paragraphs = ['fail-0', 'fail-1', 'fail-2', 'fail-3'].map((p) => `${p} ${'y'.repeat(2200)}`)
     const markdown = paragraphs.join('\n\n')
     const chunkError = new Error('telegram send failed')
-    const { ctx, calls } = makeChunkReplyCtx(undefined, [
-      Promise.reject(chunkError),
-      okSend(1),
-      okSend(2),
-      okSend(3),
-    ])
+    const { ctx, calls } = makeChunkReplyCtx(undefined, [Promise.reject(chunkError), okSend(1), okSend(2), okSend(3)])
 
     const rejection = await send(ctx, markdown, { message_id: 5 }, undefined).then(
       () => undefined,
@@ -486,9 +479,7 @@ describe('sendFormattedReply chunked delivery', () => {
 
     expect(calls.length).toBe(4)
     expect(rejection).toBe(chunkError)
-    const warn = tracked
-      .getCallsByLevel('warn')
-      .find((call) => call.args[1] === 'Failed to send Telegram reply chunk')
+    const warn = tracked.getCallsByLevel('warn').find((call) => call.args[1] === 'Failed to send Telegram reply chunk')
     expect(warn).toBeDefined()
     assert(warn !== undefined)
     expect(warn.args[0]).toMatchObject({ chunkIndex: 0, chunkCount: 4, chatId: undefined })

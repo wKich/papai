@@ -59,6 +59,8 @@ function isLowSurrogate(codeUnit: number): boolean {
 
 type FormattedChunk = ReturnType<typeof formatLlmOutput>
 
+type TelegramEntity = FormattedChunk['entities'][number]
+
 type TelegramFormatter = (markdown: string) => FormattedChunk
 
 type TelegramReplyParameters = { message_id: number } & Partial<{ message_thread_id: number }>
@@ -75,18 +77,22 @@ export type TelegramChunkSendContext = {
  * message — and only an over-limit delivery is split, at the markdown level, so
  * entity offsets stay per-message. A chunk whose formatted text still exceeds the
  * limit is re-split from its markdown at a proportionally reduced budget (the
- * splitter's hard cut is the floor).
+ * splitter's hard cut is the floor). `firstChunkReserve` shortens the first
+ * chunk's budget by the length of a text prefix the caller prepends to it (the
+ * deferred path's mention prefix), so `prefix + first chunk` stays within the
+ * limit; followers get the full budget.
  */
 export function buildFormattedChunksForTelegram(
   markdown: string,
   format: TelegramFormatter = formatLlmOutput,
+  firstChunkReserve = 0,
 ): FormattedChunk[] {
   const limit = telegramTraits.maxMessageLength!
   const whole = format(markdown)
-  if (whole.text.length <= limit) {
+  if (whole.text.length + firstChunkReserve <= limit) {
     return [whole]
   }
-  return splitFormattedChunks(markdown, limit, limit, format)
+  return splitFormattedChunks(markdown, limit, limit - firstChunkReserve, format, firstChunkReserve)
 }
 
 function splitFormattedChunks(
@@ -94,16 +100,20 @@ function splitFormattedChunks(
   limit: number,
   budget: number,
   format: TelegramFormatter,
+  firstChunkReserve = 0,
 ): FormattedChunk[] {
   const chunks: FormattedChunk[] = []
+  let reserve = firstChunkReserve
   for (const piece of chunkForTelegram(markdown, budget)) {
     const formatted = format(piece)
-    if (formatted.text.length <= limit) {
+    if (formatted.text.length + reserve <= limit) {
       chunks.push(formatted)
+      reserve = 0
       continue
     }
-    const reducedBudget = Math.floor((budget * limit) / formatted.text.length)
-    chunks.push(...splitFormattedChunks(piece, limit, reducedBudget, format))
+    const reducedBudget = Math.floor((budget * (limit - reserve)) / formatted.text.length)
+    chunks.push(...splitFormattedChunks(piece, limit, reducedBudget, format, reserve))
+    reserve = 0
   }
   return chunks
 }
@@ -137,10 +147,7 @@ export async function sendFormattedTelegramChunks(
         } catch (error) {
           const sendError = error instanceof Error ? error : new Error(String(error))
           firstError ??= sendError
-          log.warn(
-            { chatId, chunkIndex, chunkCount, error: sendError.message },
-            'Failed to send Telegram reply chunk',
-          )
+          log.warn({ chatId, chunkIndex, chunkCount, error: sendError.message }, 'Failed to send Telegram reply chunk')
         }
       }),
     ),
@@ -152,4 +159,72 @@ export async function sendFormattedTelegramChunks(
   }
   if (firstError !== undefined) throw firstError
   return firstSent
+}
+
+/** Mention prefix the deferred path prepends to the first chunk: text plus its own entities. */
+export type DeferredMentionPrefix = {
+  readonly text: string
+  readonly entities: readonly TelegramEntity[]
+}
+
+export type DeferredTelegramSendOptions = { entities: TelegramEntity[]; message_thread_id?: number }
+
+export type DeferredTelegramSend = (text: string, options: DeferredTelegramSendOptions) => Promise<unknown>
+
+/**
+ * Send a deferred markdown delivery as formatted chunks through the Bot API's
+ * sendMessage. The mention prefix (text and entity-offset shift) lands on the
+ * first chunk only, its length counted against that chunk's budget; every chunk
+ * carries the same message_thread_id. A failed chunk warns with the chat id and
+ * chunk position, later chunks are still attempted, and the first error is
+ * rethrown after the loop.
+ */
+export async function sendDeferredTelegramChunks(
+  send: DeferredTelegramSend,
+  chatId: number,
+  markdown: string,
+  mentionPrefix: DeferredMentionPrefix,
+  threadId: number | undefined,
+  format: TelegramFormatter = formatLlmOutput,
+): Promise<void> {
+  const chunks = buildFormattedChunksForTelegram(markdown, format, mentionPrefix.text.length)
+  const chunkCount = chunks.length
+  // Chunks must be sent sequentially to preserve message ordering.
+  // Use p-limit with concurrency=1 to enforce sequential execution without await-in-loop.
+  const sendOne = pLimit(1)
+  let firstError: Error | undefined
+
+  await Promise.all(
+    chunks.map((chunk, chunkIndex) =>
+      sendOne(async () => {
+        const prefixed = chunkIndex === 0
+        const options: DeferredTelegramSendOptions = {
+          entities: prefixed
+            ? [
+                ...mentionPrefix.entities,
+                ...chunk.entities.map((entity) => ({
+                  ...entity,
+                  offset: entity.offset + mentionPrefix.text.length,
+                })),
+              ]
+            : chunk.entities,
+        }
+        if (threadId !== undefined) {
+          options.message_thread_id = threadId
+        }
+        try {
+          await send(prefixed ? `${mentionPrefix.text}${chunk.text}` : chunk.text, options)
+        } catch (error) {
+          const sendError = error instanceof Error ? error : new Error(String(error))
+          firstError ??= sendError
+          log.warn(
+            { chatId, chunkIndex, chunkCount, error: sendError.message },
+            'Failed to send Telegram deferred chunk',
+          )
+        }
+      }),
+    ),
+  )
+
+  if (firstError !== undefined) throw firstError
 }
