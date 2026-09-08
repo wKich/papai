@@ -3,7 +3,7 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, mock, test } from 'bun:test'
 
 import { tool, type ModelMessage, type ToolResultPart, type ToolSet } from 'ai'
 import { z } from 'zod'
@@ -23,10 +23,15 @@ import type {
 } from '../../src/completion/verified-completion.js'
 import type { ToolFailureResult } from '../../src/tool-failure.js'
 import { assertEach, type Row } from '../utils/grouped-assertions.js'
+import { createTrackedLoggerMock, type TrackedLoggerMock } from '../utils/logger-mock.js'
 import { mockLogger } from '../utils/test-helpers.js'
 
 const stub = (): ToolSet[string] =>
-  tool({ description: '', inputSchema: z.object({}), execute: () => Promise.resolve(null) })
+  tool({
+    description: '',
+    inputSchema: z.object({}),
+    execute: () => Promise.resolve(null),
+  })
 
 const fakeTools = (...names: string[]): ToolSet => {
   const tools: ToolSet = {}
@@ -82,7 +87,12 @@ describe('detectToolFailure', () => {
       {
         role: 'tool',
         content: [
-          { type: 'tool-result', toolCallId: 'c1', toolName: 'update_task', output: { type: 'json', value: failure } },
+          {
+            type: 'tool-result',
+            toolCallId: 'c1',
+            toolName: 'update_task',
+            output: { type: 'json', value: failure },
+          },
         ],
       },
     ]
@@ -140,7 +150,10 @@ describe('deriveVerdict', () => {
   ]
 
   test('verdict derivation matrix: truncated and partial precede no-op; activity keeps confirmed', async () => {
-    const rows: readonly Row<{ turn: CompletionTurn; expected: CompletionVerdict }>[] = [
+    const rows: readonly Row<{
+      turn: CompletionTurn
+      expected: CompletionVerdict
+    }>[] = [
       {
         label: 'empty final text with no tool activity is a no-op',
         turn: {
@@ -262,17 +275,31 @@ describe('buildVerifiedCompletion', () => {
   test('confirmed: passes through the verifier text', async () => {
     mockLogger()
     const result = await buildVerifiedCompletion(
-      { history: [], finishReason: 'stop', hadToolFailure: false, hadToolActivity: true },
+      {
+        history: [],
+        finishReason: 'stop',
+        hadToolFailure: false,
+        hadToolActivity: true,
+      },
       okDeps('Created task TK-42.'),
     )
-    expect(result).toEqual({ text: 'Created task TK-42.', verdict: 'confirmed' })
+    expect(result).toEqual({
+      text: 'Created task TK-42.',
+      verdict: 'confirmed',
+      verifierOutcome: 'ok',
+    })
   })
 
   test('truncated: verdict is truncated and the prompt asks for a progress summary, offering "continue" as an option', async () => {
     mockLogger()
     let seen: VerifierPrompt | undefined
     const result = await buildVerifiedCompletion(
-      { history: [], finishReason: 'tool-calls', hadToolFailure: false, hadToolActivity: false },
+      {
+        history: [],
+        finishReason: 'tool-calls',
+        hadToolFailure: false,
+        hadToolActivity: false,
+      },
       okDeps('Did A and B; C still pending — say continue to resume.', (p) => {
         seen = p
       }),
@@ -288,7 +315,12 @@ describe('buildVerifiedCompletion', () => {
   test('partial: a tool failure yields the partial verdict', async () => {
     mockLogger()
     const result = await buildVerifiedCompletion(
-      { history: [], finishReason: 'stop', hadToolFailure: true, hadToolActivity: true },
+      {
+        history: [],
+        finishReason: 'stop',
+        hadToolFailure: true,
+        hadToolActivity: true,
+      },
       okDeps('The update failed.'),
     )
     expect(result.verdict).toBe('partial')
@@ -303,7 +335,12 @@ describe('buildVerifiedCompletion', () => {
       },
     }
     const result = await buildVerifiedCompletion(
-      { history: [], finishReason: 'stop', hadToolFailure: false, hadToolActivity: true },
+      {
+        history: [],
+        finishReason: 'stop',
+        hadToolFailure: false,
+        hadToolActivity: true,
+      },
       deps,
     )
     expect(result.verdict).toBe('unconfirmed')
@@ -313,7 +350,12 @@ describe('buildVerifiedCompletion', () => {
   test('unconfirmed: neutral message when the verifier returns empty text', async () => {
     mockLogger()
     const result = await buildVerifiedCompletion(
-      { history: [], finishReason: 'stop', hadToolFailure: false, hadToolActivity: true },
+      {
+        history: [],
+        finishReason: 'stop',
+        hadToolFailure: false,
+        hadToolActivity: true,
+      },
       okDeps(''),
     )
     expect(result.verdict).toBe('unconfirmed')
@@ -322,7 +364,11 @@ describe('buildVerifiedCompletion', () => {
 
   test('unconfirmed fallback selection matrix: activity picks the neutral vs the no-op message', async () => {
     mockLogger()
-    const rows: readonly Row<{ mode: 'empty' | 'throw'; hadToolActivity: boolean; expectedText: string }>[] = [
+    const rows: readonly Row<{
+      mode: 'empty' | 'throw'
+      hadToolActivity: boolean
+      expectedText: string
+    }>[] = [
       {
         label: 'verifier empty after an active turn reports the actions ran but were unconfirmed',
         mode: 'empty',
@@ -350,11 +396,130 @@ describe('buildVerifiedCompletion', () => {
     ]
     await assertEach(rows, async (row) => {
       const result = await buildVerifiedCompletion(
-        { history: [], finishReason: 'stop', hadToolFailure: false, hadToolActivity: row.hadToolActivity },
+        {
+          history: [],
+          finishReason: 'stop',
+          hadToolFailure: false,
+          hadToolActivity: row.hadToolActivity,
+        },
         fallbackDeps(row.mode),
       )
       expect(result.verdict).toBe('unconfirmed')
       expect(result.text).toBe(row.expectedText)
+    })
+  })
+
+  // src/completion/verified-completion.ts binds `logger.child({ scope })` at module-eval
+  // time, so the static import above already captured the real logger. The precedence
+  // matrix asserts the logged warn; install the tracked mock and force a fresh evaluation
+  // with a cache-busting query (mirrors tests/history.test.ts).
+  type VerifiedModule = typeof import('../../src/completion/verified-completion.js')
+  const isVerifiedModule = (value: unknown): value is VerifiedModule =>
+    typeof value === 'object' && value !== null && typeof Reflect.get(value, 'buildVerifiedCompletion') === 'function'
+  const loadVerifiedModule = async (tracked: TrackedLoggerMock): Promise<VerifiedModule> => {
+    void mock.module('../../src/logger.js', () => ({
+      getLogLevel: tracked.getLogLevel,
+      logger: tracked.logger,
+    }))
+    const loaded: unknown = await import(`../../src/completion/verified-completion.js?t=${crypto.randomUUID()}`)
+    if (!isVerifiedModule(loaded)) {
+      throw new Error('verified-completion module did not export expected shape')
+    }
+    return loaded
+  }
+
+  test('verifier-outcome precedence matrix: empty/errored verifier delivers model text; tool-calls preamble never delivered', async () => {
+    const tracked = createTrackedLoggerMock()
+    const { buildVerifiedCompletion: build } = await loadVerifiedModule(tracked)
+    const modelText = 'I moved TK-42 to Done.'
+    const preamble = 'Let me check the board…'
+    const neutralStub = 'I ran the requested actions but could not confirm the result — please double-check.'
+    const rows: readonly Row<{
+      mode: 'empty' | 'throw'
+      finishReason: string
+      finalText: string
+      expectedText: string
+      expectedOutcome: 'empty' | 'error'
+    }>[] = [
+      {
+        label: 'verifier empty with non-empty model text delivers the model text unconfirmed',
+        mode: 'empty',
+        finishReason: 'stop',
+        finalText: modelText,
+        expectedText: modelText,
+        expectedOutcome: 'empty',
+      },
+      {
+        label: 'verifier throw with non-empty model text delivers the model text unconfirmed',
+        mode: 'throw',
+        finishReason: 'stop',
+        finalText: modelText,
+        expectedText: modelText,
+        expectedOutcome: 'error',
+      },
+      {
+        label: 'tool-calls finish keeps the activity stub: the preamble is never the deliverable',
+        mode: 'empty',
+        finishReason: 'tool-calls',
+        finalText: preamble,
+        expectedText: neutralStub,
+        expectedOutcome: 'empty',
+      },
+      {
+        label: 'tool-calls finish with a thrown verifier also keeps the stub',
+        mode: 'throw',
+        finishReason: 'tool-calls',
+        finalText: preamble,
+        expectedText: neutralStub,
+        expectedOutcome: 'error',
+      },
+    ]
+    await assertEach(rows, async (row) => {
+      const warnsBefore = tracked.getCallsByLevel('warn').length
+      const result = await build(
+        {
+          history: [],
+          finishReason: row.finishReason,
+          hadToolFailure: false,
+          hadToolActivity: true,
+          finalText: row.finalText,
+        },
+        fallbackDeps(row.mode),
+      )
+      expect(result).toEqual({
+        text: row.expectedText,
+        verdict: 'unconfirmed',
+        verifierOutcome: row.expectedOutcome,
+      })
+      expect(tracked.getCallsByLevel('warn').length).toBe(warnsBefore + 1)
+    })
+  })
+
+  test('empty verifier output is not retried: exactly one invocation', async () => {
+    mockLogger()
+    let invoked = 0
+    const deps: VerifierDeps = {
+      readOnlyToolset: undefined,
+      invokeVerifier: (): Promise<{ text: string | undefined }> => {
+        invoked += 1
+        return Promise.resolve({ text: '' })
+      },
+    }
+    const result = await buildVerifiedCompletion(
+      {
+        history: [],
+        finishReason: 'stop',
+        hadToolFailure: false,
+        hadToolActivity: true,
+        finalText: 'Answer text.',
+      },
+      deps,
+    )
+    expect(invoked).toBe(1)
+    expect(result).toEqual({
+      text: 'Answer text.',
+      verdict: 'unconfirmed',
+      verifierOutcome: 'empty',
     })
   })
 })
