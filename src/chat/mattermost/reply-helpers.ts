@@ -14,6 +14,7 @@ import type {
 } from '../types.js'
 import type { MattermostActionContextInput, MattermostSignedActionContext } from './action-signing.js'
 import { buildMattermostMentionPrefix } from './file-helpers.js'
+import { sendMattermostFormattedChunks } from './format-chunking.js'
 import { ChannelSchema } from './schema.js'
 
 const ACTION_TTL_MS = 5 * 60 * 1000
@@ -199,7 +200,7 @@ export function createMattermostReplyFn(params: MattermostReplyHelpersParams): R
       await post(content, options)
     },
     formatted: async (markdown: string, options?: ReplyOptions): Promise<void> => {
-      const id = await post(markdown, options)
+      const id = await sendMattermostFormattedChunks(channelId, post, markdown, options)
       lastReplyTarget = id === undefined ? undefined : { platform: 'mattermost', ref: id }
     },
     file: async (file, options?: ReplyOptions): Promise<void> => {
