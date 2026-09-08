@@ -463,6 +463,117 @@ describe('createLineHandler credential scrub (enqueueLog sink)', () => {
   })
 })
 
+describe('createLineHandler todo capture', () => {
+  type TodoItems = readonly { content: string; status: string }[]
+
+  function todoReporter(): { reporter: ProgressReporter; lists: TodoItems[] } {
+    const lists: TodoItems[] = []
+    const reporter: ProgressReporter = {
+      dynamic: false,
+      event: () => {},
+      live: () => {},
+      clearLive: () => {},
+      log: () => {},
+      todos: (items) => {
+        lists.push(items)
+      },
+    }
+    return { reporter, lists }
+  }
+
+  // Pinned verbatim from walk-drill-target transcripts (agent-todos-capture D2):
+  // .afk-runner/runs/fix-the-response-delivery-path-verification-fallback-chunking/
+  // transcripts/resolver-r1-r1-a1.jsonl
+  const opencodeTodoLine =
+    '{"type":"tool_use","timestamp":1788845620465,"sessionID":"ses_f8080803dffeq3Fy1J3stieiKK","part":{"type":"tool","tool":"todowrite","callID":"call_dda71847a3bc44dd8d038d5c","state":{"status":"completed","input":{"todos":[{"content":"Locate and read the four artifacts + .review-loop dir","status":"in_progress","priority":"high"},{"content":"Verify code evidence behind findings (proactive path, builder tests, telegram format)","status":"pending","priority":"high"},{"content":"Edit specs/verified-completion/spec.md (F1/F2/S1/S2)","status":"pending","priority":"high"},{"content":"Edit design.md (F2 wording, F3, S3, S4, S5)","status":"pending","priority":"high"},{"content":"Edit proposal.md (F4 list alignment, F5 word trim)","status":"pending","priority":"high"},{"content":"Write .review-loop/resolutions-1.json","status":"pending","priority":"high"}]},"output":"[\\n  {\\n    \\"content\\": \\"Locate and read the four artifacts + .review-loop dir\\",\\n    \\"status\\": \\"in_progress\\",\\n    \\"priority\\": \\"high\\"\\n  }\\n]","metadata":{"todos":[{"content":"Locate and read the four artifacts + .review-loop dir","status":"in_progress","priority":"high"}],"truncated":false},"title":"6 todos","time":{"start":1788845620447,"end":1788845620450}},"id":"prt_07f81fcd7001drAyy2QaQ7n519","sessionID":"ses_f8080803dffeq3Fy1J3stieiKK","messageID":"msg_07f7f80c90017RdZOsgrTocsBy"}}'
+
+  test('the pinned opencode todowrite envelope fires reporter.todos with normalized items', () => {
+    const cwd = makeTempDir('line-handler-todos-')
+    const { reporter, lists } = todoReporter()
+    const handler = createLineHandler({ ...makeOptions(cwd, path.join(cwd, 'agent.log')), reporter })
+    handler.onLine(opencodeTodoLine)
+    expect(lists).toEqual([
+      [
+        { content: 'Locate and read the four artifacts + .review-loop dir', status: 'in_progress' },
+        {
+          content: 'Verify code evidence behind findings (proactive path, builder tests, telegram format)',
+          status: 'pending',
+        },
+        { content: 'Edit specs/verified-completion/spec.md (F1/F2/S1/S2)', status: 'pending' },
+        { content: 'Edit design.md (F2 wording, F3, S3, S4, S5)', status: 'pending' },
+        { content: 'Edit proposal.md (F4 list alignment, F5 word trim)', status: 'pending' },
+        { content: 'Write .review-loop/resolutions-1.json', status: 'pending' },
+      ],
+    ])
+  })
+
+  test('todoread emits nothing', () => {
+    const cwd = makeTempDir('line-handler-todoread-')
+    const { reporter, lists } = todoReporter()
+    const handler = createLineHandler({ ...makeOptions(cwd, path.join(cwd, 'agent.log')), reporter })
+    handler.onLine(
+      JSON.stringify({
+        type: 'tool_use',
+        part: { tool: 'todoread', callID: 'c1', state: { status: 'completed', input: { todos: [] } } },
+      }),
+    )
+    expect(lists).toEqual([])
+  })
+
+  test('the claude route TodoWrite envelope normalizes activeForm away', () => {
+    const cwd = makeTempDir('line-handler-claude-todos-')
+    const { reporter, lists } = todoReporter()
+    const handler = createLineHandler(
+      { ...makeOptions(cwd, path.join(cwd, 'agent.log')), reporter },
+      createClaudeStreamDecoder(),
+    )
+    handler.onLine(
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_1',
+              name: 'TodoWrite',
+              input: {
+                todos: [
+                  { content: 'Write the failing test', status: 'in_progress', activeForm: 'Writing the failing test' },
+                  { content: 'Implement the hook', status: 'pending', activeForm: 'Implementing the hook' },
+                ],
+              },
+            },
+          ],
+        },
+        session_id: 'claude-sess-1',
+      }),
+    )
+    expect(lists).toEqual([
+      [
+        { content: 'Write the failing test', status: 'in_progress' },
+        { content: 'Implement the hook', status: 'pending' },
+      ],
+    ])
+  })
+
+  test('an unknown tool emits nothing', () => {
+    const cwd = makeTempDir('line-handler-unknown-tool-')
+    const { reporter, lists } = todoReporter()
+    const handler = createLineHandler({ ...makeOptions(cwd, path.join(cwd, 'agent.log')), reporter })
+    handler.onLine(
+      JSON.stringify({
+        type: 'tool_use',
+        part: {
+          tool: 'read',
+          callID: 'c1',
+          state: { status: 'running', input: { todos: [{ content: 'x', status: 'pending' }] } },
+        },
+      }),
+    )
+    expect(lists).toEqual([])
+  })
+})
+
 describe('createLineHandler session capture seam', () => {
   test('reports the session id once, on the first session-bearing line', () => {
     const cwd = makeTempDir('line-handler-session-')

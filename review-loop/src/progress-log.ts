@@ -23,6 +23,12 @@ export interface UsageDelta {
   model?: string
 }
 
+/** One normalized todo item — the only shape that crosses the seam (agent-todos-capture D2). */
+export interface TodoItem {
+  content: string
+  status: string
+}
+
 export interface ProgressReporter {
   readonly dynamic: boolean
   readonly stats?: RunStats
@@ -41,6 +47,13 @@ export interface ProgressReporter {
   commit?(key: string, line?: string): void
   usage?(delta: UsageDelta): void
   diff?(label: string, diff: DiffStats): void
+  /**
+   * Todo snapshot hook (agent-todos-capture D1): fired when the agent updates
+   * its todo list through a recognized todo tool, with backend fields already
+   * normalized away (D2). Optional like `usage?`; consumers that ignore it are
+   * unaffected.
+   */
+  todos?(items: readonly TodoItem[]): void
 }
 
 export function emitDecision(

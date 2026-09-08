@@ -10,6 +10,7 @@ import { scrubCredentialValue } from './backend-select.js'
 import { type OpencodeEvent, parseEventLine, sessionIdOfLine } from './event-stream.js'
 import { formatLiveLine, formatToolArg } from './live-format.js'
 import type { ProgressReporter } from './progress-log.js'
+import { normalizeTodoItems, TODO_TOOLS } from './todo-capture.js'
 
 export interface LineHandler {
   readonly ctx: LiveCtx
@@ -166,6 +167,10 @@ function applyEvent(evt: OpencodeEvent, ctx: LiveCtx): void {
       }
       ctx.tool = evt.tool
       ctx.arg = formatToolArg(evt.tool, evt.input)
+      if (TODO_TOOLS.has(evt.tool)) {
+        const todos = normalizeTodoItems(evt.input)
+        if (todos !== null) reporter?.todos?.(todos)
+      }
       renderLive(ctx)
       break
     case 'step_finish':
