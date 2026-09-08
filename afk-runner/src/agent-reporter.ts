@@ -3,11 +3,15 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
-import type { ProgressReporter, UsageDelta } from '../../review-loop/src/progress-log.js'
+import type { ProgressReporter, TodoItem, UsageDelta } from '../../review-loop/src/progress-log.js'
 import type { EventInput } from './events.js'
 
 const ARROW = '\u25B6'
 const MIDDLE_DOT = '\u00B7'
+
+/** Emission bounds (agent-todos-capture D4): the sanitizeRowGap precedent — length only. */
+const MAX_TODO_ITEMS = 20
+const MAX_TODO_CONTENT_CHARS = 200
 
 /**
  * Parse a review-loop slot line (`<label> ▶ <tool> <arg?> · <dur> · <n> tools`)
@@ -62,11 +66,15 @@ const noop = (): void => {
 
 /**
  * Adapter that translates review-loop `ProgressReporter` calls into sdd-runner
- * event-bus emissions (design D1). Only `slot` and `usage` carry data; the
- * imperative display methods are no-ops because sdd-runner's renderer drives
- * its own dynamic block from the event bus.
+ * event-bus emissions (design D1). Only `slot`, `usage` and `todos` carry
+ * data; the imperative display methods are no-ops because sdd-runner's
+ * renderer drives its own dynamic block from the event bus.
  */
 export function createAgentReporter(label: string, emit: (event: EventInput) => void): ProgressReporter {
+  // Dedup state is per-reporter, i.e. per agent session (D4): identical
+  // consecutive snapshots emit once; the compare runs on the bounded shape
+  // that would be emitted.
+  let lastTodosJson: string | null = null
   return {
     get dynamic(): boolean {
       return false
@@ -80,6 +88,15 @@ export function createAgentReporter(label: string, emit: (event: EventInput) => 
     },
     usage: (delta: UsageDelta): void => {
       emit(buildStepFinishEvent(label, delta))
+    },
+    todos: (items: readonly TodoItem[]): void => {
+      const bounded = items
+        .slice(0, MAX_TODO_ITEMS)
+        .map((item) => ({ content: item.content.slice(0, MAX_TODO_CONTENT_CHARS), status: item.status }))
+      const serialized = JSON.stringify(bounded)
+      if (serialized === lastTodosJson) return
+      lastTodosJson = serialized
+      emit({ altitude: 'L0', type: 'agent_todos', agent: label, todos: bounded })
     },
     issue: noop,
     statusSuffix(): string {

@@ -403,6 +403,35 @@ describe('runStageAgent', () => {
     expect(fake.argsList[1]!.includes('--session')).toBe(false)
   })
 
+  it('threads a streamed todowrite snapshot through the reporter into an agent_todos event (agent-todos-capture)', async () => {
+    const dir = makeDir()
+    const todoLine = JSON.stringify({
+      type: 'tool_use',
+      part: {
+        tool: 'todowrite',
+        callID: 'c1',
+        state: {
+          status: 'completed',
+          input: { todos: [{ content: 'RED: add rows', status: 'in_progress', priority: 'high' }] },
+        },
+      },
+    })
+    const fake = makeFakeSpawn('findings-1.json', [{ write: VALID_FINDINGS, lines: [todoLine] }])
+    const { agent, emitted } = makeAgent(dir, fake)
+    await runStageAgent(agent, makeOptions(dir, 'findings-1.json'))
+    const todoEvents = emitted.filter(
+      (e): e is Extract<EventInput, { type: 'agent_todos' }> => e.type === 'agent_todos',
+    )
+    expect(todoEvents).toEqual([
+      {
+        altitude: 'L0',
+        type: 'agent_todos',
+        agent: 'reviewer-r1',
+        todos: [{ content: 'RED: add rows', status: 'in_progress' }],
+      },
+    ])
+  })
+
   it('halts after the second invalid sidecar instead of retrying forever', async () => {
     const dir = makeDir()
     const fake = makeFakeSpawn('findings-1.json', [

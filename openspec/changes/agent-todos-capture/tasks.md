@@ -13,8 +13,8 @@
 
 ## 3. reporter mapping, dedup, bounds (TDD)
 
-- [ ] 3.1 Failing tests in `tests/afk-runner/`: `createAgentReporter` maps the `todos` hook to an `agent_todos` emission; identical consecutive snapshots emit once; content truncates at 200 chars; lists cap at 20 items (design D4). Verify: `bun test tests/afk-runner/`
-- [ ] 3.2 Implement the mapping, dedup state (per-reporter closure), and bounds in `afk-runner/src/agent-reporter.ts`; thread the hook from `runAgent` options into `runStageAgent`'s reporter wiring (`afk-runner/src/agent-layer.ts`). Verify: `bun test tests/afk-runner/`
+- [x] 3.1 Failing tests in `tests/afk-runner/`: `createAgentReporter` maps the `todos` hook to an `agent_todos` emission; identical consecutive snapshots emit once; content truncates at 200 chars; lists cap at 20 items (design D4). Verify: `bun test tests/afk-runner/`
+- [x] 3.2 Implement the mapping, dedup state (per-reporter closure), and bounds in `afk-runner/src/agent-reporter.ts`; thread the hook from `runAgent` options into `runStageAgent`'s reporter wiring (`afk-runner/src/agent-layer.ts`). Verify: `bun test tests/afk-runner/`
 
 ## 4. Fold tolerance pin (TDD)
 

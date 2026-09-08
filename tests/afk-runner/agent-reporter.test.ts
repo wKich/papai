@@ -4,9 +4,10 @@
 // See LICENSE in the project root for details.
 
 import { describe, expect, it } from 'bun:test'
+import assert from 'node:assert'
 
-import { createAgentReporter } from '../../../afk-runner/src/agent-reporter.js'
-import type { EventInput } from '../../../afk-runner/src/events.js'
+import { createAgentReporter } from '../../afk-runner/src/agent-reporter.js'
+import type { EventInput } from '../../afk-runner/src/events.js'
 
 function harness(): { emitted: EventInput[]; reporter: ReturnType<typeof createAgentReporter> } {
   const emitted: EventInput[] = []
@@ -91,5 +92,54 @@ describe('createAgentReporter', () => {
     reporter.issue?.({ type: 'round', round: 1, maxRounds: 3 })
     reporter.statusSuffix?.()
     expect(emitted).toHaveLength(0)
+  })
+})
+
+describe('createAgentReporter todo capture (agent-todos-capture D3/D4)', () => {
+  it('maps the todos hook to an L0 agent_todos emission tagged with the label', () => {
+    const { emitted, reporter } = harness()
+    reporter.todos?.([
+      { content: 'RED: add llm:verifier rows', status: 'in_progress' },
+      { content: 'GREEN: implementation', status: 'pending' },
+    ])
+    expect(emitted).toHaveLength(1)
+    expect(emitted[0]).toMatchObject({
+      altitude: 'L0',
+      type: 'agent_todos',
+      agent: 'resolver-r1',
+      todos: [
+        { content: 'RED: add llm:verifier rows', status: 'in_progress' },
+        { content: 'GREEN: implementation', status: 'pending' },
+      ],
+    })
+  })
+
+  it('an identical consecutive snapshot emits once, a changed one emits again', () => {
+    const { emitted, reporter } = harness()
+    const todos = [{ content: 'RED: add llm:verifier rows', status: 'in_progress' }]
+    reporter.todos?.(todos)
+    reporter.todos?.(todos)
+    expect(emitted).toHaveLength(1)
+    reporter.todos?.([{ content: 'RED: add llm:verifier rows', status: 'completed' }])
+    expect(emitted).toHaveLength(2)
+    expect(emitted[1]).toMatchObject({ todos: [{ status: 'completed' }] })
+  })
+
+  it('truncates content at 200 characters', () => {
+    const { emitted, reporter } = harness()
+    reporter.todos?.([{ content: 'x'.repeat(250), status: 'pending' }])
+    const event = emitted.find((e): e is Extract<EventInput, { type: 'agent_todos' }> => e.type === 'agent_todos')
+    assert(event !== undefined)
+    expect(event.todos[0]?.content).toHaveLength(200)
+  })
+
+  it('caps a list at 20 items', () => {
+    const { emitted, reporter } = harness()
+    const todos = Array.from({ length: 25 }, (_, i) => ({ content: `item ${i}`, status: 'pending' }))
+    reporter.todos?.(todos)
+    const event = emitted.find((e): e is Extract<EventInput, { type: 'agent_todos' }> => e.type === 'agent_todos')
+    assert(event !== undefined)
+    expect(event.todos).toHaveLength(20)
+    expect(event.todos[19]?.content).toBe('item 19')
   })
 })
