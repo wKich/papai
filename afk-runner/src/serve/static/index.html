@@ -243,6 +243,30 @@ See LICENSE in the project root for details.
         color: var(--text);
         font-weight: 500;
       }
+      .todos {
+        font-size: 12.5px;
+      }
+      .todo-agent {
+        margin-top: 8px;
+        font-weight: 600;
+      }
+      .todo-agent .todo-age {
+        color: var(--dim);
+        font-weight: 400;
+      }
+      .todo-item {
+        padding: 1px 0 1px 10px;
+        overflow-wrap: anywhere;
+      }
+      .todo-glyph.completed {
+        color: var(--finished);
+      }
+      .todo-glyph.in_progress {
+        color: var(--running);
+      }
+      .todo-glyph.pending {
+        color: var(--dim);
+      }
       .conn {
         font-size: 11px;
         color: var(--dim);
@@ -384,6 +408,34 @@ See LICENSE in the project root for details.
         }
       }
 
+      function todoGlyph(status) {
+        if (status === 'completed') return '✓'
+        if (status === 'in_progress') return '→'
+        return '·'
+      }
+
+      function renderTodos(detail, host) {
+        if (detail.todos.length === 0) return
+        host.append(el('h2', null, 'agent todos (agent-emitted)'))
+        const panel = el('div', 'todos')
+        for (const entry of detail.todos) {
+          const head = el('div', 'todo-agent')
+          head.append(el('span', null, entry.agent))
+          const ageMs = Date.now() - Date.parse(entry.updatedAt)
+          if (Number.isFinite(ageMs)) {
+            head.append(el('span', 'todo-age', ` · ${fmtDuration(Math.max(0, ageMs))}`))
+          }
+          panel.append(head)
+          for (const item of entry.items) {
+            const line = el('div', 'todo-item')
+            line.append(el('span', `todo-glyph ${item.status}`, `${todoGlyph(item.status)} `))
+            line.append(document.createTextNode(item.content))
+            panel.append(line)
+          }
+        }
+        host.append(panel)
+      }
+
       function renderDetail(detail) {
         const host = $('detail-body')
         host.replaceChildren()
@@ -444,6 +496,8 @@ See LICENSE in the project root for details.
           host.append(table)
         }
 
+        renderTodos(detail, host)
+
         if (detail.gate !== null) {
           host.append(
             el('h2', null, `gate ${detail.gate.mode} v${detail.gate.version} — ${detail.gate.file} (read-only)`),
@@ -485,6 +539,31 @@ See LICENSE in the project root for details.
       }
       $('back').addEventListener('click', showPortfolio)
 
+      // Live detail (web-board D3): one in-flight re-fetch; a snapshot during a
+      // fetch marks dirty and refetches once after — bursts cannot flood.
+      let detailFetching = false
+      let detailDirty = false
+      async function refreshOpenDetail() {
+        if (detailFetching) {
+          detailDirty = true
+          return
+        }
+        if (selectedRun === null) {
+          detailDirty = false
+          return
+        }
+        detailFetching = true
+        try {
+          await openDetail(selectedRun)
+        } finally {
+          detailFetching = false
+          if (detailDirty) {
+            detailDirty = false
+            void refreshOpenDetail()
+          }
+        }
+      }
+
       async function refresh() {
         try {
           const response = await fetch(withToken('/api/portfolio'))
@@ -508,6 +587,7 @@ See LICENSE in the project root for details.
           try {
             lastPortfolio = JSON.parse(event.data)
             if (selectedRun === null) renderCards(lastPortfolio)
+            else void refreshOpenDetail()
           } catch {
             /* a partial frame — the next snapshot re-renders */
           }

@@ -12,8 +12,8 @@
 
 ## 3. Board page: panel + live detail
 
-- [ ] 3.1 `afk-runner/src/serve/static/index.html`: render the agent todos panel from the detail's `todos` — caption names the source ("agent todos (agent-emitted)"), agent label sub-headings ordered as delivered, items as checkbox-glyph lines (`✓ / → / ·` for completed / in-progress / pending), muted relative age from `updatedAt` (design D4/D6); no panel node at all when `todos` is empty (design D5, spec: no-telemetry + no-panel scenarios). Verify: serving a fixture work dir renders the panel; `bun test tests/afk-runner/serve/`
-- [ ] 3.2 `afk-runner/src/serve/static/index.html`: live detail — the SSE `snapshot` handler re-fetches the selected run's detail through the existing `openDetail(selectedRun)` path, throttled to one in-flight fetch with a trailing edge (a snapshot during a fetch marks dirty and refetches once after; design D3). Verify: serve a fixture work dir, open a detail, append an `agent_todos` event to its log, observe the panel update within one sweep without user action; `bun test tests/afk-runner/serve/`
+- [x] 3.1 `afk-runner/src/serve/static/index.html`: render the agent todos panel from the detail's `todos` — caption names the source ("agent todos (agent-emitted)"), agent label sub-headings ordered as delivered, items as checkbox-glyph lines (`✓ / → / ·` for completed / in-progress / pending), muted relative age from `updatedAt` (design D4/D6); no panel node at all when `todos` is empty (design D5, spec: no-telemetry + no-panel scenarios). Verify: serving a fixture work dir renders the panel; `bun test tests/afk-runner/serve/`
+- [x] 3.2 `afk-runner/src/serve/static/index.html`: live detail — the SSE `snapshot` handler re-fetches the selected run's detail through the existing `openDetail(selectedRun)` path, throttled to one in-flight fetch with a trailing edge (a snapshot during a fetch marks dirty and refetches once after; design D3). Verify: serve a fixture work dir, open a detail, append an `agent_todos` event to its log, observe the panel update within one sweep without user action; `bun test tests/afk-runner/serve/`
 
 ## 4. Full verification and docs
 
