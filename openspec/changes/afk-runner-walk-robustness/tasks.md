@@ -35,7 +35,7 @@ See LICENSE in the project root for details.
       write-protections line (widened verb list). → `bun run format:check`
 - [x] 5.1 Final gates: full `bun run test --serial`, `bun run lint`,
       `bun run typecheck`, `openspec validate afk-runner-walk-robustness --strict`.
-- [ ] 6.1 (owed from the walk-item-green-decomposition drill, finding F-W1,
+- [x] 6.1 (owed from the walk-item-green-decomposition drill, finding F-W1,
       2026-09-08): the commit-time tasks.md read is outside the F-P3 guard's
       wrap — `commitTaskSlice` (`afk-runner/src/work/slice-commit.ts:36`) does
       its own `readFile` after the per-item check, and an unreadable tasks.md
