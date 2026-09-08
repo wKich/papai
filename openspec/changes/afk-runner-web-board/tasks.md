@@ -15,11 +15,11 @@
 
 ## 3. Serve verb
 
-- [ ] 3.1 `cli.ts`: `serve [--host] [--port] [--token]` routing through `resolveRunnerConfig` (file-declared `workDir` honored); usage line names the new verb
-- [ ] 3.2 `serve/server.ts`: `Bun.serve` — `GET /` static page, `GET /api/portfolio`, `GET /api/runs/:id`, `GET /events` SSE (snapshot on connect, full snapshot on each sweep change)
-- [ ] 3.3 Token gate on every route; boot-generated random token printed once as the ready-to-open URL; loopback default bind
-- [ ] 3.4 `serve/static/index.html`: phone-first portfolio page (vanilla JS + `EventSource`, no build step) — attention-sorted cards with spend bars and task progress lines; run detail with rounds, task walk, recent events, read-only gate render
-- [ ] 3.5 Read-only proof: serve a live work dir through appends and a gate park; assert event logs, memos, and gate files byte-unchanged
+- [x] 3.1 `cli.ts`: `serve [--host] [--port] [--token]` routing through `resolveRunnerConfig` (file-declared `workDir` honored); usage line names the new verb
+- [x] 3.2 `serve/server.ts`: `Bun.serve` — `GET /` static page, `GET /api/portfolio`, `GET /api/runs/:id`, `GET /events` SSE (snapshot on connect, full snapshot on each sweep change)
+- [x] 3.3 Token gate on every route; boot-generated random token printed once as the ready-to-open URL; loopback default bind
+- [x] 3.4 `serve/static/index.html`: phone-first portfolio page (vanilla JS + `EventSource`, no build step) — attention-sorted cards with spend bars and task progress lines; run detail with rounds, task walk, recent events, read-only gate render
+- [x] 3.5 Read-only proof: serve a live work dir through appends and a gate park; assert event logs, memos, and gate files byte-unchanged
 
 ## 4. Verification
 
