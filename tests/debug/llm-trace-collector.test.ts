@@ -555,6 +555,138 @@ describe('chatUserId attribution', () => {
   })
 })
 
+describe('llm:verifier', () => {
+  let pushed: LlmTrace[]
+  let stats: { totalLlmCalls: number; totalToolCalls: number }
+
+  // Route llm:end pushes through the real ring so the verifier handler can
+  // find them; `pushed` keeps the same references the callbacks received.
+  const ringCallbacks = (traces: LlmTrace[]): { pushTrace: (t: LlmTrace) => void; broadcastTrace: () => void } => ({
+    pushTrace: (t: LlmTrace): void => {
+      pushTrace(t)
+      traces.push(t)
+    },
+    broadcastTrace: (): void => {},
+  })
+
+  beforeEach(() => {
+    pushed = []
+    stats = { totalLlmCalls: 0, totalToolCalls: 0 }
+    resetLlmBuffers()
+  })
+
+  test('llm:verifier sets verifierOutcome in place on the trace pushed by the matching llm:end', () => {
+    const ctx = 'u:verifier'
+    handleLlmTraceEvent(
+      { type: 'llm:start', timestamp: 1, scope: userScope(ctx), data: { model: 'm' }, turnId: 'turn-a' },
+      ringCallbacks(pushed),
+      stats,
+      () => {},
+    )
+    handleLlmTraceEvent(
+      { type: 'llm:end', timestamp: 2, scope: userScope(ctx), data: {}, turnId: 'turn-a' },
+      ringCallbacks(pushed),
+      stats,
+      () => {},
+    )
+    handleLlmTraceEvent(
+      {
+        type: 'llm:verifier',
+        timestamp: 3,
+        scope: userScope(ctx),
+        data: { chatUserId: ctx, outcome: 'empty' },
+        turnId: 'turn-a',
+      },
+      ringCallbacks(pushed),
+      stats,
+      () => {},
+    )
+
+    expect(pushed).toHaveLength(1)
+    expect(pushed[0]!.turnId).toBe('turn-a')
+    expect(pushed[0]!.verifierOutcome).toBe('empty')
+    expect(recentLlm[recentLlm.length - 1]!.verifierOutcome).toBe('empty')
+  })
+
+  test('llm:verifier with an unknown turnId matches nothing and throws nothing', () => {
+    const ctx = 'u:verifier-miss'
+    handleLlmTraceEvent(
+      { type: 'llm:start', timestamp: 1, scope: userScope(ctx), data: { model: 'm' }, turnId: 'turn-a' },
+      ringCallbacks(pushed),
+      stats,
+      () => {},
+    )
+    handleLlmTraceEvent(
+      { type: 'llm:end', timestamp: 2, scope: userScope(ctx), data: {}, turnId: 'turn-a' },
+      ringCallbacks(pushed),
+      stats,
+      () => {},
+    )
+
+    expect(() =>
+      handleLlmTraceEvent(
+        {
+          type: 'llm:verifier',
+          timestamp: 3,
+          scope: userScope(ctx),
+          data: { chatUserId: ctx, outcome: 'ok' },
+          turnId: 'turn-unknown',
+        },
+        ringCallbacks(pushed),
+        stats,
+        () => {},
+      ),
+    ).not.toThrow()
+
+    expect(recentLlm).toHaveLength(1)
+    expect(recentLlm[0]!.verifierOutcome).toBeUndefined()
+    expect(pushed[0]!.verifierOutcome).toBeUndefined()
+  })
+
+  test('the newest trace with a matching turnId wins', () => {
+    const ctx = 'u:verifier-newest'
+    handleLlmTraceEvent(
+      { type: 'llm:start', timestamp: 1, scope: userScope(ctx), data: { model: 'm-1' }, turnId: 'turn-a' },
+      ringCallbacks(pushed),
+      stats,
+      () => {},
+    )
+    handleLlmTraceEvent(
+      { type: 'llm:end', timestamp: 2, scope: userScope(ctx), data: {}, turnId: 'turn-a' },
+      ringCallbacks(pushed),
+      stats,
+      () => {},
+    )
+    handleLlmTraceEvent(
+      { type: 'llm:start', timestamp: 3, scope: userScope(ctx), data: { model: 'm-2' }, turnId: 'turn-a' },
+      ringCallbacks(pushed),
+      stats,
+      () => {},
+    )
+    handleLlmTraceEvent(
+      { type: 'llm:end', timestamp: 4, scope: userScope(ctx), data: {}, turnId: 'turn-a' },
+      ringCallbacks(pushed),
+      stats,
+      () => {},
+    )
+    handleLlmTraceEvent(
+      {
+        type: 'llm:verifier',
+        timestamp: 5,
+        scope: userScope(ctx),
+        data: { chatUserId: ctx, outcome: 'error' },
+        turnId: 'turn-a',
+      },
+      ringCallbacks(pushed),
+      stats,
+      () => {},
+    )
+
+    expect(pushed[0]!.verifierOutcome).toBeUndefined()
+    expect(pushed[1]!.verifierOutcome).toBe('error')
+  })
+})
+
 describe('shapeLlmTrace', () => {
   const makeTrace = (overrides: Partial<LlmTrace> = {}): LlmTrace => ({
     timestamp: 10,

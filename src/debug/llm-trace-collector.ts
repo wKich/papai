@@ -3,6 +3,7 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
+import { logger } from '../logger.js'
 import type { Scope } from './event-bus.js'
 import { str, num, bool, optStr, tokenUsage, parseStepsDetail } from './state-collector-utils.js'
 
@@ -40,6 +41,8 @@ export type LlmTrace = {
   generatedText: string | undefined
   stepsDetail: ReturnType<typeof parseStepsDetail>
   currentTimeTag?: string
+  turnId?: string
+  verifierOutcome?: string
 }
 
 type PendingLlmTrace = {
@@ -186,6 +189,7 @@ function buildEndTrace(event: TraceEvent, userId: string, pending: PendingLlmTra
     generatedText: str(event.data['generatedText']),
     stepsDetail: parseStepsDetail(event.data['stepsDetail']),
     currentTimeTag: optStr(event.data['currentTimeTag']),
+    turnId: event.turnId,
   }
 }
 
@@ -280,5 +284,15 @@ export function handleLlmTraceEvent(
     const trace = buildErrorTrace(event, traceUserId(event, userId), pending)
     callbacks.pushTrace(trace)
     callbacks.broadcastTrace(trace, event.timestamp)
+  } else if (event.type === 'llm:verifier') {
+    // llm:end fires before verification, so the outcome lands on the trace the
+    // end event already pushed; the ring holds references, so every later read
+    // sees the field. No match (ring eviction) drops the event.
+    const trace = recentLlm.findLast((candidate) => candidate.turnId === event.turnId)
+    if (trace === undefined) {
+      logger.debug({ scope: 'debug:llm-trace-collector', turnId: event.turnId }, 'llm:verifier matched no recent trace')
+    } else {
+      trace.verifierOutcome = str(event.data['outcome'])
+    }
   }
 }
