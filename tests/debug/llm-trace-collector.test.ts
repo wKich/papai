@@ -796,6 +796,15 @@ describe('shapeLlmTrace', () => {
     })
   })
 
+  test('non-own trace keeps verifierOutcome while dropping text fields', () => {
+    const shaped = shapeLlmTrace(makeTrace({ verifierOutcome: 'ok' }), 'chat-2')
+
+    expect(shaped.verifierOutcome).toBe('ok')
+    expect(shaped.finishReason).toBe('stop')
+    expect(shaped.generatedText).toBeUndefined()
+    expect(shaped.stepsDetail).toBeUndefined()
+  })
+
   test('unattributed trace is shaped even for a defined viewer', () => {
     const shaped = shapeLlmTrace(makeTrace({ chatUserId: undefined }), 'chat-2')
 
