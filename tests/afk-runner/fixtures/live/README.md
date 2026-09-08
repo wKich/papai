@@ -85,3 +85,25 @@ shape (every red-first item failing the green-per-item affected check) ridden by
 operator re-targets to the surgical completion; verify red×3 (cwd leak, killed
 hang, real lint) → green; the release gate v12's brutally honest digest (tasks
 0/24 walked-done) settled `APPROVE` → completed. Terminal memo `completed`.
+
+## walk-item-green-live
+
+The walk-item-green-decomposition drill run W (2026-09-08,
+`zai-coding-plan/glm-5.3`, `budget: null` unmetered, no deadline, $17.15 nominal,
+2,841 events): the F-P2 fix's owed live verification — the decomposer's 13-item
+plan carries **zero test-only items and zero test/impl splits** (every code item
+bundles its reproducing tests; the contract held on the first post-fix armed run),
+and the walk completed **13/13 tasks with zero operator re-targets** (operator
+writes: two gate APPROVEs, the pre-registered induced `mv` + restore, three
+`resume` invocations — no hand merges, no baseline-resetting commits, no surgical
+completions; **zero escalation gates**, the C9 contrast). Honest incidents kept:
+t6's 30-min spawn wall cap (`stage_failed{exhausted}` → under-budget re-run
+continuing the same session id — the F-A4 shape, wall-cap flavored); the induced
+F-P3 attempt crashing the holder at the **commit-time** tasks.md read
+(`slice-commit.ts`, outside the guard's wrap — finding **F-W1**, routed to
+`afk-runner-walk-robustness`) recovered by restore + exactly one
+`resume{stage-rebuild, implement}`; the third-strike concern thrash (round-3
+convergence `concerns` field, no verification round bought, `### Concern history`
+rendered at the final gate). Final v1 approve (D3 mover-first, seq 1136–1137),
+verify-1 green first time (18,023 tests), release v2 approve (D7 exit-then-answer,
+seq 2840–2841). Terminal memo `completed`.

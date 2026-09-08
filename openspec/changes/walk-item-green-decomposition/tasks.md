@@ -29,6 +29,16 @@ See LICENSE in the project root for details.
       point). → `bun run format:check`
 - [x] 5.1 Final gates: full `bun run test --serial`, `bun run lint`,
       `bun run typecheck`, `openspec validate walk-item-green-decomposition --strict`.
-- [ ] 6.1 Live drill (owed verification, next armed cycle — design D5): an
+- [x] 6.1 Live drill (owed verification, next armed cycle — design D5): an
       armed run on a red-first-prone task asserting zero operator re-targets
       through the walk; recorded in the change's notes before it archives.
+      → Delivered 2026-09-08 as drill run W (unmetered glm-5.3, base 72a8ed4c8,
+      task pick = issue #417 bugs 1–3): decomposer emitted 13/13 green-per-item
+      tasks (zero test-only items, zero test/impl splits — D2's wake trigger did
+      not fire), the walk completed 13/13 with zero `task failed` and zero
+      escalation gates, verify-1 green first time, release settled verb-only —
+      and zero operator re-targets (two gate APPROVEs, the pre-registered
+      induced fault + restore, three resumes — nothing else). Harvested as
+      `tests/afk-runner/fixtures/live/walk-item-green-live` under the extended
+      oracle; pre-registration, working record, and adjudication in `notes.md`
+      (incl. finding F-W1 routed to `afk-runner-walk-robustness` task 6.1).
