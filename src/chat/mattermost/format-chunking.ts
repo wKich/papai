@@ -103,3 +103,47 @@ export async function sendMattermostFormattedChunks(
   if (firstError !== undefined) throw firstError
   return firstId
 }
+
+/** Post seam shared with `sendMattermostDeferredMessage`: one chunk post per call. */
+export type MattermostDeferredPost = (message: string) => Promise<unknown>
+
+/**
+ * Send a deferred markdown delivery as ordered chunks through the Mattermost
+ * post API. The mention prefix lands on the first chunk only, its length
+ * counted against that chunk's budget; every chunk goes through the same post
+ * seam (same channel and thread root). A failed chunk logs `warn` with the
+ * channel id and chunk position, later chunks are still attempted, and the
+ * first error is rethrown after the loop.
+ */
+export async function sendMattermostDeferredChunks(
+  channelId: string,
+  post: MattermostDeferredPost,
+  markdown: string,
+  mentionPrefix = '',
+): Promise<void> {
+  const chunks = chunkForMattermost(markdown, mattermostTraits.maxMessageLength! - mentionPrefix.length)
+  const chunkCount = chunks.length
+  // Chunks must be sent sequentially to preserve message ordering.
+  // Use p-limit with concurrency=1 to enforce sequential execution without await-in-loop.
+  const sendOne = pLimit(1)
+  let firstError: Error | undefined
+
+  await Promise.all(
+    chunks.map((chunk, chunkIndex) =>
+      sendOne(async () => {
+        try {
+          await post(chunkIndex === 0 ? `${mentionPrefix}${chunk}` : chunk)
+        } catch (error) {
+          const sendError = error instanceof Error ? error : new Error(String(error))
+          firstError ??= sendError
+          log.warn(
+            { channelId, chunkIndex, chunkCount, error: sendError.message },
+            'Failed to send Mattermost deferred chunk',
+          )
+        }
+      }),
+    ),
+  )
+
+  if (firstError !== undefined) throw firstError
+}

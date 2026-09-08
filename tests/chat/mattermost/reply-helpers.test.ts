@@ -6,8 +6,8 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 import assert from 'node:assert/strict'
 
-import { createMattermostReplyFn } from '../../../src/chat/mattermost/reply-helpers.js'
-import type { ReplyFn } from '../../../src/chat/types.js'
+import { createMattermostReplyFn, sendMattermostDeferredMessage } from '../../../src/chat/mattermost/reply-helpers.js'
+import type { DeferredDeliveryTarget, ReplyFn } from '../../../src/chat/types.js'
 import { createTrackedLoggerMock, mockLogger, type TrackedLoggerMock } from '../../utils/test-helpers.js'
 
 interface ReplyFnResult {
@@ -541,5 +541,155 @@ describe('createMattermostReplyFn', () => {
       expect(sent).toHaveLength(4)
       expect(rejection).toBe(firstError)
     })
+  })
+})
+
+describe('sendMattermostDeferredMessage', () => {
+  beforeEach(() => {
+    mockLogger()
+  })
+
+  /** apiFetch double recording every post body; serves the DM-channel and mention-user lookups. */
+  const makeDeferredApi = (): {
+    apiFetch: (method: string, path: string, body: unknown) => Promise<unknown>
+    posts: Array<Record<string, unknown>>
+  } => {
+    const posts: Array<Record<string, unknown>> = []
+    const apiFetch = (method: string, path: string, body: unknown): Promise<unknown> => {
+      if (method === 'POST' && path === '/api/v4/posts') {
+        posts.push(body as Record<string, unknown>)
+        return Promise.resolve({ id: `post-${String(posts.length - 1)}` })
+      }
+      if (method === 'POST' && path === '/api/v4/channels/direct') return Promise.resolve({ id: 'dm-chan' })
+      if (method === 'GET' && path === '/api/v4/users/42') return Promise.resolve({ id: '42', username: 'alice' })
+      return Promise.resolve({})
+    }
+    return { apiFetch, posts }
+  }
+
+  const messageOf = (post: Record<string, unknown>): string => {
+    const message = post['message']
+    assert(typeof message === 'string')
+    return message
+  }
+
+  const groupPersonalTarget = (threadId: string | null): DeferredDeliveryTarget => ({
+    contextId: 'chan-9',
+    contextType: 'group',
+    threadId,
+    audience: 'personal',
+    mentionUserIds: ['42'],
+    createdByUserId: '42',
+    createdByUsername: 'alice',
+  })
+
+  const dmTarget: DeferredDeliveryTarget = {
+    contextId: '55',
+    contextType: 'dm',
+    threadId: null,
+    audience: 'personal',
+    mentionUserIds: [],
+    createdByUserId: '55',
+    createdByUsername: null,
+  }
+
+  test('deferred group-personal over-limit send arrives as ordered chunks, first prefixed, every chunk under the same root_id', async () => {
+    const { apiFetch, posts } = makeDeferredApi()
+    const paragraphs = ['chunk-0', 'chunk-1', 'chunk-2', 'chunk-3'].map((label) => `${label} ${'x'.repeat(9000)}`)
+
+    await sendMattermostDeferredMessage('bot-1', groupPersonalTarget('root-5'), paragraphs.join('\n\n'), apiFetch)
+
+    expect(posts).toHaveLength(4)
+    const messages = posts.map(messageOf)
+    for (const [index, post] of posts.entries()) {
+      expect(messages[index]?.length).toBeLessThanOrEqual(16383)
+      expect(post).toMatchObject({ channel_id: 'chan-9', root_id: 'root-5' })
+    }
+    expect(messages[0]?.startsWith('@alice chunk-0')).toBe(true)
+    expect(messages[0]?.includes('chunk-1')).toBe(false)
+    expect(messages[1]?.startsWith('chunk-1')).toBe(true)
+    expect(messages[2]?.startsWith('chunk-2')).toBe(true)
+    expect(messages[3]?.startsWith('chunk-3')).toBe(true)
+  })
+
+  test('counts the mention prefix length against the first chunk budget', async () => {
+    const { apiFetch, posts } = makeDeferredApi()
+
+    await sendMattermostDeferredMessage('bot-1', groupPersonalTarget('root-5'), 'x'.repeat(33000), apiFetch)
+
+    expect(posts.map(messageOf).map((message) => message.length)).toEqual([16383, 16376, 248])
+  })
+
+  test('deferred dm over-limit send arrives as ordered unprefixed chunks in the direct channel', async () => {
+    const { apiFetch, posts } = makeDeferredApi()
+    const markdown = 'y'.repeat(40000)
+
+    await sendMattermostDeferredMessage('bot-1', dmTarget, markdown, apiFetch)
+
+    expect(posts.map(messageOf).map((message) => message.length)).toEqual([16383, 16383, 7234])
+    for (const post of posts) {
+      expect(post).toMatchObject({ channel_id: 'dm-chan' })
+      expect(post).not.toHaveProperty('root_id')
+    }
+    expect(posts.map(messageOf).join('')).toBe(markdown)
+  })
+
+  // The deferred chunk send loop lives in format-chunking.ts (same max-lines
+  // constraint as the immediate-path loop above), and its logger child binds at
+  // module-eval time — same cache-busting pattern as loadChunkSend.
+  type DeferredChunkModule = typeof import('../../../src/chat/mattermost/format-chunking.js')
+
+  const isDeferredChunkModule = (value: unknown): value is DeferredChunkModule =>
+    typeof value === 'object' &&
+    value !== null &&
+    typeof Reflect.get(value, 'sendMattermostDeferredChunks') === 'function'
+
+  const loadDeferredChunkSend = async (tracked: TrackedLoggerMock): Promise<DeferredChunkModule> => {
+    void mock.module('../../../src/logger.js', () => ({
+      getLogLevel: tracked.getLogLevel,
+      logger: tracked.logger,
+    }))
+    const loaded: unknown = await import(`../../../src/chat/mattermost/format-chunking.js?t=${crypto.randomUUID()}`)
+    if (!isDeferredChunkModule(loaded)) {
+      throw new Error('format-chunking module did not export the expected shape')
+    }
+    return loaded
+  }
+
+  test('a failed middle deferred chunk warns with channel id and chunk position, still sends later chunks, and rethrows', async () => {
+    const tracked = createTrackedLoggerMock()
+    const { sendMattermostDeferredChunks: send } = await loadDeferredChunkSend(tracked)
+    const chunkError = new Error('mattermost deferred send failed')
+    const sent: string[] = []
+    const behaviors = [
+      Promise.resolve('post-0'),
+      Promise.reject(chunkError),
+      Promise.resolve('post-2'),
+      Promise.resolve('post-3'),
+    ]
+    const post = (message: string): Promise<string> => {
+      const index = sent.length
+      sent.push(message)
+      return behaviors[index] ?? Promise.resolve(`post-${String(index)}`)
+    }
+    const paragraphs = ['fail-0', 'fail-1', 'fail-2', 'fail-3'].map((label) => `${label} ${'z'.repeat(9000)}`)
+
+    const rejection = await send('chan-1', post, paragraphs.join('\n\n'), '@alice ').then(
+      () => undefined,
+      (err: unknown) => err,
+    )
+
+    expect(sent).toHaveLength(4)
+    expect(sent[0]?.startsWith('@alice fail-0')).toBe(true)
+    expect(sent[1]?.startsWith('fail-1')).toBe(true)
+    expect(sent[2]?.startsWith('fail-2')).toBe(true)
+    expect(sent[3]?.startsWith('fail-3')).toBe(true)
+    expect(rejection).toBe(chunkError)
+    const warn = tracked
+      .getCallsByLevel('warn')
+      .find((call) => call.args[1] === 'Failed to send Mattermost deferred chunk')
+    expect(warn).toBeDefined()
+    assert(warn !== undefined)
+    expect(warn.args[0]).toMatchObject({ channelId: 'chan-1', chunkIndex: 1, chunkCount: 4 })
   })
 })
