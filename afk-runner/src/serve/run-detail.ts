@@ -12,9 +12,10 @@ import { buildRunView, foldRunEvents } from './view-model.js'
 /**
  * The run-detail projection (web-board spec): the pipeline position, the
  * per-round history with raised and open counts, the per-task walk with
- * attempt counts for armed runs, a bounded recent-events feed, and — for a
- * pending gate — the gate file rendered read-only. It offers no action that
- * settles, steers, or mutates the run.
+ * attempt counts for armed runs, a bounded recent-events feed, the agent
+ * todos panel's last-snapshot-per-agent input, and — for a pending gate —
+ * the gate file rendered read-only. It offers no action that settles,
+ * steers, or mutates the run.
  */
 
 export const RECENT_EVENT_LIMIT = 20
@@ -47,6 +48,17 @@ export interface DetailGate {
   readonly content: string | null
 }
 
+export interface TodoItem {
+  readonly content: string
+  readonly status: string
+}
+
+export interface AgentTodosEntry {
+  readonly agent: string
+  readonly updatedAt: string
+  readonly items: readonly TodoItem[]
+}
+
 export interface RunDetailView {
   readonly runId: string
   readonly changeName: string
@@ -58,6 +70,7 @@ export interface RunDetailView {
   readonly round: { readonly current: number; readonly cap: number } | null
   readonly rounds: readonly RoundHistory[]
   readonly tasks: readonly TaskWalkEntry[]
+  readonly todos: readonly AgentTodosEntry[]
   readonly recentEvents: readonly RecentEvent[]
   readonly gate: DetailGate | null
   readonly taskProgress: RunView['taskProgress']
@@ -85,6 +98,24 @@ function summarizeEvent(event: SddEvent): string {
   if (event.type === 'convergence') return `convergence r${event.round} ${event.verdict}`
   if (event.type === 'done') return `done ${event.agent}`
   return event.type
+}
+
+/**
+ * The last `agent_todos` snapshot per agent (board-todos D1): one backwards
+ * pass, first sighting per label in reverse is that agent's latest snapshot;
+ * collection order is therefore most-recent-snapshot first. The scan skips
+ * already-seen labels and rides the array the detail projection already
+ * holds — no fold change, no new read.
+ */
+function todosOf(events: readonly SddEvent[] | null): readonly AgentTodosEntry[] {
+  if (events === null) return []
+  const latest = new Map<string, AgentTodosEntry>()
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event === undefined || event.type !== 'agent_todos' || latest.has(event.agent)) continue
+    latest.set(event.agent, { agent: event.agent, updatedAt: event.ts, items: event.todos })
+  }
+  return [...latest.values()]
 }
 
 function recentEventsOf(events: readonly SddEvent[] | null): readonly RecentEvent[] {
@@ -119,6 +150,7 @@ export function buildRunDetail(input: RunDetailInput): RunDetailView {
     round: card.round,
     rounds: folded === null ? [] : folded.context.perRound.map(roundHistoryOf),
     tasks,
+    todos: todosOf(events),
     recentEvents: recentEventsOf(events),
     gate:
       card.gate === null

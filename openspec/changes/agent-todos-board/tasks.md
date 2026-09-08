@@ -2,8 +2,8 @@
 
 ## 1. Todos projection (TDD)
 
-- [ ] 1.1 Failing tests in `tests/afk-runner/serve/run-detail.test.ts`: `buildRunDetail` projects `todos` from a log's `agent_todos` events — last snapshot per agent wins, agents ordered by most-recent snapshot seq (descending), each entry `{agent, updatedAt, items: [{content, status}]}` with `updatedAt` = the snapshot's stamped `ts` (design D1); a log with no `agent_todos` events yields `todos: []` with the detail otherwise identical (spec: no-telemetry scenario). Verify: `bun test tests/afk-runner/serve/`
-- [ ] 1.2 Implement the backwards scan in `afk-runner/src/serve/run-detail.ts` (stop once every seen label has a snapshot and no new labels appear above), populating `RunDetailView.todos`. Verify: `bun test tests/afk-runner/serve/`
+- [x] 1.1 Failing tests in `tests/afk-runner/serve/run-detail.test.ts`: `buildRunDetail` projects `todos` from a log's `agent_todos` events — last snapshot per agent wins, agents ordered by most-recent snapshot seq (descending), each entry `{agent, updatedAt, items: [{content, status}]}` with `updatedAt` = the snapshot's stamped `ts` (design D1); a log with no `agent_todos` events yields `todos: []` with the detail otherwise identical (spec: no-telemetry scenario). Verify: `bun test tests/afk-runner/serve/`
+- [x] 1.2 Implement the backwards scan in `afk-runner/src/serve/run-detail.ts` (stop once every seen label has a snapshot and no new labels appear above), populating `RunDetailView.todos`. Verify: `bun test tests/afk-runner/serve/`
 
 ## 2. Feed filter (TDD)
 
