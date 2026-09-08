@@ -8,13 +8,13 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import type { AgentUsage, EventInput, SddEvent, StageId } from '../../afk-runner/src/events.js'
-import { stampEvent } from '../../afk-runner/src/events.js'
-import type { PersistedLite } from '../../afk-runner/src/run-lite.js'
-import { nodeServeFs } from '../../afk-runner/src/serve/fs-seam.js'
-import { loadPortfolio, loadRunDetail } from '../../afk-runner/src/serve/load.js'
-import { RECENT_EVENT_LIMIT, buildRunDetail } from '../../afk-runner/src/serve/run-detail.js'
-import { buildPortfolio, buildRunView } from '../../afk-runner/src/serve/view-model.js'
+import type { AgentUsage, EventInput, SddEvent, StageId } from '../../../afk-runner/src/events.js'
+import { stampEvent } from '../../../afk-runner/src/events.js'
+import type { PersistedLite } from '../../../afk-runner/src/run-lite.js'
+import { nodeServeFs } from '../../../afk-runner/src/serve/fs-seam.js'
+import { loadPortfolio, loadRunDetail } from '../../../afk-runner/src/serve/load.js'
+import { RECENT_EVENT_LIMIT, buildRunDetail } from '../../../afk-runner/src/serve/run-detail.js'
+import { buildPortfolio, buildRunView } from '../../../afk-runner/src/serve/view-model.js'
 
 /**
  * The pure fold→view projection (web-board D3): card fields, portfolio sort,
