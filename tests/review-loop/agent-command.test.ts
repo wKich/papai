@@ -276,7 +276,14 @@ describe('buildAgentCommand (claude argv branch)', () => {
         opencodeEnv: { PATH: '/usr/bin:/bin', OPENCODE_CONFIG_CONTENT: '{}' },
       })
     expect(compose).toThrow(AgentCommandError)
-    expect(compose).toThrow(/opencodeEnv/u)
+    expect(compose).toThrow(
+      new AgentCommandError(
+        'opencodeEnv is an opencode-route knob and cannot ride a claude invocation ' +
+          '(got PATH OPENCODE_CONFIG_CONTENT); remove the knob or run the opencode backend — ' +
+          'the claude child env is composed from the spawn context alone, and a silent ignore ' +
+          'would hide an operator mistake.',
+      ),
+    )
   })
 
   test('backend claude without the claude context is refused with a named composition error', () => {
