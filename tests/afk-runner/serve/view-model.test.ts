@@ -41,6 +41,7 @@ function liteMemo(runId: string, overrides: Partial<PersistedLite> = {}): Persis
     gate: null,
     changeName: runId,
     updatedAt: at(60_000),
+    repoRoot: null,
     ...overrides,
   }
 }
@@ -414,7 +415,7 @@ describe('serve view-model — the fs shells over a real work dir', () => {
     fs.writeFileSync(path.join(runDir, 'events.ndjson'), `${lines.join('\n')}\n`)
     fs.writeFileSync(
       path.join(runDir, 'state.json'),
-      `${JSON.stringify({ repoRoot: workDir, workDir, stage: 'review', depth: 'S', round: 1, createdAt: memo.updatedAt, ...memo }, null, 2)}\n`,
+      `${JSON.stringify({ workDir, stage: 'review', depth: 'S', round: 1, createdAt: memo.updatedAt, ...memo }, null, 2)}\n`,
     )
     return runDir
   }
