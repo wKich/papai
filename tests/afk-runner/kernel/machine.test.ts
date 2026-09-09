@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'bun:test'
 
 import { pipelineMachine } from '../../../afk-runner/src/graph/pipeline.js'
+import type { KernelMachine, KernelSnapshot } from '../../../afk-runner/src/kernel/machine.js'
 import {
   initialStep,
   kernelSetup,
@@ -13,6 +14,7 @@ import {
   initialKernelContext,
   step,
 } from '../../../afk-runner/src/kernel/machine.js'
+import type { KernelContext } from '../../../afk-runner/src/kernel/types.js'
 
 const alpha = kernelSetup.createStateConfig({
   on: {
@@ -200,5 +202,25 @@ describe('allStagesDone guard reshape — gate done && no active stages (C5 D4)'
     const reopened = step(pipelineMachine, exited, { type: 'round.open', round: 2, cap: 4 })[0]
     expect(reopened.value).toBe('review')
     expect(reopened.status).toBe('active')
+  })
+})
+
+describe('kernel machine typing pin — the shared type survives xstate constraint instantiation', () => {
+  type IsAny<T> = 0 extends 1 & T ? true : false
+
+  type MachineDegenerate =
+    IsAny<KernelMachine> extends true
+      ? 'kernel machine type degenerated to any (xstate ≥5.28 constraint instantiation)'
+      : 'concrete'
+  const MACHINE_CONCRETE: MachineDegenerate = 'concrete'
+
+  type SnapshotContext = KernelSnapshot extends { readonly context: KernelContext }
+    ? 'snapshot context survives'
+    : 'snapshot context lost'
+  const CONTEXT_SURVIVES: SnapshotContext = 'snapshot context survives'
+
+  it('the shared machine and snapshot types stay concrete (type-level pin)', () => {
+    expect(MACHINE_CONCRETE).toBe('concrete')
+    expect(CONTEXT_SURVIVES).toBe('snapshot context survives')
   })
 })
