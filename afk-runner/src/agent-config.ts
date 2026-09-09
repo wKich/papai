@@ -3,7 +3,7 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
-import type { AgentMcpCredentials } from './mcp-servers.js'
+import type { AgentMcpCredentials, AgentMcpSurface, McpServers } from './mcp-servers.js'
 
 /**
  * The content composer (afk-runner-agent-mcp design D2/D3): pure functions
@@ -98,4 +98,48 @@ export const providerBlockFor = (
       models: { [modelId]: { name: modelId } },
     },
   }
+}
+
+/** A value of the delivered `permission` map: `allow` or `deny` — `ask` is not in the emitted vocabulary. */
+export type ComposedPermissionValue = 'allow' | 'deny'
+
+/** The `permission` map of the delivered content (design D4): generated `<name>_*` key → verdict. */
+export type ComposedPermissionMap = Readonly<Record<string, ComposedPermissionValue>>
+
+/**
+ * The permission base of the delivered content (design D4): exactly one
+ * generated `<name>_*` key per base-map server — `"allow"` for each server
+ * in the spawn's resolved set, `"deny"` for each server the role's
+ * narrowing sheds. Keyed over the base map, not the resolved set, so every
+ * server the operator declared is keyed allow-or-deny by construction and a
+ * discovered file re-defining a shed server's name cannot re-enable it
+ * (same-key conflicts resolve to the content).
+ *
+ * The denies-before-allows emission order is belt-and-braces, not
+ * load-bearing: D1's shadowing refusals keep the emitted wildcards pairwise
+ * disjoint, so under the recorded later-rule-wins ordering no key can flip
+ * another key's verdict whichever order they land in — D1's built-in
+ * shadowing refusal keeps every emitted key off the built-in tool names the
+ * spec's non-MCP invariance protects.
+ *
+ * Deliberately no `"*"` key and no named built-in tool (the sibling's
+ * deny-by-default shape is not copied): afk-runner's agents run on the
+ * binary's default tool surface, and an allow-list would have to enumerate
+ * today's built-ins exactly — a later binary's new built-in would arrive
+ * silently denied, and the spec's non-MCP invariance would become
+ * unpinnable. `ask` is never emitted (the `--auto` route waves it through,
+ * so it gates nothing on an unattended run), and no operator-supplied
+ * permission text is copied: the knob schema has no permission passthrough,
+ * so the emitted keys derive from base-map server names alone.
+ */
+export const permissionBaseFor = (surface: AgentMcpSurface, resolved: McpServers): ComposedPermissionMap => {
+  const names = Object.keys(surface.servers)
+  const permission: Record<string, ComposedPermissionValue> = {}
+  for (const name of names) {
+    if (!Object.hasOwn(resolved, name)) permission[`${name}_*`] = 'deny'
+  }
+  for (const name of names) {
+    if (Object.hasOwn(resolved, name)) permission[`${name}_*`] = 'allow'
+  }
+  return permission
 }
