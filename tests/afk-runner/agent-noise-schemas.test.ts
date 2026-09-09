@@ -12,6 +12,7 @@ import {
   RetryingEvent,
   SpawnedEvent,
   StepFinishEvent,
+  TodosMissingEvent,
   ToolUseEvent,
 } from '../../afk-runner/src/agent-noise-schemas.js'
 
@@ -72,5 +73,18 @@ describe('AgentTodosEvent (agent-todos-capture D3)', () => {
     ).toBe(false)
     expect(AgentTodosEvent.safeParse({ altitude: 'L0', type: 'agent_todos', todos }).success).toBe(false)
     expect(AgentTodosEvent.safeParse({ altitude: 'L2', type: 'agent_todos', agent: 'a', todos }).success).toBe(false)
+  })
+})
+
+describe('TodosMissingEvent (afk-runner-task-todos D5)', () => {
+  it('accepts a stamped L0 {agent} event', () => {
+    expect(TodosMissingEvent.safeParse({ altitude: 'L0', type: 'todos_missing', agent: 'implement-t2' }).success).toBe(
+      true,
+    )
+  })
+
+  it('rejects a missing agent and wrong altitudes', () => {
+    expect(TodosMissingEvent.safeParse({ altitude: 'L0', type: 'todos_missing' }).success).toBe(false)
+    expect(TodosMissingEvent.safeParse({ altitude: 'L1', type: 'todos_missing', agent: 'a' }).success).toBe(false)
   })
 })

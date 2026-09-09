@@ -13,6 +13,7 @@ export {
   KilledEvent,
   AgentDoneEvent,
   AgentTodosEvent,
+  TodosMissingEvent,
 } from './agent-noise-schemas.js'
 import {
   ToolUseEvent,
@@ -22,6 +23,7 @@ import {
   KilledEvent,
   AgentDoneEvent,
   AgentTodosEvent,
+  TodosMissingEvent,
 } from './agent-noise-schemas.js'
 
 export { ExecutionEvent, TaskEvent, GateModeSchema, StageIdSchema, STAGE_ORDER } from './execution-schemas.js'
@@ -219,6 +221,7 @@ const EVENT_VARIANTS = [
   KilledEvent,
   AgentDoneEvent,
   AgentTodosEvent,
+  TodosMissingEvent,
   StageEnterEvent,
   StageExitEvent,
   StageFailedEvent,
@@ -254,6 +257,7 @@ export const SddEventSchema = z.discriminatedUnion('type', [
   KilledEvent.extend(StampShape),
   AgentDoneEvent.extend(StampShape),
   AgentTodosEvent.extend(StampShape),
+  TodosMissingEvent.extend(StampShape),
   StageEnterEvent.extend(StampShape),
   StageExitEvent.extend(StampShape),
   StageFailedEvent.extend(StampShape),

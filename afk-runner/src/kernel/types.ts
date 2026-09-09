@@ -43,6 +43,12 @@ export type TaskStatus = 'running' | 'done' | 'failed'
 export interface TaskRecord {
   readonly status: TaskStatus
   readonly attempts: number
+  /**
+   * The item's tasks.md text as stamped by its started event's detail
+   * (afk-runner-task-todos D2): absent on pre-change logs, preserved through
+   * finish rebuilds, re-stamped last-wins by a re-start.
+   */
+  readonly text?: string
 }
 
 /** Scratch tally accumulator: findings counted per round until the round's convergence flushes them. */
@@ -154,6 +160,6 @@ export type KernelEvent =
   | { readonly type: 'child.spawned'; readonly child: string }
   | { readonly type: 'child.done'; readonly child: string; readonly outcome: 'done' | 'failed' }
   | { readonly type: 'execution.armed' }
-  | { readonly type: 'task.started'; readonly id: string }
+  | { readonly type: 'task.started'; readonly id: string; readonly detail?: string }
   | { readonly type: 'task.done'; readonly id: string }
   | { readonly type: 'task.failed'; readonly id: string }

@@ -141,10 +141,15 @@ export const kernelSetup = setup({
     startTask: assign(({ context, event }) => {
       if (event.type !== 'task.started') return {}
       const prior = context.tasks[event.id]
+      const text = event.detail ?? prior?.text
       return {
         tasks: {
           ...context.tasks,
-          [event.id]: { status: 'running', attempts: (prior?.attempts ?? 0) + 1 },
+          [event.id]: {
+            status: 'running',
+            attempts: (prior?.attempts ?? 0) + 1,
+            ...(text === undefined ? {} : { text }),
+          },
         },
       }
     }),
@@ -154,7 +159,11 @@ export const kernelSetup = setup({
       return {
         tasks: {
           ...context.tasks,
-          [event.id]: { status: event.type === 'task.done' ? 'done' : 'failed', attempts: prior?.attempts ?? 1 },
+          [event.id]: {
+            status: event.type === 'task.done' ? 'done' : 'failed',
+            attempts: prior?.attempts ?? 1,
+            ...(prior?.text === undefined ? {} : { text: prior.text }),
+          },
         },
       }
     }),
