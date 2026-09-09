@@ -31,7 +31,7 @@ export interface AgentCommand {
   args: readonly string[]
   /** The whole role prompt; present only on the claude branch (one argv entry is capped at 128 KiB). */
   stdin?: string
-  /** The child's entire replacement environment; present only on the claude branch. */
+  /** The child's entire replacement environment; absent inherits `process.env`. */
   env?: Record<string, string>
 }
 
@@ -128,6 +128,13 @@ export interface AgentCommandOptions {
    * backend-aware here, never hardcoded at a caller. Absent adds no flag.
    */
   continueSessionId?: string
+  /**
+   * The opencode child's entire replacement environment, caller-composed — the
+   * builder never reads ambient `process.env` (afk-runner-agent-mcp D3).
+   * Returned verbatim as `AgentCommand.env`; absent stays `undefined`, so
+   * `realSpawn` inherits `process.env` byte-identically.
+   */
+  opencodeEnv?: Record<string, string>
 }
 
 function opencodeCommand(options: AgentCommandOptions): AgentCommand {
@@ -146,6 +153,7 @@ function opencodeCommand(options: AgentCommandOptions): AgentCommand {
       ...(options.continueSessionId === undefined ? [] : ['--session', options.continueSessionId]),
       options.prompt,
     ],
+    ...(options.opencodeEnv === undefined ? {} : { env: options.opencodeEnv }),
   }
 }
 
@@ -277,11 +285,12 @@ export function findMisplacedScratches(expectedPath: string, cwd: string, basena
 }
 
 /**
- * Composes one agent invocation. The opencode branch returns today's argv with
- * no optional fields, so `realSpawn` inherits `process.env` exactly as before;
- * the claude branch composes the profile block, the streaming tail, the
- * per-role allowlist, the stripped model id, the prompt on stdin and the
- * strip-then-add child env.
+ * Composes one agent invocation. The opencode branch returns today's argv and,
+ * when the caller composed one, the verbatim `opencodeEnv` as the child env —
+ * absent, `realSpawn` inherits `process.env` exactly as before; the claude
+ * branch composes the profile block, the streaming tail, the per-role
+ * allowlist, the stripped model id, the prompt on stdin and the strip-then-add
+ * child env.
  */
 export function buildAgentCommand(options: AgentCommandOptions): AgentCommand {
   return options.backend === 'claude' ? claudeCommand(options) : opencodeCommand(options)
