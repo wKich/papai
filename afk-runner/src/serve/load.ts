@@ -12,7 +12,8 @@ import { readEvents } from '../events.js'
 import { readAllRunStates } from '../run-index.js'
 import type { ServeFs } from './fs-seam.js'
 import { buildRunDetail } from './run-detail.js'
-import type { RunDetailView } from './run-detail.js'
+import type { RecentEvent, RunDetailView } from './run-detail.js'
+import { eventsPageOf } from './run-detail.js'
 import type { PortfolioView, RunView } from './view-model.js'
 import { buildPortfolio, buildRunView } from './view-model.js'
 
@@ -66,4 +67,20 @@ export async function loadRunDetail(
       ? null
       : await fs.readFile(path.join(workDir, 'runs', runId, `gate-${pendingGate.version}.md`)).catch(() => null)
   return buildRunDetail({ runId, memo, events, now: now.getTime(), gateContent })
+}
+
+export interface RunEventsPage {
+  readonly events: readonly RecentEvent[]
+}
+
+/** One history page (tool-reports D3): the last `limit` feed events strictly below `before`. */
+export async function loadRunEventsPage(
+  workDir: string,
+  runId: string,
+  before: number,
+  limit: number,
+): Promise<RunEventsPage | null> {
+  const memo = (await readAllRunStates(workDir)).find((entry) => entry.runId === runId)
+  if (memo === undefined) return null
+  return { events: eventsPageOf(readRunEvents(workDir, runId) ?? [], before, limit) }
 }

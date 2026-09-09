@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url'
 
 import type { ServeFs } from './fs-seam.js'
 import { nodeServeFs } from './fs-seam.js'
-import { loadPortfolio, loadRunDetail } from './load.js'
+import { loadPortfolio, loadRunDetail, loadRunEventsPage } from './load.js'
+import type { RunEventsPage } from './load.js'
 import type { RunDetailView } from './run-detail.js'
 import type { RosterFingerprints } from './sweep.js'
 import { emptyRoster, sweepRuns } from './sweep.js'
@@ -27,6 +28,8 @@ import type { PortfolioView } from './view-model.js'
 export const DEFAULT_BOARD_HOST = '127.0.0.1'
 export const DEFAULT_BOARD_PORT = 4545
 export const DEFAULT_SWEEP_INTERVAL_MS = 2_000
+export const DEFAULT_EVENTS_PAGE_LIMIT = 100
+export const MAX_EVENTS_PAGE_LIMIT = 500
 
 export interface BoardOptions {
   readonly workDir: string
@@ -40,6 +43,7 @@ export interface BoardOptions {
   readonly fs?: ServeFs
   readonly loadPortfolio?: (now: Date) => Promise<PortfolioView>
   readonly loadRunDetail?: (runId: string, now: Date) => Promise<RunDetailView | null>
+  readonly loadEventsPage?: (runId: string, before: number, limit: number) => Promise<RunEventsPage | null>
   readonly sweep?: (roster: RosterFingerprints) => Promise<{ changed: readonly string[]; roster: RosterFingerprints }>
   readonly log?: (line: string) => void
 }
@@ -105,12 +109,13 @@ function sseFactory(sinks: Set<Sink>, loadSnapshot: (now: Date) => Promise<Portf
   }
 }
 
-/** The token-gated routes: page, portfolio JSON, run detail JSON, SSE. */
+/** The token-gated routes: page, portfolio JSON, run detail JSON, events pages, SSE. */
 function routeFactory(deps: {
   readonly token: string
   readonly page: string
   readonly loadSnapshot: (now: Date) => Promise<PortfolioView>
   readonly loadDetail: (runId: string, now: Date) => Promise<RunDetailView | null>
+  readonly loadEventsPage: (runId: string, before: number, limit: number) => Promise<RunEventsPage | null>
   readonly sse: () => Response
 }): (request: Request) => Promise<Response> {
   return async (request: Request): Promise<Response> => {
@@ -121,6 +126,25 @@ function routeFactory(deps: {
     }
     if (url.pathname === '/api/portfolio') return Response.json(await deps.loadSnapshot(new Date()))
     if (url.pathname === '/events') return deps.sse()
+    const eventsMatch = /^\/api\/runs\/([^/]+)\/events$/u.exec(url.pathname)
+    if (eventsMatch !== null) {
+      const runId = decodeURIComponent(eventsMatch[1] ?? '')
+      const before = Number(url.searchParams.get('before'))
+      const limitParam = url.searchParams.get('limit')
+      const limit = limitParam === null ? DEFAULT_EVENTS_PAGE_LIMIT : Number(limitParam)
+      if (
+        !Number.isInteger(before) ||
+        before <= 0 ||
+        !Number.isInteger(limit) ||
+        limit <= 0 ||
+        limit > MAX_EVENTS_PAGE_LIMIT
+      ) {
+        return Response.json({ error: 'before and limit must be positive integers' }, { status: 400 })
+      }
+      const page = await deps.loadEventsPage(runId, before, limit)
+      if (page === null) return Response.json({ error: `unknown run: ${runId}` }, { status: 404 })
+      return Response.json(page)
+    }
     const runMatch = /^\/api\/runs\/([^/]+)$/u.exec(url.pathname)
     if (runMatch !== null) {
       const runId = decodeURIComponent(runMatch[1] ?? '')
@@ -140,6 +164,7 @@ interface BoardRuntime {
   readonly log: (line: string) => void
   readonly loadSnapshot: (now: Date) => Promise<PortfolioView>
   readonly loadDetail: (runId: string, now: Date) => Promise<RunDetailView | null>
+  readonly loadEventsPage: (runId: string, before: number, limit: number) => Promise<RunEventsPage | null>
   readonly detectChanges: ChangeDetector
   readonly intervalMs: number
 }
@@ -162,6 +187,10 @@ function resolveRuntime(options: BoardOptions): BoardRuntime {
     loadDetail:
       options.loadRunDetail ??
       ((runId: string, now: Date): Promise<RunDetailView | null> => loadRunDetail(fs, workDir, runId, now)),
+    loadEventsPage:
+      options.loadEventsPage ??
+      ((runId: string, before: number, limit: number): Promise<RunEventsPage | null> =>
+        loadRunEventsPage(workDir, runId, before, limit)),
     detectChanges:
       options.sweep ??
       ((roster: RosterFingerprints): Promise<{ changed: readonly string[]; roster: RosterFingerprints }> =>
@@ -211,6 +240,7 @@ export function startBoardServer(options: BoardOptions): Promise<BoardHandle> {
       page: runtime.page,
       loadSnapshot: runtime.loadSnapshot,
       loadDetail: runtime.loadDetail,
+      loadEventsPage: runtime.loadEventsPage,
       sse,
     }),
     error(error) {

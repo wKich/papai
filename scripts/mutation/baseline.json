@@ -288,10 +288,10 @@
     "scored": 74
   },
   "afk-runner/src/serve/view-model.ts": {
-    "score": 0.719626168224299,
-    "killed": 154,
+    "score": 0.7183098591549296,
+    "killed": 153,
     "timeout": 0,
-    "scored": 214
+    "scored": 213
   },
   "afk-runner/src/session-id.ts": {
     "score": 0.7647058823529411,

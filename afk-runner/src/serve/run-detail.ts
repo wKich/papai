@@ -6,6 +6,11 @@
 import type { FindingCounts, SddEvent } from '../events.js'
 import { openCountsOf } from '../legacy-fold.js'
 import type { DigestRecord } from '../legacy-fold.js'
+import { tokensOf } from '../work/gate-signals.js'
+import { agentStripsOf } from './agent-strips.js'
+import type { AgentStrip } from './agent-strips.js'
+import { stageAccountsOf } from './stage-accounts.js'
+import type { StageAccount } from './stage-accounts.js'
 import type { RunProjectionInput, RunView } from './view-model.js'
 import { buildRunView, foldRunEvents } from './view-model.js'
 
@@ -18,7 +23,13 @@ import { buildRunView, foldRunEvents } from './view-model.js'
  * steers, or mutates the run.
  */
 
-export const RECENT_EVENT_LIMIT = 20
+/**
+ * The live window's bound applies to rendered feed content (tool-reports
+ * D3): signal lines after the tier exclusions. Sized so typical runs fit
+ * whole — the corpus measures 60–430 signal events per lane and 250 covers
+ * 10/16 lanes entirely; earlier events page through `/api/runs/:id/events`.
+ */
+export const SIGNAL_EVENT_LIMIT = 250
 
 export interface RoundHistory {
   readonly round: number
@@ -71,6 +82,8 @@ export interface RunDetailView {
   readonly rounds: readonly RoundHistory[]
   readonly tasks: readonly TaskWalkEntry[]
   readonly todos: readonly AgentTodosEntry[]
+  readonly strips: readonly AgentStrip[]
+  readonly stageAccounts: readonly StageAccount[]
   readonly recentEvents: readonly RecentEvent[]
   readonly gate: DetailGate | null
   readonly taskProgress: RunView['taskProgress']
@@ -87,6 +100,21 @@ function roundHistoryOf(record: DigestRecord): RoundHistory {
   return { round: record.round, verdict: record.verdict, raised: record.counts, open: openCountsOf(record) }
 }
 
+/** A feed line's detail clause stays a line: bounded like a gate row gap. */
+const MAX_DETAIL_LEN = 160
+
+function boundedDetail(detail: string): string {
+  return detail.length > MAX_DETAIL_LEN ? `${detail.slice(0, MAX_DETAIL_LEN - 1)}…` : detail
+}
+
+/** Compact tokens for one feed line, mirroring the client's ticker format. */
+function fmtTokens(tokens: number): string {
+  if (tokens < 1000) return String(tokens)
+  if (tokens < 1_000_000) return `${Math.round(tokens / 100) / 10}K`
+  if (tokens < 1_000_000_000) return `${Math.round(tokens / 10_000) / 100}M`
+  return `${Math.round(tokens / 10_000_000) / 100}B`
+}
+
 function summarizeEvent(event: SddEvent): string {
   if (event.type === 'stage_enter' || event.type === 'stage_exit') return `${event.type} ${event.stage}`
   if (event.type === 'stage_failed') return `stage_failed ${event.stage} (${event.kind})`
@@ -96,7 +124,20 @@ function summarizeEvent(event: SddEvent): string {
   }
   if (event.type === 'task') return `task ${event.action} ${event.id}`
   if (event.type === 'convergence') return `convergence r${event.round} ${event.verdict}`
-  if (event.type === 'done') return `done ${event.agent}`
+  if (event.type === 'spawned') return `spawned ${event.agent} · ${event.role} · ${event.model}`
+  if (event.type === 'finding') {
+    const cls = event.class === undefined ? '' : ` ${event.class}`
+    const detail = event.detail === undefined ? '' : ` — ${boundedDetail(event.detail)}`
+    return `finding ${event.action} ${event.id}${cls}${detail}`
+  }
+  if (event.type === 'done') {
+    const model = event.model === undefined ? '' : ` · ${event.model}`
+    const tokens = tokensOf(event.usage)
+    const cost = event.usage.costUsd > 0 ? `$${event.usage.costUsd.toFixed(2)}` : tokens > 0 ? 'cost unknown' : '$0.00'
+    return `done ${event.agent}${model} · ${fmtTokens(tokens)} tok · ${cost}`
+  }
+  if (event.type === 'retrying') return `retrying ${event.agent} · ${event.reason} · attempt ${event.attempt}`
+  if (event.type === 'killed') return `killed ${event.agent} · ${event.cause}`
   return event.type
 }
 
@@ -118,20 +159,43 @@ function todosOf(events: readonly SddEvent[] | null): readonly AgentTodosEntry[]
   return [...latest.values()]
 }
 
+/**
+ * Feed eligibility (tool-reports D2): todo telemetry renders in the todos
+ * panel, `step_finish` in the spend ticker, and `tool_use` in the per-agent
+ * strips — none of them feed; a still-pending `auto_decision` is waiter
+ * heartbeat — excluded **before** the bound so a heartbeat flood cannot
+ * shrink the feed (the 6,333-pending lane is the pin). Non-pending
+ * auto-decisions are gate signal and stay.
+ */
+function isFeedEvent(event: SddEvent): boolean {
+  if (event.type === 'agent_todos' || event.type === 'step_finish' || event.type === 'tool_use') return false
+  if (event.type === 'auto_decision' && event.decision === 'pending') return false
+  return true
+}
+
+function recentEventOf(event: SddEvent): RecentEvent {
+  return { seq: event.seq, ts: event.ts, summary: summarizeEvent(event) }
+}
+
 function recentEventsOf(events: readonly SddEvent[] | null): readonly RecentEvent[] {
   if (events === null) return []
-  // The todos panel renders this telemetry (board-todos D2): excluded before
-  // the bound is applied, so a todo burst cannot shrink the feed below its size.
-  const feed = events.filter((event) => event.type !== 'agent_todos')
-  return feed.slice(-RECENT_EVENT_LIMIT).map((event) => ({
-    seq: event.seq,
-    ts: event.ts,
-    summary: summarizeEvent(event),
-  }))
+  const feed = events.filter(isFeedEvent)
+  return feed.slice(-SIGNAL_EVENT_LIMIT).map(recentEventOf)
+}
+
+/**
+ * One history page below the live window (tool-reports D3): the last `limit`
+ * feed events with `seq < before`, ascending — the same exclusions as the
+ * feed, so pages never carry heartbeat or telemetry lines. Below-tail pages
+ * are immutable by construction (append-only log).
+ */
+export function eventsPageOf(events: readonly SddEvent[], before: number, limit: number): readonly RecentEvent[] {
+  const feed = events.filter((event) => event.seq < before && isFeedEvent(event))
+  return feed.slice(-limit).map(recentEventOf)
 }
 
 export function buildRunDetail(input: RunDetailInput): RunDetailView {
-  const { runId, memo, events, gateContent } = input
+  const { runId, memo, events, now, gateContent } = input
   const card = buildRunView(input)
   const folded = foldRunEvents(events)
   const tasks =
@@ -154,6 +218,8 @@ export function buildRunDetail(input: RunDetailInput): RunDetailView {
     rounds: folded === null ? [] : folded.context.perRound.map(roundHistoryOf),
     tasks,
     todos: todosOf(events),
+    strips: events === null ? [] : agentStripsOf(events),
+    stageAccounts: events === null ? [] : stageAccountsOf(events, now),
     recentEvents: recentEventsOf(events),
     gate:
       card.gate === null

@@ -224,7 +224,13 @@ describe('serve server — token gate on every route', () => {
     writeRunsFixture(workDir)
     const board = await startBoard(workDir)
     const origin = originOf(board)
-    for (const route of ['/', '/api/portfolio', '/api/runs/gate-run', '/events'] as const) {
+    for (const route of [
+      '/',
+      '/api/portfolio',
+      '/api/runs/gate-run',
+      '/api/runs/gate-run/events?before=10',
+      '/events',
+    ] as const) {
       const none = await fetch(`${origin}${route}`)
       expect(none.status).toBe(401)
       expect(await none.text()).not.toContain('gate-run')
@@ -269,6 +275,66 @@ describe('serve server — the routes', () => {
     expect(missing.status).toBe(404)
     const stray = await fetch(`${origin}/api/nothing?token=${TOKEN}`)
     expect(stray.status).toBe(404)
+  })
+})
+
+describe('serve server — the event history pagination route', () => {
+  it('pages strictly below `before`, ascending, applying the feed exclusions', async () => {
+    const workDir = makeWorkDir()
+    writeRunsFixture(workDir)
+    const board = await startBoard(workDir)
+    const origin = originOf(board)
+    const page: unknown = await (
+      await fetch(`${origin}/api/runs/done-run/events?before=8&limit=3&token=${TOKEN}`)
+    ).json()
+    expect(page).toMatchObject({
+      events: [
+        { seq: 5, summary: 'convergence r1 converged' },
+        { seq: 6, summary: 'stage_exit review' },
+        { seq: 7, summary: 'stage_enter gate' },
+      ],
+    })
+  })
+
+  it('rejects a missing or non-numeric before and an unknown run', async () => {
+    const workDir = makeWorkDir()
+    writeRunsFixture(workDir)
+    const board = await startBoard(workDir)
+    const origin = originOf(board)
+    const noBefore = await fetch(`${origin}/api/runs/done-run/events?token=${TOKEN}`)
+    expect(noBefore.status).toBe(400)
+    const badBefore = await fetch(`${origin}/api/runs/done-run/events?before=soon&token=${TOKEN}`)
+    expect(badBefore.status).toBe(400)
+    const unknown = await fetch(`${origin}/api/runs/no-such-run/events?before=5&token=${TOKEN}`)
+    expect(unknown.status).toBe(404)
+  })
+
+  it('a below-tail page is immutable while the run appends, and the torn tail tolerates', async () => {
+    const workDir = makeWorkDir()
+    writeRunsFixture(workDir)
+    const board = await startBoard(workDir)
+    const origin = originOf(board)
+    const first = await fetch(`${origin}/api/runs/live-run/events?before=4&limit=2&token=${TOKEN}`)
+    const firstBody = await first.text()
+    expect(first.status).toBe(200)
+    // the run appends (a complete line and a torn in-flight tail) — the
+    // below-tail page must return identical content
+    fs.appendFileSync(
+      path.join(workDir, 'runs', 'live-run', 'events.ndjson'),
+      `${stageExit('draft', 4, at(30 * 60_000))}\n{"altitude":"L2","type":"ga`,
+    )
+    const second = await fetch(`${origin}/api/runs/live-run/events?before=4&limit=2&token=${TOKEN}`)
+    expect(await second.text()).toBe(firstBody)
+    // the appended tail itself pages on the next fetch
+    const grown: unknown = await (
+      await fetch(`${origin}/api/runs/live-run/events?before=5&limit=2&token=${TOKEN}`)
+    ).json()
+    expect(grown).toMatchObject({
+      events: [
+        { seq: 3, summary: 'stage_enter draft' },
+        { seq: 4, summary: 'stage_exit draft' },
+      ],
+    })
   })
 })
 

@@ -9,11 +9,11 @@ import os from 'node:os'
 import path from 'node:path'
 
 import type { AgentUsage, EventInput, SddEvent, StageId } from '../../../afk-runner/src/events.js'
-import { stampEvent } from '../../../afk-runner/src/events.js'
+import { readEvents, stampEvent } from '../../../afk-runner/src/events.js'
 import type { PersistedLite } from '../../../afk-runner/src/run-lite.js'
 import { nodeServeFs } from '../../../afk-runner/src/serve/fs-seam.js'
 import { loadPortfolio, loadRunDetail } from '../../../afk-runner/src/serve/load.js'
-import { RECENT_EVENT_LIMIT, buildRunDetail } from '../../../afk-runner/src/serve/run-detail.js'
+import { buildRunDetail, SIGNAL_EVENT_LIMIT } from '../../../afk-runner/src/serve/run-detail.js'
 import { buildPortfolio, buildRunView } from '../../../afk-runner/src/serve/view-model.js'
 
 /**
@@ -194,6 +194,12 @@ function viewOf(fixture: RunFixture): ReturnType<typeof buildRunView> {
   return buildRunView({ ...fixture, now: NOW_MS })
 }
 
+const LIVE_ROOT = path.join(import.meta.dir, '..', 'fixtures', 'live')
+
+function readLaneEvents(lane: string): readonly SddEvent[] {
+  return readEvents(path.join(LIVE_ROOT, lane, 'events.ndjson'), () => undefined)
+}
+
 describe('serve view-model — portfolio sort by attention', () => {
   it('a gate-pending run leads running and finished runs, carrying its gate mode and pending age', () => {
     const gate = viewOf(gatePendingRun())
@@ -294,6 +300,25 @@ describe('serve view-model — spend is tokens-first with honest cost bounds', (
     expect(card.wallMs).toBeNull()
     expect(buildPortfolio([card]).totals.unpricedCount).toBe(1)
   })
+
+  it('cards carry the delta-based spend: the kill lane no longer undercounts', () => {
+    const killLane = readLaneEvents('walk-item-green-live')
+    const card = viewOf({ runId: 'kill-lane', memo: liteMemo('kill-lane'), events: [...killLane] })
+    expect(card.spend.tokens).toBe(55_074_568)
+    expect(card.spend.costKnown).toBe(true)
+  })
+
+  it('portfolio totals re-sum the delta-based spend and keep the unpriced count', () => {
+    const killLane = viewOf({
+      runId: 'kill-lane',
+      memo: liteMemo('kill-lane'),
+      events: [...readLaneEvents('walk-item-green-live')],
+    })
+    const unpriced = viewOf(runFixtured('unpriced-run', [doneEvent('impl', 1, at(1 * 60_000), 4_200, 0)]))
+    const portfolio = buildPortfolio([killLane, unpriced])
+    expect(portfolio.totals.tokens).toBe(55_074_568 + 4_200)
+    expect(portfolio.totals.unpricedCount).toBe(1)
+  })
 })
 
 describe('serve view-model — the run detail projection', () => {
@@ -357,7 +382,7 @@ describe('serve view-model — the run detail projection', () => {
       file: 'gate-2.md',
       content: '## Final gate\n→ <answer or OVERRIDE>',
     })
-    expect(detail.recentEvents.length).toBeLessThanOrEqual(RECENT_EVENT_LIMIT)
+    expect(detail.recentEvents.length).toBeLessThanOrEqual(SIGNAL_EVENT_LIMIT)
     const last = detail.recentEvents[detail.recentEvents.length - 1]
     expect(last).toMatchObject({ seq: 10, ts: at(6 * 60_000) })
     expect(last?.summary).toContain('gate presented final v2')
