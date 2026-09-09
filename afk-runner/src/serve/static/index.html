@@ -246,6 +246,53 @@ See LICENSE in the project root for details.
       .todos {
         font-size: 12.5px;
       }
+      .strip {
+        border: 1px solid var(--edge);
+        border-left: 3px solid var(--running);
+        border-radius: 8px;
+        padding: 6px 10px;
+        margin-bottom: 6px;
+        font-size: 12.5px;
+      }
+      .strip .strip-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: baseline;
+      }
+      .strip .strip-agent {
+        font-weight: 600;
+      }
+      .strip .strip-ticker {
+        color: var(--running);
+        white-space: nowrap;
+      }
+      .strip .strip-meta {
+        color: var(--dim);
+        margin-top: 2px;
+        overflow-wrap: anywhere;
+      }
+      .strip .strip-tool b {
+        color: var(--text);
+        font-weight: 500;
+      }
+      .load-earlier {
+        display: block;
+        width: 100%;
+        background: none;
+        border: 1px dashed var(--edge);
+        color: var(--dim);
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-size: 12.5px;
+        margin: 6px 0;
+      }
+      .load-earlier:disabled {
+        opacity: 0.5;
+      }
+      .earlier {
+        opacity: 0.75;
+      }
       .todo-agent {
         margin-top: 8px;
         font-weight: 600;
@@ -436,6 +483,124 @@ See LICENSE in the project root for details.
         host.append(panel)
       }
 
+      function renderStageAccounts(detail, host) {
+        if (detail.stageAccounts.length === 0) return
+        host.append(el('h2', null, 'stages — wall · tokens · cost (occupancy)'))
+        const table = el('table')
+        const header = el('tr')
+        for (const label of ['stage', 'wall', 'tokens', 'cost']) header.append(el('th', null, label))
+        table.append(header)
+        for (const account of detail.stageAccounts) {
+          const row = el('tr')
+          row.append(el('td', null, account.stage))
+          row.append(el('td', null, fmtDuration(account.wallMs)))
+          row.append(el('td', null, fmtTokens(account.tokens)))
+          row.append(el('td', null, account.costKnown ? `≥ $${account.costUsd.toFixed(2)}` : 'cost ?'))
+          table.append(row)
+        }
+        host.append(table)
+      }
+
+      function renderStrips(detail, host) {
+        if (detail.strips.length === 0) return
+        host.append(el('h2', null, 'in flight'))
+        for (const strip of detail.strips) {
+          const node = el('div', 'strip')
+          const head = el('div', 'strip-head')
+          head.append(el('span', 'strip-agent', strip.agent))
+          const cost = strip.costUsd > 0 ? ` · $${strip.costUsd.toFixed(2)}` : ''
+          head.append(el('span', 'strip-ticker', `${fmtTokens(strip.tokens)} tok${cost}`))
+          node.append(head)
+          node.append(el('div', 'strip-meta', `${strip.role} · ${strip.model}`))
+          if (strip.lastTool !== null) {
+            const arg = strip.lastTool.arg === null ? '' : ` ${strip.lastTool.arg}`
+            const line = el('div', 'strip-meta strip-tool')
+            line.append(el('b', null, strip.lastTool.tool))
+            line.append(document.createTextNode(arg))
+            node.append(line)
+          }
+          node.append(el('div', 'strip-meta', strip.transcript))
+          host.append(node)
+        }
+      }
+
+      function feedItem(event) {
+        const item = el('li')
+        item.append(el('b', null, `#${event.seq} `))
+        item.append(document.createTextNode(`${event.summary} · ${fmtWhen(event.ts)}`))
+        return item
+      }
+
+      // Load-earlier state (tool-reports D3): the one deliberate client-side
+      // cache — pages prepended below the live window, kept per open run and
+      // discarded on back-navigation. Below-tail pages are immutable, so each
+      // page is fetched at most once per open run.
+      const earlierPages = new Map()
+      const earlierExhausted = new Map()
+      let loadingEarlier = false
+
+      async function loadEarlier(runId, before) {
+        if (loadingEarlier) return
+        loadingEarlier = true
+        try {
+          const response = await fetch(
+            withToken(`/api/runs/${encodeURIComponent(runId)}/events?before=${before}&limit=100`),
+          )
+          if (!response.ok) throw new Error(`events page: HTTP ${response.status}`)
+          const payload = await response.json()
+          const fetched = payload.events ?? []
+          if (fetched.length === 0) {
+            earlierExhausted.set(runId, true)
+            return
+          }
+          const cached = earlierPages.get(runId) ?? []
+          earlierPages.set(runId, [...fetched, ...cached])
+        } finally {
+          loadingEarlier = false
+        }
+      }
+
+      function renderFeed(detail, host) {
+        host.append(el('h2', null, 'events'))
+        const live = detail.recentEvents
+        const cached = earlierPages.get(detail.runId) ?? []
+        const firstLive = live[0]?.seq ?? Number.POSITIVE_INFINITY
+        const earlier = cached.filter((event) => event.seq < firstLive)
+        const list = el('ul', 'events')
+        if (earlier.length > 0) {
+          for (const event of earlier) {
+            const item = feedItem(event)
+            item.classList.add('earlier')
+            list.append(item)
+          }
+        }
+        for (const event of live) list.append(feedItem(event))
+        if (earlierExhausted.get(detail.runId) !== true && (earlier.length > 0 || live.length > 0)) {
+          const firstSeq = (earlier[0] ?? live[0])?.seq
+          if (firstSeq !== undefined) {
+            const button = el('button', 'load-earlier', 'load earlier events')
+            button.addEventListener('click', async () => {
+              const scroll = document.scrollingElement ?? document.body
+              const heightBefore = scroll.scrollHeight
+              button.disabled = true
+              try {
+                await loadEarlier(detail.runId, firstSeq)
+              } catch (error) {
+                button.textContent = error instanceof Error ? error.message : String(error)
+                return
+              }
+              // full re-render; then hold the reading position: the prepended
+              // height is added to scrollTop once (D5)
+              await openDetail(detail.runId)
+              const added = scroll.scrollHeight - heightBefore
+              if (added > 0) scroll.scrollTop += added
+            })
+            host.append(button)
+          }
+        }
+        host.append(list)
+      }
+
       function renderDetail(detail) {
         const host = $('detail-body')
         host.replaceChildren()
@@ -496,7 +661,9 @@ See LICENSE in the project root for details.
           host.append(table)
         }
 
+        renderStageAccounts(detail, host)
         renderTodos(detail, host)
+        renderStrips(detail, host)
 
         if (detail.gate !== null) {
           host.append(
@@ -507,15 +674,7 @@ See LICENSE in the project root for details.
           host.append(pre)
         }
 
-        host.append(el('h2', null, 'recent events'))
-        const list = el('ul', 'events')
-        for (const event of detail.recentEvents) {
-          const item = el('li')
-          item.append(el('b', null, `#${event.seq} `))
-          item.append(document.createTextNode(`${event.summary} · ${fmtWhen(event.ts)}`))
-          list.append(item)
-        }
-        host.append(list)
+        renderFeed(detail, host)
       }
 
       async function openDetail(runId) {
@@ -532,6 +691,9 @@ See LICENSE in the project root for details.
       }
 
       function showPortfolio() {
+        // the page cache is ephemeral per open run — discarded on back-navigation (D3)
+        earlierPages.clear()
+        earlierExhausted.clear()
         selectedRun = null
         $('detail').style.display = 'none'
         $('portfolio').style.display = 'block'

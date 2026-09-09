@@ -9,7 +9,7 @@ import { pipelineMachine } from '../graph/pipeline.js'
 import { foldEvents } from '../kernel/fold.js'
 import type { KernelContext } from '../kernel/machine.js'
 import type { PersistedLite } from '../run-lite.js'
-import { usageTotalsOf } from '../work/gate-signals.js'
+import { deltaSpendOf } from './spend.js'
 
 /**
  * The board's pure card projection (web-board D3): the same kernel fold the
@@ -30,7 +30,7 @@ export interface TaskProgress {
   readonly failed: readonly string[]
 }
 
-/** Tokens-first spend (cross-run accounting doctrine): cost is a lower bound. */
+/** Tokens-first spend (cross-run accounting doctrine): cost is a lower bound. Delta-based (tool-reports D1). */
 export interface SpendView {
   readonly tokens: number | null
   readonly costUsd: number | null
@@ -169,8 +169,7 @@ function taskProgressOf(context: KernelContext): TaskProgress | null {
 
 function spendOf(events: readonly SddEvent[] | null): SpendView {
   if (events === null) return { tokens: null, costUsd: null, costKnown: false }
-  const usage = usageTotalsOf(events)
-  return { tokens: usage.tokens, costUsd: usage.costUsd, costKnown: usage.costKnown }
+  return deltaSpendOf(events)
 }
 
 /** Wall from log timestamps — fresh for live runs; null for a degraded or eventless row. */
