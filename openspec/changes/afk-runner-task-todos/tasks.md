@@ -26,4 +26,4 @@
 
 ## 6. Full verification and docs
 
-- [ ] 6.1 Run `bun test`, `bun run typecheck`, `bun run lint`; update `docs/architecture/afk-runner.md` (execution-half walk line: started detail, mandate + mark; board section: walk text + panel note) and this change's artifacts if reality forced a delta. Verify: all four green
+- [x] 6.1 Run `bun test`, `bun run typecheck`, `bun run lint`; update `docs/architecture/afk-runner.md` (execution-half walk line: started detail, mandate + mark; board section: walk text + panel note) and this change's artifacts if reality forced a delta. Verify: all four green
