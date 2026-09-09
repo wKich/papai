@@ -12,8 +12,8 @@
 
 ## 3. Reporter flag and the mark emission matrix
 
-- [ ] 3.1 Failing test: `createAgentReporter().sawTodos()` is false until the todos hook fires and true after any emission; then implement the flag on the reporter closure. Verify: `bun test tests/afk-runner/agent-reporter.test.ts`
-- [ ] 3.2 Failing test matrix: implementer + zero snapshots on the success path → one `todos_missing` before settle-out; implementer + snapshots → none; non-implementer role → none; validation-failed attempt → none; killed attempt → none; then implement the role-gated emission in `agent-layer.ts`'s success path. Verify: `bun test tests/afk-runner/agent-layer.test.ts`
+- [x] 3.1 Failing test: `createAgentReporter().sawTodos()` is false until the todos hook fires and true after any emission; then implement the flag on the reporter closure. Verify: `bun test tests/afk-runner/agent-reporter.test.ts`
+- [x] 3.2 Failing test matrix: implementer + zero snapshots on the success path → one `todos_missing` before settle-out; implementer + snapshots → none; non-implementer role → none; validation-failed attempt → none; killed attempt → none; then implement the role-gated emission in `agent-layer.ts`'s success path. Verify: `bun test tests/afk-runner/agent-layer.test.ts`
 
 ## 4. Memo projection carries task text additively
 

@@ -155,6 +155,31 @@ function prepareSpawnContext<T>(
   return { prompt, model, spawnInput, ledgerAttempt, sessionLedger, logPath }
 }
 
+/**
+ * The success-path settle (afk-runner-task-todos D4 split): the done event,
+ * the zero-snapshot compliance mark, the ledger write, and the run info. The
+ * mark means "this completed spawn session emitted no todo snapshot" — one
+ * tolerated L0 event, role-gated to implementers; a crash or validation
+ * failure never reaches here, and other roles are never mandated.
+ */
+function settleSuccess<T>(
+  deps: AgentLayerDeps,
+  options: RunStageAgentOptions<T>,
+  spawnInput: { label: string; role: string; round: number; model: string },
+  ledgerAttempt: number,
+  reporter: ReturnType<typeof createAgentReporter>,
+  parsed: { readonly success: true; readonly data: T },
+  usage: AgentUsage,
+  attempt: number,
+): AgentRunInfo<T> {
+  deps.emit({ altitude: 'L1', type: 'done', agent: options.label, model: spawnInput.model, usage })
+  if (options.role === 'implementer' && !reporter.sawTodos()) {
+    deps.emit({ altitude: 'L0', type: 'todos_missing', agent: options.label })
+  }
+  settleSessionAttempt(options.runDir, spawnInput, ledgerAttempt, 'done')
+  return { value: parsed.data, usage, attempts: attempt }
+}
+
 async function attemptStageAgent<T>(
   deps: AgentLayerDeps,
   options: RunStageAgentOptions<T>,
@@ -186,9 +211,7 @@ async function attemptStageAgent<T>(
     await guardWorkingTree(deps.execGit, options.cwd, before, writeGuardOf(options))
     const parsed = options.outputSchema.safeParse(result.value)
     if (parsed.success) {
-      deps.emit({ altitude: 'L1', type: 'done', agent: options.label, model, usage: result.usage })
-      settleSessionAttempt(options.runDir, spawnInput, ledgerAttempt, 'done')
-      return { value: parsed.data, usage: result.usage, attempts: attempt }
+      return settleSuccess(deps, options, spawnInput, ledgerAttempt, reporter, parsed, result.usage, attempt)
     }
     settleSessionAttempt(options.runDir, spawnInput, ledgerAttempt, 'killed')
     if (attempt >= MAX_VALIDATION_ATTEMPTS) {
