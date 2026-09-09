@@ -3,7 +3,6 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
-import { existsSync } from 'node:fs'
 import path from 'node:path'
 
 import type { SpawnFn } from '../../review-loop/src/agent-runner.js'
@@ -16,10 +15,10 @@ import { nodeAnalyzeFs } from './analyze-io.js'
 import { readOnlyGit } from './analyze-io.js'
 import { renderCorpusJson, renderCorpusReport } from './analyze-report.js'
 import { groundTruthJoin } from './analyze-truth.js'
+import { fullStateSummary, runCli } from './cli-summary.js'
 import type { ExecGitFn, RunnerConfig } from './config.js'
 import { resolveRunnerConfig } from './config.js'
-import { pipelineMachine } from './graph/pipeline.js'
-import { foldLog } from './kernel/fold.js'
+import { resolveAgentMcp } from './mcp-servers.js'
 import { foldRun, logPathOf } from './memo-project.js'
 import { createOpenSpecDriver } from './openspec-driver.js'
 import type { ExecFn } from './openspec-driver.js'
@@ -27,7 +26,7 @@ import { resumeRun } from './run-resume.js'
 import { stopRunOperator } from './run-stop.js'
 import type { OperatorStop } from './run-stop.js'
 import { startRun, statusRun } from './run.js'
-import type { RunDeps, RunStatus } from './run.js'
+import type { RunDeps } from './run.js'
 import { parseStartArgs } from './start-args.js'
 export { parseStartArgs } from './start-args.js'
 export type { StartArgs } from './start-args.js'
@@ -36,45 +35,6 @@ import { startBoardServer } from './serve/server.js'
 import type { BoardOptions } from './serve/server.js'
 import { oneSecondTick } from './work/gate-waiter.js'
 import { buildRunReport } from './work/report.js'
-
-export function runCli(argv: readonly string[]): string {
-  const runDir = argv[0]
-  if (runDir === undefined || runDir.length === 0) {
-    throw new Error('usage: afk-runner <runDir>')
-  }
-  const logPath = path.join(runDir, 'events.ndjson')
-  if (!existsSync(logPath)) {
-    throw new Error(
-      `events.ndjson not found: ${logPath} — pass 'start <taskFile>' to drive a run, 'resume <runId>' to attend a parked one, or 'status'/'report' to inspect`,
-    )
-  }
-  const { snapshot, accounting } = foldLog(pipelineMachine, logPath)
-  const value = typeof snapshot.value === 'string' ? snapshot.value : JSON.stringify(snapshot.value)
-  const lines: string[] = [
-    `value: ${value}`,
-    ...Object.entries(snapshot.context.stages).map(([stage, status]) => `${stage}: ${status}`),
-    `events: ${accounting.total} (mapped ${accounting.mapped}, tolerated ${accounting.tolerated})`,
-  ]
-  const summary = lines.join('\n')
-  console.log(summary)
-  return summary
-}
-
-/** The folded full-state summary the status command prints. */
-export function fullStateSummary(status: RunStatus): string {
-  const context = status.context
-  const lines: string[] = [
-    `value: ${status.position}`,
-    ...Object.entries(context.stages).map(([stage, stageStatus]) => `${stage}: ${stageStatus}`),
-    `depth: ${context.depth ?? 'unclassified'}`,
-    `round: ${context.round === null ? 'none' : `${context.round.current}/${context.round.cap}`}`,
-    `rounds recorded: ${context.perRound.length}`,
-    `last verdict: ${context.lastVerdict === null ? 'none' : `${context.lastVerdict.verdict} (${context.lastVerdict.counts.blocker}b ${context.lastVerdict.counts.material}m ${context.lastVerdict.counts.nitpick}n)`}`,
-    `gate: ${context.gate === null ? 'none' : `${context.gate.mode} v${context.gate.version}${context.gate.answered ? ' answered' : ' awaiting'}`}`,
-    `halted: ${status.parked}`,
-  ]
-  return lines.join('\n')
-}
 
 const EXEC_GIT: ExecGitFn = (cwd, args) => {
   const proc = Bun.spawnSync(['git', '-C', cwd, ...args], {
@@ -115,6 +75,21 @@ export function defaultCliDeps(config: RunnerConfig): CliDeps {
     // resume attends a gate-pending park in the foreground.
     gateWait: { tick: oneSecondTick },
   }
+}
+
+/**
+ * The verb-dispatch injection seam (afk-runner-agent-mcp D1): production
+ * passes nothing — the config ladder resolves and the real deps assemble
+ * inside `cliMain` — while tests inject the operator env record (the input
+ * the spawning verbs' MCP gate reads) and a deps set (config, spawn seam,
+ * execGit, driver), keeping the verb boundary exercisable hermetically: no
+ * real `opencode` spawn ever runs.
+ */
+export interface CliMainIo {
+  /** The operator env record; absent reads `process.env`. */
+  readonly env?: Record<string, string | undefined>
+  /** Fully-formed deps carrying their own config; absent resolves the ladder and assembles the real deps. */
+  readonly deps?: CliDeps
 }
 
 export async function runStartCommand(deps: RunDeps, args: readonly string[]): Promise<string> {
@@ -261,7 +236,7 @@ function printUsage(): void {
   )
 }
 
-export async function cliMain(argv: readonly string[]): Promise<string | undefined> {
+export async function cliMain(argv: readonly string[], io: CliMainIo = {}): Promise<string | undefined> {
   const [command, ...rest] = argv
   if (
     command === 'start' ||
@@ -273,7 +248,19 @@ export async function cliMain(argv: readonly string[]): Promise<string | undefin
     command === 'analyze' ||
     command === 'serve'
   ) {
-    const deps = defaultCliDeps(await resolveRunnerConfig(process.cwd()))
+    const env = io.env ?? process.env
+    const resolved = io.deps ?? defaultCliDeps(await resolveRunnerConfig(process.cwd(), env))
+    // The verb-time MCP gate (afk-runner-agent-mcp D1): only the verbs that
+    // can spawn agents or spend budget resolve the operator surface, and the
+    // refusal lands here — after the config ladder, before any run work,
+    // agent spawn, or budget spend. The non-spawning verbs skip the step
+    // entirely: env knobs are per-invocation and more volatile than the
+    // config file, and stop — the calm-stop channel for a live
+    // budget-burning run — must not be lost to an unrelated MCP typo.
+    const surface =
+      command === 'start' || command === 'resume' ? resolveAgentMcp(env, resolved.config.model) : undefined
+    const deps = surface === undefined ? resolved : { ...resolved, mcpSurface: surface }
+    for (const warning of surface?.warnings ?? []) console.error(`warning: ${warning}`)
     if (command === 'start') return runStartCommand(deps, rest)
     if (command === 'report') return runReportCommand(deps, rest)
     if (command === 'runs') return runRunsCommand(deps)

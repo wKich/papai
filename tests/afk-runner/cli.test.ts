@@ -4,12 +4,13 @@
 // See LICENSE in the project root for details.
 
 import { afterEach, describe, expect, it } from 'bun:test'
+import assert from 'node:assert'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { composeConfigContent } from '../../afk-runner/src/agent-config.js'
 import {
-  runCli,
   runResumeCommand,
   runRunsCommand,
   runServeCommand,
@@ -17,12 +18,14 @@ import {
   runStatusCommand,
   runAnalyzeCommand,
   cliMain,
-  fullStateSummary,
   parseStartArgs,
 } from '../../afk-runner/src/cli.js'
 import { resolveRunnerConfig } from '../../afk-runner/src/config.js'
 import { readEvents } from '../../afk-runner/src/events.js'
+import { mcpFor, resolveAgentMcp } from '../../afk-runner/src/mcp-servers.js'
+import type { RunDeps } from '../../afk-runner/src/run.js'
 import type { BoardHandle, BoardOptions } from '../../afk-runner/src/serve/server.js'
+import { assertEach, type Row } from '../utils/grouped-assertions.js'
 import { BLOCKER_ROUND, TASK_TEXT, makeFakePipeline } from './fixtures/fake-pipeline.js'
 
 /** The run id from a start-command summary's first line. */
@@ -93,26 +96,6 @@ function overrideCapHitBlocker(gateMd: string): void {
   fs.writeFileSync(gateMd, `${md}\nAPPROVE\n`)
 }
 
-const FIXTURE_RUN = path.join(import.meta.dir, 'fixtures', 'real', '2026-08-21T19-44-19-770Z-2f6e644a')
-
-describe('afk-runner cli', () => {
-  it('prints a folded state summary with mapped/tolerated accounting for a run dir', () => {
-    const summary = runCli([FIXTURE_RUN])
-    expect(summary).toContain('value: completed')
-    expect(summary).toContain('intake: done')
-    expect(summary).toContain('gate: done')
-    expect(summary).toContain('events: 886 (mapped 68, tolerated 818)')
-  })
-
-  it('exits with a usage error when no run dir is given', () => {
-    expect(() => runCli([])).toThrow('usage: afk-runner <runDir>')
-  })
-
-  it('exits with a clear error for a run dir without events.ndjson', () => {
-    expect(() => runCli([import.meta.dir])).toThrow('events.ndjson not found')
-  })
-})
-
 describe('afk-runner cli launch resolution (the config ladder reaches every verb)', () => {
   const makeRoot = (): string => fs.mkdtempSync(path.join(os.tmpdir(), 'sdd-cli-resolution-'))
   const roots: string[] = []
@@ -180,19 +163,6 @@ describe('afk-runner cli commands (fake agents)', () => {
     expect(summary).toContain('gate: final v1 answered')
     expect(summary).toContain('halted: final')
     expect(summary).toContain('report: afk-runner report add-thing')
-  })
-
-  it('fullStateSummary renders the gate-pending flavor from folded context', async () => {
-    const pipeline = makeFakePipeline({ sidecarOverrides: BLOCKER_ROUND })
-    const taskFile = path.join(pipeline.repoRoot, 'task.md')
-    fs.writeFileSync(taskFile, TASK_TEXT)
-    await runStartCommand(pipeline.deps, [taskFile])
-    const runId = firstRunOf(pipeline)
-    const { statusRun } = await import('../../afk-runner/src/run.js')
-    const status = await statusRun(pipeline.deps, runId)
-    const lines = fullStateSummary(status)
-    expect(lines).toContain('gate: early v1 awaiting')
-    expect(lines).toContain('halted: gate-pending')
   })
 
   it('resume re-enters an interrupted think-half run through the review self-loop', async () => {
@@ -352,11 +322,6 @@ describe('afk-runner cli attach policy (start parks, resume attends)', () => {
     expect(await ticksUntilFile(clock, path.join(runDir, 'gate-2.md'))).toBe(true)
     // the waiter holds for the v2 answer — Ctrl-C is the operator's exit
     void resumed
-  })
-
-  it('bare-arg miss error names the replacement verbs', () => {
-    expect(() => runCli([import.meta.dir])).toThrow('start <taskFile>')
-    expect(() => runCli([import.meta.dir])).toThrow('resume <runId>')
   })
 })
 
@@ -577,5 +542,154 @@ describe('afk-runner analyze command (read-only corpus report)', () => {
     }
     const usage = lines.join('\n')
     expect(usage).toContain('analyze [workdirs…] [--json]')
+  })
+})
+
+describe('afk-runner cli verb-time MCP gate (afk-runner-agent-mcp D1)', () => {
+  /** A base map one discriminator short of valid: refused naming the knob and the shape problem. */
+  const INVALID_ENV: Record<string, string | undefined> = {
+    AGENT_MCP_SERVERS: '{"notes":{"command":["uvx","mcp-notes"]}}',
+  }
+  /** The spec's valid declaration: one local server, one remote, and a reviewer narrowing entry. */
+  const VALID_ENV: Record<string, string | undefined> = {
+    AGENT_MCP_SERVERS: JSON.stringify({
+      notes: { type: 'local', command: ['uvx', 'mcp-notes'] },
+      search: { type: 'remote', url: 'https://mcp.example.test/search' },
+    }),
+    AGENT_MCP_ROLE_NARROWING: JSON.stringify({ reviewer: ['notes'] }),
+  }
+
+  /**
+   * An execGit that answers branch discovery (report's commits line needs a
+   * branch; the fake pipeline's default execGit yields none).
+   */
+  const branchYieldingExecGit: RunDeps['execGit'] = (_cwd, args) =>
+    Promise.resolve({ stdout: args.includes('branch') ? 'main\n' : '', stderr: '' })
+
+  /** A spawn seam that records each spawn's composed child env by output basename, delegating to the inner fake. */
+  const envCapturingSpawn = (
+    inner: RunDeps['spawn'],
+    childEnvByBasename: Record<string, Record<string, string>>,
+  ): RunDeps['spawn'] => {
+    const spawn: RunDeps['spawn'] = (command, args, options, onLine) => {
+      const prompt = String(args[args.length - 1])
+      const basename = prompt.match(/\.review-loop\/([\w-]+\.json)/u)?.[1] ?? 'unknown.json'
+      if (options.env !== undefined) childEnvByBasename[basename] = options.env
+      return inner(command, args, options, onLine)
+    }
+    return spawn
+  }
+
+  it('an invalid AGENT_MCP_SERVERS fails start before any spawn or spend, naming the offending key', async () => {
+    const pipeline = makeFakePipeline()
+    const taskFile = path.join(pipeline.repoRoot, 'task.md')
+    fs.writeFileSync(taskFile, TASK_TEXT)
+    let spawns = 0
+    const deps: RunDeps = {
+      ...pipeline.deps,
+      spawn: (command, args, options, onLine) => {
+        spawns += 1
+        return pipeline.deps.spawn(command, args, options, onLine)
+      },
+    }
+
+    await expect(cliMain(['start', taskFile], { env: INVALID_ENV, deps })).rejects.toThrow(/AGENT_MCP_SERVERS/u)
+    await expect(cliMain(['start', taskFile], { env: INVALID_ENV, deps })).rejects.toThrow(/valid MCP server map/u)
+
+    // before any run work: no spawn ran and no run directory was created
+    expect(spawns).toBe(0)
+    expect(fs.existsSync(path.join(pipeline.workDir, 'runs'))).toBe(false)
+  })
+
+  it('the same invalid knob fails resume the same way — before the run is even read', async () => {
+    const pipeline = makeFakePipeline()
+    // a ghost run id: without the gate, resume would fail on the missing run
+    // instead — so this pins the refusal's order, not just its existence
+    await expect(cliMain(['resume', 'ghost-run'], { env: INVALID_ENV, deps: pipeline.deps })).rejects.toThrow(
+      /AGENT_MCP_SERVERS/u,
+    )
+  })
+
+  it('the same invalid knob leaves every non-spawning verb ungated', async () => {
+    const pipeline = makeFakePipeline()
+    const taskFile = path.join(pipeline.repoRoot, 'task.md')
+    fs.writeFileSync(taskFile, TASK_TEXT)
+    const started = await runStartCommand(pipeline.deps, [taskFile])
+    const runId = runIdOf(started)
+    const deps: RunDeps = { ...pipeline.deps, execGit: branchYieldingExecGit }
+
+    const rows: readonly Row<{ readonly argv: readonly string[]; readonly flavor: string }>[] = [
+      { label: 'runs prints the roster', argv: ['runs'], flavor: 'totals: 1 runs' },
+      { label: 'analyze prints the corpus report', argv: ['analyze'], flavor: '## corpus' },
+      { label: 'status prints the folded full-state summary', argv: ['status', runId], flavor: 'halted: final' },
+      { label: 'report prints the run report', argv: ['report', runId], flavor: `run: ${runId}` },
+    ]
+    await assertEach(rows, async (row) => {
+      const out = await cliMain(row.argv, { env: INVALID_ENV, deps })
+      expect(out).toContain(row.flavor)
+    })
+
+    // serve reaches its own argument parsing — the MCP gate never ran
+    await expect(cliMain(['serve', '--por', '1'], { env: INVALID_ENV, deps })).rejects.toThrow(
+      /usage: afk-runner serve/u,
+    )
+  })
+
+  it('a bare model beside the credential pair proceeds, warning on the ignored keys and never their values', async () => {
+    const pipeline = makeFakePipeline()
+    const taskFile = path.join(pipeline.repoRoot, 'task.md')
+    fs.writeFileSync(taskFile, TASK_TEXT)
+    const stderrLines: string[] = []
+    const original = console.error
+    console.error = (line: string): void => {
+      stderrLines.push(line)
+    }
+    try {
+      const summary = await cliMain(['start', taskFile], {
+        env: {
+          AGENT_MCP_SERVERS: VALID_ENV['AGENT_MCP_SERVERS'],
+          LLM_API_KEY: 'sk-warn-4b7e91',
+          LLM_BASE_URL: 'https://llm-warn.example.test/v1',
+        },
+        deps: pipeline.deps,
+      })
+      expect(summary).toContain('halted: final')
+    } finally {
+      console.error = original
+    }
+    const warnings = stderrLines.join('\n')
+    expect(warnings).toContain('LLM_API_KEY')
+    expect(warnings).toContain('LLM_BASE_URL')
+    expect(warnings).not.toContain('sk-warn-4b7e91')
+    expect(warnings).not.toContain('llm-warn.example.test')
+  })
+
+  it('a valid surface on start reaches the spawned child env end to end (hermetic spawn seam)', async () => {
+    const pipeline = makeFakePipeline()
+    const taskFile = path.join(pipeline.repoRoot, 'task.md')
+    fs.writeFileSync(taskFile, TASK_TEXT)
+    const childEnvByBasename: Record<string, Record<string, string>> = {}
+    const deps: RunDeps = { ...pipeline.deps, spawn: envCapturingSpawn(pipeline.deps.spawn, childEnvByBasename) }
+
+    const summary = await cliMain(['start', taskFile], { env: VALID_ENV, deps })
+
+    expect(summary).toContain('halted: final')
+    // every stage spawn carried a composed replacement env, carriers stripped
+    expect(Object.keys(childEnvByBasename)).toHaveLength(pipeline.spawnOrder.length)
+    for (const childEnv of Object.values(childEnvByBasename)) {
+      expect(childEnv['OPENCODE_CONFIG_CONTENT']).toBeTypeOf('string')
+      for (const carrier of ['AGENT_MCP_SERVERS', 'AGENT_MCP_ROLE_NARROWING', 'LLM_API_KEY', 'LLM_BASE_URL']) {
+        expect(Object.hasOwn(childEnv, carrier)).toBe(false)
+      }
+    }
+    // the reviewer spawn's content is the narrowed composition; the estimator's carries the full base
+    const surface = resolveAgentMcp(VALID_ENV, 'test-model')
+    assert(surface !== undefined)
+    expect(childEnvByBasename['findings-1.json']?.['OPENCODE_CONFIG_CONTENT']).toBe(
+      composeConfigContent('test-model', surface, mcpFor(surface, 'reviewer')),
+    )
+    expect(childEnvByBasename['depth.json']?.['OPENCODE_CONFIG_CONTENT']).toBe(
+      composeConfigContent('test-model', surface, mcpFor(surface, 'estimator')),
+    )
   })
 })
