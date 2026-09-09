@@ -5,6 +5,164 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.14.7] - 2026-09-09
+
+### Added
+
+- **afk-runner:** Deliver walk-robustness + walk-item-green-decomposition — the U13 queue head lands both changes: implement's missing-tasks.md read-catch escalates as StageHaltError{precondition} with the restoration resume hint mirroring runAtomicity's exact shape (F-P3, extracted readTaskItems/pickTargetOf — behavior identical, the crash-the-holder seam is gone), the production check seam carries the compiled 30-minute EXEC_CHECK_WALL_CAP_MS with Bun.spawnSync timeout and a 'check exceeded wall cap (1800000 ms)' stderr marker so a hung suite check routes red honestly and fix context attributes the hang (F-U3), and the agent bash git-verb blocklist widens to reset/rm/switch/checkout-every-form plus branch-creation-only via five new .hooks/git/checks modules wired into pre-bash.mjs — flagged git branch forms (-a/-d/--list) stay allowed (F-P4); the walk-granularity contract (F-P2 Option A) pins both tail prompts — buildDecomposerPrompt states one task = one complete red→green cycle with test+impl in the same task, buildAtomicityPrompt's verification line reworded from 'ends with its verification command' to 'independently green' so no sentence licenses a test-only item, the check side untouched as the design's fixed point; tests red-first across tests/afk-runner/work + tests/opencode-tdd-enforcement, docs updated (afk-runner.md execution + tail sections, commands.md write-protections line), both tasks.md complete except the owed 6.1 live drill (next armed cycle)
+- **afk-runner:** Board section 1 — the pure fold→view projection — RunView/PortfolioView attention sort (gate-pending → running → finished), armed walk progress line naming retries, tokens-first spend with honest cost bounds, run-detail projection (position, per-round raised/open, task walk, bounded events, read-only gate pointer), empty/torn-tail cases folding to valid views; fs shells split to serve/load.ts riding run-index memos + readEvents tolerance; tests red-first in serve-view-model.test.ts
+- **afk-runner:** Board section 2 — the read-only fs seam + change sweep — ServeFs exposing only readFile/readdir/stat with the type-level write-members-absent pin (analyze-seam construction), sweepRuns as the pure scan-runs-to-changed-ids function over (size, mtimeMs) fingerprints with roster growth/shrink counted as changes, torn tails staying readEvents' business; tests red-first in serve/fs-seam.test.ts + serve/sweep.test.ts
+- **afk-runner:** Board section 3 — the serve verb — Bun.serve HTTP surface with token gate on every route (query/bearer), GET / static page + /api/portfolio + /api/runs/:id + /events SSE (snapshot on connect, full snapshot per detected change, keepalive pings riding the sweep so idle EventSource connections outlive Bun's 10s idleTimeout), loopback default bind, boot-generated token printed once as the ready URL; parseServeArgs + runServeCommand routing through resolveRunnerConfig (file-declared workDir honored) + usage line; phone-first static page (vanilla JS + EventSource, no build step); read-only proof: served corpus byte-unchanged beyond the live appends themselves; tests red-first in serve/{args,server}.test.ts + cli.test.ts ladder/inventory additions
+- **afk-runner:** Board section 4 — verification + docs — docs/architecture/afk-runner.md gains the web-board section (surface, auth, read-only doctrine, SSE/sweep semantics, the projection as the reusable subscriber seam) and the serve/ module layout entry; tasks.md 4.x checked off with the nested-mirror test-layout note (TDD test-resolver pairing); full battery green: test:affected, full suite (one load-induced implement-module timeout re-run file-by-file green), lint, typecheck (root + workspace), bun security, format:check
+- **review-loop:** Capture stage-agent todo snapshots through a todos reporter hook
+- **afk-runner:** Declare the L0 agent_todos noise event in the schema union
+- **afk-runner:** Map the todos hook to bounded, deduped agent_todos emissions
+- **afk-runner:** Deliver walk-item-green-decomposition 6.1 — the F-P2 live drill passes with zero operator re-targets (drill run W, 2026-09-08, unmetered glm-5.3 over base 72a8ed4c8 on task pick #417 bugs 1-3: the decomposer's 13-item plan carries zero test-only items and zero test/impl splits — every code item bundles its reproducing tests with its implementation and the implementers' own commit texts articulate the granularity ('one cycle, not separate tasks'), so design D2's wake trigger does not fire; the walk completed 13/13 through their own per-item checks with zero task failed and zero escalation gates — the C9 contrast is six operator gates on Run P and eleven on Run U against two here — and the complete operator-write ledger is two gate APPROVEs, the pre-registered induced mv + restore, and three resume invocations; verify-1 green first time (18,023 tests), release v2 settled verb-only with the D7 exit-then-answer ordering; harvest: lane walk-item-green-live (2,841 events, $17.15 nominal) under the extended oracle — roster x6, per-lane fold≡memo with the tasks projection, the drill-shape assertions (armed birth, mover-first approve, answer-last release with no implement mover, 13 done/15 started/0 failed, zero escalation presentations, exactly one wall-cap exhaustion whose under-budget re-run continued the killed session id — the F-A4 shape wall-cap flavored — and exactly one stage-rebuild implement resume) plus the thrash drill pin (round-3 convergence concerns field, the pre-registered opportunistic (d) landed: no verification round bought, Concern history rendered at the final gate); finding F-W1 recorded and routed to afk-runner-walk-robustness task 6.1 — the induced F-P3 attempt crashed the holder at commitTaskSlice's commit-time tasks.md read (slice-commit.ts:36, outside the guard's wrap), recovered by restore + resume with no state faked, disposition record+route per the operator; ledger re-score in notes.md: U1/U4/U8 hold, U2 park with the closest-approach observation (independent platform groups over a 3.8h serialized walk), no trigger fired so the afk-runner.md ledger paragraph is unchanged; notes.md carries the pre-registration (operator sign-off 2026-09-08 incl. the base-commit deviation — master lacks the fix under test), the append-only working record with event cites, and the adjudication; pre-flight F-U3/F-P4/C<n> not-arisen recorded; product strict-valid in the target (13 slice commits on walk-drill-target, openspec validate --strict green); full serial suite 18025 pass 0 fail after the oracle edit, typecheck/lint/format:check green)
+- **afk-runner:** Project agent todos into run detail — last snapshot per agent, most-recent first (agent-todos-board 1.1/1.2, TDD: board-todos D1 backwards scan over the already-loaded events; no fold change, no new read; RunDetailView.todos is empty for logs without agent_todos events)
+- **afk-runner:** Exclude agent_todos from the recent-events feed before the bound — filter-then-slice keeps the feed full during todo bursts (agent-todos-board 2.1/2.2, TDD: board-todos D2; tool_use/step_finish/spawned keep their feed treatment)
+- **afk-runner:** Board renders the agent todos panel and keeps the open detail live — agent-emitted caption, glyph lines (✓/→/·), muted snapshot age, no panel when empty; SSE snapshots re-fetch the open detail through openDetail throttled to one in-flight fetch with a trailing edge (agent-todos-board 3.1/3.2, board-todos D4/D5/D6 + web-board D3; verified against a served fixture work dir)
+- **agent:** Implement issue #417 — step 1/21: 1.1 Red test in `tests/completion/verified-completion.test.ts` (DI `invo
+- **agent:** Implement issue #417 — step 2/21: 1.2 Implement the rule in `buildVerifiedCompletion` (`src/completion/ver
+- **agent:** Implement issue #417 — step 3/21: 1.3 Call-path assertions in `tests/llm-orchestrator-send.test.ts` and `t
+- **agent:** Implement issue #417 — step 4/21: 1.4 Bug 1 MR gate: `bun run test:affected`, then `bun run test:mutate:ch
+- **agent:** Implement issue #417 — step 5/21: 2.1 Red test in `tests/completion/verified-completion.test.ts`: `Verifie
+- **agent:** Implement issue #417 — step 6/21: 2.2 Red test in `tests/debug/schemas.test.ts` (`schemaValidates()`): `Ll
+- **agent:** Implement issue #417 — step 7/21: 2.3 Red test in `tests/debug/llm-trace-collector.test.ts`: a follow-up `
+- **agent:** Implement issue #417 — step 8/21: 2.4 Implement: `verifierOutcome` on `VerifiedCompletion` (`src/completio
+- **agent:** Implement issue #417 — step 9/21: 2.5 Wire the call sites: thread `turnId` from `src/llm-orchestrator-supp
+- **agent:** Implement issue #417 — step 10/21: 2.6 Bug 2 MR gate: `bun run test:affected`, then `bun run test:mutate:ch
+- **agent:** Implement issue #417 — step 11/21: 3.1 Red test in new `tests/chat/telegram/chunking.test.ts` (mirroring `t
+- **agent:** Implement issue #417 — step 12/21: 3.2 Implement `chunkForTelegram(text, maxLen)` in new `src/chat/telegram
+- **agent:** Implement issue #417 — step 13/21: 3.3 Red tests in `tests/chat/telegram/reply-helpers.test.ts` and `tests/
+- **agent:** Implement issue #417 — step 14/21: 3.4 Implement chunked sends: entity-windowing helper alongside the split
+- **agent:** Implement issue #417 — step 15/21: 3.5 If `tests/stories/chat/telegram-reply-fn.story.test.ts` pins single-
+- **agent:** Implement issue #417 — step 16/21: 3.6 Bug 3 MR gate: `bun run test:affected`, then `bun run test:mutate:ch
+- **agent:** Implement issue #417 — step 17/21: 4.1 Red tests in `tests/message-embedding-sweep.test.ts`: `SweepDeps` ga
+- **agent:** Implement issue #417 — step 18/21: 4.2 Implement in `src/message-embedding-sweep.ts`: provider error-class
+- **agent:** Implement issue #417 — step 19/21: 4.3 Bug 4 MR gate: `bun run test:affected`, then `bun run test:mutate:ch
+- **agent:** Implement issue #417 — step 20/21: 5.1 Update `docs/architecture/behaviors.md`: the verified-completion bul
+- **agent:** Implement issue #417 — step 21/21: 5.2 Final gate over the whole change: `bun run test` && `bun run typeche
+- **agent:** Implement issue #418 — step 1/18: 1.1 Write failing schema-level tests beside the existing condition-schem
+- **agent:** Implement issue #418 — step 2/18: 1.2 Implement `alertConditionInputSchema` (object union ∪ `z.string()`,
+- **agent:** Implement issue #418 — step 3/18: 1.3 Write failing tool-bridge tests through `getToolExecutor()` on `make
+- **agent:** Implement issue #418 — step 4/18: 1.4 Wire `alertConditionInputSchema` into `makeCreateAlertTool` and `mak
+- **agent:** Implement issue #418 — step 5/18: 1.5 Add string-form gating cases: stringified activity condition refused
+- **agent:** Implement issue #418 — step 6/18: 1.6 MR gate: `bun run test tests/deferred-prompts tests/tools` then `bun
+- **agent:** Implement issue #418 — step 7/18: 2.1 Create failing `tests/plugins/task-provider-github/activities.test.t
+- **agent:** Implement issue #418 — step 8/18: 2.2 Implement the merge in `plugins/task-provider-github/operations/acti
+- **agent:** Implement issue #418 — step 9/18: 2.3 MR gate: `bun run test tests/plugins/task-provider-github` then `bun
+- **agent:** Implement issue #418 — step 10/18: 3.1 Write failing poller tests in `tests/deferred-prompts/poller-alerts*
+- **agent:** Implement issue #418 — step 11/18: 3.2 Implement the guard in the filter branch of `collectFieldFirings` (`
+- **agent:** Implement issue #418 — step 12/18: 3.3 Add verification-only close tests: a per-task watch observes a GitHu
+- **agent:** Implement issue #418 — step 13/18: 3.4 MR gate: `bun run test tests/deferred-prompts tests/plugins/task-pro
+- **agent:** Implement issue #418 — step 14/18: 4.1 Update `docs/architecture/tools.md`: `create_alert`/`update_reminder
+- **agent:** Implement issue #418 — step 15/18: 4.2 Update `docs/architecture/behaviors.md`: filter alerts baseline on t
+- **agent:** Implement issue #418 — step 16/18: 5.1 Create per-issue comment alerts for #417/#401/#397/#400 and a `task.
+- **agent:** Implement issue #418 — step 17/18: 5.2 Verify one real comment on a watched issue delivers within one poll
+- **agent:** Implement issue #418 — step 18/18: 6.1 Run the full suite and checks — `bun run test`, `bun run typecheck`,
+- **afk-runner:** Board tool reports — honest delta spend, tiered feed, history pagination, per-stage accounting (afk-runner-board-tool-reports 1.1–6.2)
+- **afk-runner:** Task records carry item text and todos_missing joins the tolerated vocabulary (afk-runner-task-todos 1.1-1.2)
+- **afk-runner:** Started events stamp the item text; implementer prompts mandate the todo tool (afk-runner-task-todos 2.1-2.2)
+- **afk-runner:** Zero-snapshot implementer spawns emit one todos_missing mark (afk-runner-task-todos 3.1-3.2)
+- **afk-runner:** Memo tasks projection carries item text additively (afk-runner-task-todos 4.1)
+- **afk-runner:** Board walk text, feed detail, and no-todos panel note (afk-runner-task-todos 5.1-5.2)
+
+### Changed
+
+- **afk-runner:** Move the board projection suite to the nested test mirror (tests/afk-runner/serve/view-model.test.ts) — the TDD test-resolver pairs afk-runner/src/serve/X.ts with tests/afk-runner/serve/X.test.ts, so the mutation gate finds its companion
+- **sweep:** Replace hand-rolled defaultSleep timer with Bun.sleep
+
+### Documentation
+
+- **afk-runner:** Record the agent_todos L0 telemetry in layout and tolerance taxonomy
+- **review-loop:** Record the todos reporter hook in the workspace doc
+- **openspec:** Settle agent-todos-board's open threads (freshness, feed semantics)
+- **openspec:** Author agent-todos-board tasks
+- **afk-runner:** Web-board section records the agent todos panel, the live detail re-fetch, and the feed exclusion (agent-todos-board 4.1/4.2; full suite 18024 pass, mutation gate seeded run-detail.ts at 0.6667)
+- **openspec:** Pre-register the afk-runner-agent-mcp live drill — n=5 armed dogfood cycle off this research's §5 outline (operator sign-off 2026-09-08: budget 20 metered + deadline 240 armed for the U2 wall-vs-clock decision, config-surface decision left open as U6/U10 bait, notes homed here; drills: dead-server probe + invalid-config refusal post-walk; target base gated on PR #427 so the F-P3/F-U3/F-P4 guards are live in the walk)
+- **openspec:** Draft artifacts for response-delivery-path-fixes
+- **openspec:** Draft artifacts for instant-issue-activity-alerts
+- **afk-runner:** Walk started detail, todo mandate + mark, board text + panel note (afk-runner-task-todos 6.1)
+- **mutation:** Dependency bumps can invalidate floors — zod 4.5 Killed→RuntimeError flip, delete-then-seed remedy
+- **afk-runner:** Close out the afk-runner-agent-mcp live cycle — the n=5 re-score (no trigger fired: U2's closest approach confirmed, 5 disjoint streams walked serially at 402 m vs the armed 240 deadline while the gate-wait clock never decided anything; U6 4th conflict-free cycle on the deliberately-open config surface; U10 second all-gap absence; D2 held on the first design-shaped walk), both registered drills PASS (invalid-config refusal names the knob before any run work, presentation-polish finding recorded; dead-server probe emits bounded mcp names with no hang), the resolver misbehavior triad adjudicated (sibling-folder writes crashing the holder, config workDir retarget plus 3 scratch runs — the write guard never sees gitignored .afk-runner/, a D6-doctrine near-miss for the follow-up lane), working record with event cites appended to the research change notes
+
+### Fixed
+
+- **opencode-agent:** Align the direct commitAll test with master's environment-carried identity — the branch-added scripted mock expected the retired '-c user.name/user.email' argv stamps while master's git.ts carries GIT_AUTHOR_*/GIT_COMMITTER_* on every git child, so the mock answers the plain 'commit -m' call and the assertion pins the new sequence
+- **afk-runner:** CommitTaskSlice escalates an unreadable commit-time tasks.md as StageHaltError{precondition} with the restoration resume hint — the read was outside the F-P3 guard's wrap, so a missing folder crashed the holder crash-shaped with the item already marked done (walk-robustness 6.1, the F-W1 finding from the walk-item-green-decomposition drill; red-first: missing-file and EISDIR shapes pinned, no git call before the guard)
+- **telegram:** Propagate total chunk-send failure so deferred prompts stay due
+- **embedding-sweep:** Per-context dead-letter counts so full failing batches reach the retire thresh
+- **debug:** Bound verifiedTraces registry globally, not just per user
+- **chat:** Clamp chunkForTelegram maxLen to >= 1 so the splitter always advances
+- **afk-runner:** Keep KernelMachine concrete under xstate >=5.28 constraint instantiation
+- **deferred-prompts:** Baseline filter alerts once per alert life, not per empty episode
+- **deferred-prompts:** Reset lastTriggeredAt on alert condition edit so the edited alert re-baseline
+- **deferred-prompts:** Baseline fresh filter alerts on the first poll cycle even when the tracker is
+- **agent:** Repair CI for issue #418
+
+### Miscellaneous
+
+- **openspec:** Rename the drill's task change folder to afk-runner-launch-config ahead of delivery (Run U's target product — the launch configuration ladder)
+- **openspec:** Archive execution-half-on-graph — U3's deltas merged into current truth: new capability home openspec/specs/afk-runner-execution/ created from the delta's Purpose + eight requirements (arming is log truth, sequential task walk, implementer write guard, verify boundary with bounded fix loop, release gate ends execution, additive events, resume and crash windows, conformance); six homes carry the MODIFIED truths — cli's verb table gains --execute with its arming scenario, kernel's golden replay parity scopes comparison to the legacy vocabulary with execution stages pending, output's report/memo requirements carry the execution facts block and the tasks projection, pipeline's stage sequence and gate disclosure name the armed continuation into implement/verify/release, runs' status rendering gains exec:<stage> d/total, tail's outcome-ordered settlement carries the armed approve ordering (exit → implement mover → answer); openspec validate --specs --strict 36/36 green
+- **mutation:** Ratchet baseline
+- **openspec:** Archive afk-runner-launch-config — Run U's target product delivered: the launch configuration ladder lands with its deltas merged into current truth (afk-runner-cli gains Launch configuration resolution + Standing default work dir is ignore-covered and the command-doc pin widened to the .opencode twin and the configuration prose; sdd-runner-config gains Config file is the authoritative launch surface with the file-over-environment-over-defaults precedence and the rejection-reaches-launch-path guarantee); openspec validate --specs --strict 36/36 green
+- **openspec:** Rename the drill's task change folder to mutation-gate-opencode-agent ahead of delivery (Run P's target product — the hooks TDD resolver + mutation-gate widening for the coding-agent workspace)
+- **openspec:** Archive mutation-gate-opencode-agent — Run P's target product delivered: the mutation-gate deltas merged into current truth (mutation-gate gains four requirements — coding-agent workspace product code is gated, source-test mapping covers the workspace, newly covered files are floored before their first gated change, and the shell check's workspace enumeration routes gated source trees with the plugins/afk-runner divergence recorded as pre-existing); the baseline union re-seed rides the merge commit (+147 opencode-agent floors, 0 changed from master); openspec validate --specs --strict 36/36 green
+- **mutation:** Ratchet baseline
+- **mutation:** Ratchet baseline
+- **openspec:** Afk-runner-u13-audit — the post-plan e2e weak-point audit delivers (U13, zero spawns): both probes adjudicated from the retained corpus (gap-fingerprint clustering over the 9 sidecar-carrying workdir runs — 71 findings, ~68 clusters, 1 persisting resolved-by-edits, zero 'assumed' resolutions, veto/extend counter-tracking domain novelty → U10 falls with its falsifiable trigger; aborted sunk-spend — zero terminal aborts in the live era's 12 runs, the one stranded-value case is sdd-runner-era n=1 → U11 falls), all eight deliberate deltas stressed with no evidence of hurt (the C<n> sweep finds zero synthesized findings corpus-wide, so the consistency-vocabulary widening stays gated), the C9 corpus baseline re-verified byte-stable over the surviving workdirs, and the U-ledger in docs/architecture/afk-runner.md re-scored from measurements with exactly zero 'next' rows remaining — the queue's head is the two follow-up proposals this audit files; evidence in openspec/changes/afk-runner-u13-audit/{notes,reflection}.md + corpus-report.json
+- **openspec:** Propose walk-item-green-decomposition — F-P2 decided Option A at the U13 audit: both C9 decomposers split red-first test/impl pairs independently (a prompt-shaped cause — buildDecomposerPrompt carried no granularity guidance and atomicity's verification-command line licensed the split), the walk's per-item affected check structurally demands green (run-check.ts's between-slice-commits invariant), and the operator's own C9 escape hatches were pair-merges — so the change pins the walk-granularity contract in both tail prompts (one item = one complete red-to-green cycle; no test-only items) with red-first prompt-builder tests, leaving the check side untouched as the design's fixed point and owing the armed red-first-prone drill as its live verification; check tolerance (Option B) rejected on mechanism — exit codes cannot attribute declared-red, red slice commits break the between-commits-green invariant verify routing rests on, and tolerance does not contain the uncommitted-red poison cascade
+- **openspec:** Propose afk-runner-walk-robustness — F-P3/F-P4/F-U3 dispositioned as one change (the C9 unguarded-seam class fixtures cannot see): implement's missing-tasks.md read-catch escalates as StageHaltError{precondition} mirroring atomicity's exact shape instead of crashing the holder, the production check seam gains a compiled 30-minute wall cap (the spawn-side precedent) with a cap-naming stderr marker so a hung suite check routes red honestly instead of hanging the walk six hours, and the agent bash git-verb blocklist widens beyond stash/discard to reset/rm/switch/checkout and branch-creation forms under the new agent-git-verb-guard capability (the C9 rampage was reflog-recovered operator surgery); tasks red-first across tests/afk-runner/work and tests/opencode-tdd-enforcement.test.ts, both changes validate --strict
+- **openspec:** Afk-runner-web-board — sections 1–2 checked off (view projection, fs seam + sweep)
+- **openspec:** Check off the agent-todos-capture live confirmation pass
+- **openspec:** Record the close-out incident in walk-item-green-decomposition notes — a parallel session's scratch-run cleanup reverted the drill's uncommitted harvest edits in the shared worktree mid-close-out (the drill source in the target and the untracked notes.md survived); everything was re-applied byte-identically, the serial suite re-run green on the re-applied tree (18025 pass 0 fail, the prior report honestly flagged STALE), and the evidence committed as 18696527f — lesson recorded: commit harvested evidence before tending anything else on a worktree another session can reach
+- **openspec:** Archive walk-item-green-decomposition — Run W (2026-09-08) delivered the owed live verification (task 6.1): the armed drill on the red-first-prone #417 bugs 1-3 pick ran unmetered glm-5.3 over base 72a8ed4c8 and proved both halves of the fix — the decomposer emitted 13/13 green-per-item tasks (zero test-only items, zero test/impl splits; D2's wake trigger did not fire) and the walk completed every item through its own checks with zero operator re-targets (two gate APPROVEs, the pre-registered induced mv + restore, three resumes — nothing else), zero task-failed and zero escalation gates against C9's six-and-eleven, verify-1 green first time (18023 tests), release settled verb-only D7; the lane walk-item-green-live (2841 events, $17.15 nominal) rides the extended oracle and the ledger re-score moved nothing (no trigger fired — U1/U4/U8 hold, U2 parks with the closest-approach observation); finding F-W1 (commitTaskSlice's commit-time tasks.md read outside the F-P3 guard) recorded with event cites and routed to afk-runner-walk-robustness task 6.1; deltas merged into current truth — afk-runner-tail gains the Walk-safe task granularity requirement (prompt-carries-contract, no-test-only-licensing, check-side-unchanged scenarios), specs 36/36 strict-green
+- **openspec:** Complete the walk-item-green-decomposition archive move — the archive commit recorded the destination copies but not the source-path deletions (the mv's unstaged removals); this records the source side so the change exists only under openspec/changes/archive/2026-09-08-walk-item-green-decomposition
+- **openspec:** Archive afk-runner-web-board; restructure agent-todos-board as a normal modification
+- **openspec:** Agent-todos-board 4.3 live confirmation green — task-scratch-2 served: both drafters' last snapshots with visible ages, feed excludes todo events, corpus byte-unchanged across open sweeps, afk-runner status shape unchanged
+- **openspec:** Scaffold response-delivery-path-fixes
+- **mutation:** Ratchet baseline
+- **mutation:** Ratchet baseline
+- **openspec:** Scaffold instant-issue-activity-alerts
+- **mutation:** Ratchet baseline
+- **mutation:** Ratchet baseline
+- **mutation:** Ratchet baseline
+- **mutation:** Ratchet baseline
+- **mutation:** Ratchet baseline — re-base event-schemas floor on the zod 4.5 measurement basis
+- **mutation:** Ratchet baseline
+- **mutation:** Ratchet baseline
+
+### Styling
+
+- Oxfmt tests/afk-runner/config.test.ts (the drill-era file predates the oxfmt surface CI checks repo-wide)
+
+### Testing
+
+- **afk-runner:** Pin agent_todos fold tolerance in both folds
+- **review-loop:** Pin the opencodeEnv refusal message exactly — the loose /opencodeEnv/u regex left the message's three string mutants alive (the joined key-list separator and both prose segments), dropping agent-command.ts to 126 kills / 0.8400 against the recorded 127 / 0.8523 floor and failing the PR #432 mutation gate as a true regression; the exact-message toThrow (error-object form is exact equality) kills all three, re-measured 129 kills / 0.86
+
+### Afk-runner-service
+
+- Phase 0 gate attendance metric + corpus evidence
+- Phase 1 central-store contract (config pins + repoRoot attribution)
+- Phase 1 dogfood (two live worktrees on the shared store) + docs
+- Final sweep — 13/13 tasks complete
+
+### Ci
+
+- Bump the github-actions group with 3 updates
+
+### Deps
+
+- Bump the bun-dependencies group with 17 updates
+
+### Task
+
+- Partial config-surface work — operator hand-commit resetting the affected baseline (the F-P2 poisoning cascade: every failed item's red test rode the tree and failed every later check)
+- The config-surface implementation — operator surgical completion (8.1-8.4: DEFAULT_* constants + resolveRunnerConfig ladder, the pure defaultCliDeps assembler + cliMain resolution, the CLI resolution tests, agent-seam signature, docs twins + pin) — afk-runner suite 1099 green
+- 8.5 — the serial-mode cwd leak fixed (the resolution tests restore the original cwd, not import.meta.dir — the serial process shares one cwd across files)
+- The config matrix's conditional hoisted (no-conditional-in-test — the verify lint leg's real red)
+- Slices 1.2-2.3 staged work — operator hand-commit resetting the affected baseline after F-P1 (silent slice-commit failure) and F-P2 (red-first poisoning); red-first pairs merged in tasks.md per the structural re-target
 ## [6.14.6] - 2026-09-06
 
 ### Added
