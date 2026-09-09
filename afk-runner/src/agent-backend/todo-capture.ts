@@ -6,22 +6,22 @@
 import type { TodoItem } from './progress-log.js'
 
 /**
- * Todo-tool recognition (agent-todos-capture D2): opencode's `todowrite` and
- * claude's `TodoWrite`. `todoread` (read-only) never matches, and an unknown
- * tool degrades to today's bare marker — silence, not corruption.
+ * Todo-tool recognition (agent-todos-capture D2): opencode's `todowrite`.
+ * `todoread` (read-only) never matches, and an unknown tool degrades to
+ * today's bare marker — silence, not corruption.
  */
-export const TODO_TOOLS: ReadonlySet<string> = new Set(['todowrite', 'TodoWrite'])
+export const TODO_TOOLS: ReadonlySet<string> = new Set(['todowrite'])
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
 /**
- * Backend normalization at the decoder boundary (D2): both backends' inputs —
- * opencode `{content, status, priority}`, claude `{content, status,
- * activeForm}` — reduce to `{content, status}` before the hook fires.
- * Agent-internal fields are dropped; items without string content are skipped.
- * Returns null when the input carries no todos array at all.
+ * Normalization at the decoder boundary (D2): the opencode input —
+ * `{content, status, priority}` — reduces to `{content, status}` before the
+ * hook fires. Agent-internal fields are dropped; items without string
+ * content are skipped. Returns null when the input carries no todos array
+ * at all.
  */
 export function normalizeTodoItems(input: unknown): readonly TodoItem[] | null {
   if (!isObject(input)) return null

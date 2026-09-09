@@ -3,7 +3,7 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
-import type { SpawnFn } from '../../../review-loop/src/agent-runner.js'
+import type { SpawnFn } from '../../../afk-runner/src/agent-backend/agent-runner.js'
 import { autonomyOf } from '../config.js'
 import type { ExecGitFn, RunnerConfig } from '../config.js'
 import type { SddEvent } from '../events.js'

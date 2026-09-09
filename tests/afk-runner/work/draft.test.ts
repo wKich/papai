@@ -8,14 +8,14 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { agentWritePath } from '../../../afk-runner/src/agent-backend/agent-runner.js'
+import type { SpawnFn } from '../../../afk-runner/src/agent-backend/agent-runner.js'
 import type { RunnerConfig } from '../../../afk-runner/src/config.js'
 import { StageHaltError } from '../../../afk-runner/src/errors.js'
 import { createOpenSpecDriver } from '../../../afk-runner/src/openspec-driver.js'
 import type { ExecFn } from '../../../afk-runner/src/openspec-driver.js'
 import { draftArtifacts, runDraft } from '../../../afk-runner/src/work/draft.js'
 import type { DraftDeps } from '../../../afk-runner/src/work/draft.js'
-import { agentWritePath } from '../../../review-loop/src/agent-runner.js'
-import type { SpawnFn } from '../../../review-loop/src/agent-runner.js'
 
 const tmpDirs: string[] = []
 

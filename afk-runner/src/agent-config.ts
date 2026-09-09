@@ -3,7 +3,6 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
-import { MAX_ARG_STRLEN } from '../../review-loop/src/claude-argv.js'
 import type { AgentMcpCredentials, AgentMcpSurface, McpServers } from './mcp-servers.js'
 
 /**
@@ -240,15 +239,24 @@ const composeDocument = (model: string, surface: AgentMcpSurface, resolved: McpS
 }
 
 /**
+ * The Linux single-argument cap (`MAX_ARG_STRLEN`), rehomed verbatim from the
+ * pruned claude-argv module — this file's size bound is its one surviving
+ * consumer. The role prompt dodges the cap by riding argv, but the serialized
+ * `OPENCODE_CONFIG_CONTENT` cannot — the bound refuses to compose a child env
+ * that would die in `spawn` with an `E2BIG` the failure classifier would
+ * misread as a dead backend.
+ */
+export const MAX_ARG_STRLEN = 131_072
+
+/**
  * The D1 size bound: the serialized **full-base** composition (provider
  * block included when active) measured against the OS per-string
- * environment ceiling — `MAX_ARG_STRLEN`, imported from review-loop's
- * `claude-argv.js`, the same constant the over-limit claude system prompt
- * refuses with. The full base is the upper bound of every per-spawn
- * composition: narrowing only removes `mcp` entries and swaps `"allow"`
- * values for the shorter `"deny"`, so one measurement bounds every spawn.
- * An over-limit map refuses naming `AGENT_MCP_SERVERS` — the alternative
- * is an opaque `E2BIG` at the first spawn.
+ * environment ceiling — `MAX_ARG_STRLEN`, rehomed into this module from
+ * the pruned claude-argv module. The full base is the upper bound of every
+ * per-spawn composition: narrowing only removes `mcp` entries and swaps
+ * `"allow"` values for the shorter `"deny"`, so one measurement bounds
+ * every spawn. An over-limit map refuses naming `AGENT_MCP_SERVERS` — the
+ * alternative is an opaque `E2BIG` at the first spawn.
  */
 const refuseOversizeBase = (model: string, surface: AgentMcpSurface): void => {
   const bytes = Buffer.byteLength(JSON.stringify(composeDocument(model, surface, surface.servers)), 'utf8')

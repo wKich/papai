@@ -8,6 +8,8 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { agentWritePath } from '../../../afk-runner/src/agent-backend/agent-runner.js'
+import type { SpawnFn } from '../../../afk-runner/src/agent-backend/agent-runner.js'
 import type { DepthSignals } from '../../../afk-runner/src/agent-layer.js'
 import type { RunnerConfig } from '../../../afk-runner/src/config.js'
 import { EventInputSchema } from '../../../afk-runner/src/events.js'
@@ -16,8 +18,6 @@ import { createOpenSpecDriver } from '../../../afk-runner/src/openspec-driver.js
 import type { ExecFn } from '../../../afk-runner/src/openspec-driver.js'
 import { mapSignalsToProfile, prescreenProfile, resolveDepth, runIntake } from '../../../afk-runner/src/work/intake.js'
 import type { IntakeDeps } from '../../../afk-runner/src/work/intake.js'
-import { agentWritePath } from '../../../review-loop/src/agent-runner.js'
-import type { SpawnFn } from '../../../review-loop/src/agent-runner.js'
 
 const tmpDirs: string[] = []
 

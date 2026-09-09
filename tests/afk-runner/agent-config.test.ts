@@ -8,6 +8,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   composeConfigContent,
   type ComposedPermissionMap,
+  MAX_ARG_STRLEN,
   mcpBlockFor,
   permissionBaseFor,
   providerBlockFor,
@@ -21,8 +22,7 @@ import {
   mcpFor,
   resolveAgentMcp,
 } from '../../afk-runner/src/mcp-servers.js'
-import { MAX_ARG_STRLEN } from '../../review-loop/src/claude-argv.js'
-import { assertEach, type Row } from '../utils/grouped-assertions.js'
+import { assertEach, type Row } from './grouped-assertions.js'
 
 /**
  * `providerBlockFor` (task 3.1 of afk-runner-agent-mcp, design D2): the
@@ -411,9 +411,9 @@ describe('composeConfigContent (design D3 composed document)', () => {
 /**
  * The D1 size bound (task 3.4 of afk-runner-agent-mcp, design D1): the
  * serialized **full-base** composition — provider block included when
- * active — is measured against `MAX_ARG_STRLEN`, imported from
- * review-loop's `claude-argv.js`, the same constant the over-limit claude
- * system prompt refuses with. An over-limit map refuses naming
+ * active — is measured against `MAX_ARG_STRLEN`, rehomed into
+ * `agent-config.ts` from the pruned claude-argv module as this bound's one
+ * surviving consumer. An over-limit map refuses naming
  * `AGENT_MCP_SERVERS` (the alternative is an opaque `E2BIG` at the first
  * spawn); the full base is the upper bound of every per-spawn composition,
  * because narrowing only removes `mcp` entries and swaps `"allow"` values
@@ -435,6 +435,10 @@ describe('composeConfigContent (design D1 size bound)', () => {
     }
     return surface
   }
+
+  test('MAX_ARG_STRLEN pins the OS per-string ceiling the bound measures against', () => {
+    expect(MAX_ARG_STRLEN).toBe(131_072)
+  })
 
   test('an over-limit full-base row refuses with the knob named, not an opaque E2BIG', async () => {
     const rows: readonly Row<{

@@ -10,6 +10,7 @@ import path from 'node:path'
 
 import { z } from 'zod'
 
+import { agentWritePath } from '../../../afk-runner/src/agent-backend/agent-runner.js'
 import type { RunnerConfig } from '../../../afk-runner/src/config.js'
 import type { WorkIO } from '../../../afk-runner/src/drive/loop.js'
 import type { SddEvent } from '../../../afk-runner/src/events.js'
@@ -22,7 +23,6 @@ import type { GateAnswers } from '../../../afk-runner/src/work/gate-answers.js'
 import { renderGateAnswers } from '../../../afk-runner/src/work/gate-answers.js'
 import type { VetoRevisionDeps } from '../../../afk-runner/src/work/veto-revision.js'
 import { runVetoRevision } from '../../../afk-runner/src/work/veto-revision.js'
-import { agentWritePath } from '../../../review-loop/src/agent-runner.js'
 
 const tmpDirs: string[] = []
 

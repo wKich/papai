@@ -5,8 +5,8 @@
 
 import { z } from 'zod'
 
-import { runAgent } from '../../review-loop/src/agent-runner.js'
-import type { AgentUsage, SpawnFn } from '../../review-loop/src/agent-runner.js'
+import { runAgent } from '../../afk-runner/src/agent-backend/agent-runner.js'
+import type { AgentUsage, SpawnFn } from '../../afk-runner/src/agent-backend/agent-runner.js'
 import { composeConfigContent } from './agent-config.js'
 import { createAgentReporter } from './agent-reporter.js'
 import { INACTIVITY_TIMEOUT_MS, WALL_CLOCK_TIMEOUT_MS } from './config.js'

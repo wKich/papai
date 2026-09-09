@@ -5,7 +5,7 @@
 
 import pLimit from 'p-limit'
 
-import { agentWritePath } from '../../../review-loop/src/agent-runner.js'
+import { agentWritePath } from '../../../afk-runner/src/agent-backend/agent-runner.js'
 import { FindingsSidecarSchema, runStageAgent, SkepticFindingsSidecarSchema } from '../agent-layer.js'
 import type { Finding } from '../agent-layer.js'
 import type { EventInput } from '../events.js'

@@ -3,7 +3,7 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
-import { parsePorcelainPaths } from '../../mutation-improve/src/diff-guard.js'
+import { parsePorcelainPaths } from '../../afk-runner/src/agent-backend/diff-guard.js'
 import type { ExecGitFn } from './config.js'
 
 /**

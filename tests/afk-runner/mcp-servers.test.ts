@@ -16,7 +16,7 @@ import {
   RESERVED_BUILTIN_TOOL_NAMES,
   resolveAgentMcp,
 } from '../../afk-runner/src/mcp-servers.js'
-import { assertEach, type Row } from '../utils/grouped-assertions.js'
+import { assertEach, type Row } from './grouped-assertions.js'
 
 /**
  * `AGENT_MCP_SERVERS` (task 2.1 of afk-runner-agent-mcp): the base map knob,

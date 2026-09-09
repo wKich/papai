@@ -13,7 +13,7 @@ import { fixTargetOf, releaseVetoOwed } from '../../../afk-runner/src/work/fix-t
 import type { FixTargetDeps } from '../../../afk-runner/src/work/fix-target.js'
 import { parseTaskItems } from '../../../afk-runner/src/work/tasks-md.js'
 import type { TaskItem } from '../../../afk-runner/src/work/tasks-md.js'
-import { assertEach, type Row } from '../../utils/grouped-assertions.js'
+import { assertEach, type Row } from '../grouped-assertions.js'
 
 const tmpDirs: string[] = []
 

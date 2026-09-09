@@ -5,7 +5,7 @@
 
 import path from 'node:path'
 
-import type { SpawnFn } from '../../review-loop/src/agent-runner.js'
+import type { SpawnFn } from '../../afk-runner/src/agent-backend/agent-runner.js'
 import { autonomyOf } from './config.js'
 import type { RunnerConfig } from './config.js'
 import { createAppendBoundary } from './drive/boundary.js'

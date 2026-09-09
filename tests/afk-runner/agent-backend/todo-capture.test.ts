@@ -22,14 +22,6 @@ describe('normalizeTodoItems', () => {
     ])
   })
 
-  it('reduces the claude item shape {content, status, activeForm} to {content, status}', () => {
-    expect(
-      normalizeTodoItems({
-        todos: [{ content: 'Write the failing test', status: 'in_progress', activeForm: 'Writing the failing test' }],
-      }),
-    ).toEqual([{ content: 'Write the failing test', status: 'in_progress' }])
-  })
-
   it('returns null when the input carries no todos array', () => {
     expect(normalizeTodoItems({})).toBeNull()
     expect(normalizeTodoItems({ todos: 'nope' })).toBeNull()
@@ -55,9 +47,9 @@ describe('normalizeTodoItems', () => {
 })
 
 describe('TODO_TOOLS', () => {
-  it('recognizes exactly the two write tools and never the read tool', () => {
+  it('recognizes the opencode write tool and never the read or claude spelling', () => {
     expect(TODO_TOOLS.has('todowrite')).toBe(true)
-    expect(TODO_TOOLS.has('TodoWrite')).toBe(true)
+    expect(TODO_TOOLS.has('TodoWrite')).toBe(false)
     expect(TODO_TOOLS.has('todoread')).toBe(false)
     expect(TODO_TOOLS.has('read')).toBe(false)
   })
