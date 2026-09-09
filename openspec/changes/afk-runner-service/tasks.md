@@ -56,22 +56,22 @@ follow-up proposals gated on this change's evidence artifacts.
 
 ## 3. Phase 1 — dogfood and docs
 
-- [ ] 3.1 Move-and-cutover (copy, never move): create
+- [x] 3.1 Move-and-cutover (copy, never move): create
       `~/.afk-runner/projects/<slug>/`, copy the two live worktrees' `runs/`
       into it, write each worktree's pointer config
       (`{"repoRoot": <abs>, "workDir": <abs store>}`), verify `status`, `runs`,
       and `serve` over the store from both worktrees; record the procedure and
       results in `notes.md`. → `bun afk-runner/src/cli.ts runs` (in each worktree)
-- [ ] 3.2 Dogfood at least one attended gate cycle through the store: the
+- [x] 3.2 Dogfood at least one attended gate cycle through the store: the
       pointer line names the store path, a hand-edited settle at that location
       flows through the normal seam, and waiter/steer polling across the
       relocated directory shows no observable latency change. Decide the
       grouping-by-project question (ship now vs ride Phase 2) from the evidence
       and record the decision in `notes.md`. → recorded in `openspec/changes/afk-runner-service/notes.md`
-- [ ] 3.3 Rollback drill: flip one worktree's config back to local bookkeeping,
+- [x] 3.3 Rollback drill: flip one worktree's config back to local bookkeeping,
       confirm a new run lands under `<repoRoot>/.afk-runner/` while the store's
       historical runs remain listable; record. → `bun afk-runner/src/cli.ts runs`
-- [ ] 3.4 Docs: update `docs/architecture/afk-runner.md` — a central-store
+- [x] 3.4 Docs: update `docs/architecture/afk-runner.md` — a central-store
       layout section (pointer configs, per-project slugs, rollback), the phased
       service roadmap with the Phase 2/3 doctrine pointers (design D5/D6), and
       the evidence-artifact pointers. → `bun run lint`

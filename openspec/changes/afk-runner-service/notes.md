@@ -91,4 +91,68 @@ Verification: `bun run typecheck` clean; `bun test tests/afk-runner/` green.
 
 ### Dogfood record (tasks 3.1–3.3)
 
-(to be recorded)
+#### 3.1 Move-and-cutover (2026-09-09, copy-never-move)
+
+Store: `~/.afk-runner/projects/papai/` (slug = repo dir name, design's Phase 1
+choice). The two live worktrees of the papai repo — `afk-runner-u13` (2 runs)
+and `agent-mcp-live-target` (1 run) — were cut over:
+
+1. `mkdir -p ~/.afk-runner/projects/papai/runs`; `cp -R` each worktree's
+   `.afk-runner/runs/<id>` into it (originals left intact).
+2. Each worktree's `<repoRoot>/.afk-runner/config.json` rewritten as the
+   pointer: `{"repoRoot": <abs worktree>, "workDir": "/Users/ki/.afk-runner/projects/papai", …}`
+   — model/budget/deadline keys carried over unchanged.
+3. Verification (this worktree's CLI, `cwd` = each target worktree):
+   - `runs` from **both** worktrees renders the identical 3-run roster with
+     the shared-store repo column distinguishing the two `repoRoot`s.
+   - `status afk-runner-agent-mcp` from `afk-runner-u13` resolves and folds a
+     run **started by the other worktree** through the store.
+   - `serve --port 4699 --token …`: `/api/portfolio` returns 3 cards each
+     carrying its `repoRoot`; wrong token → 401; board stopped cleanly.
+
+#### 3.2 Attended gate cycle through the store (live, 2026-09-09)
+
+A depth-S scratch run (`store-dogfood-scratch`, metered, $0.38) started in
+`agent-mcp-live-target` with the pointer config in place:
+
+- **Pointer names the store**: the park line printed
+  `resume: afk-runner resume store-dogfood-scratch — answer /Users/ki/.afk-runner/projects/papai/runs/store-dogfood-scratch/gate-1.md`.
+- **Hand settle at the store location**: `APPROVE` appended to that gate file;
+  `resume` re-entered, the waiter picked the answer up **11.4s** after the
+  hand-edit (resume startup + the 1s poll — no observable cross-directory
+  polling latency), settled through the standard render-back/integrity/mover
+  seam (`gate-hashes-1.json` verified, gate file answered in place), and the
+  run completed. No waiter/steer latency change is observable at 1s poll
+  granularity across directories on one machine.
+- **Repo attribution**: the completed memo carries
+  `repoRoot: …/agent-mcp-live-target`, `workDir: /Users/ki/.afk-runner/projects/papai`.
+- **Change folder locality**: the mover wrote
+  `openspec/changes/store-dogfood-scratch/` in the worktree only; the store
+  holds nothing but `runs/`.
+
+**Grouping-by-project decision: ride Phase 2.** The repo column (roster) and
+repoRoot lines (portfolio cards) already distinguish worktrees in one store —
+at the dogfood's scale (2 worktrees, 1 project) grouping UI adds nothing; the
+Phase 2 one-board-over-N-stores daemon is where per-project grouping earns
+its keep. Consistent with the proposal's non-goal.
+
+#### 3.3 Rollback drill (2026-09-09)
+
+`afk-runner-u13`'s config flipped back to `"workDir": ".afk-runner"` (its
+original keys; the store's copies and the other worktree's pointer untouched):
+
+- A new run (`rollback-probe-scratch`, depth-S, interrupted ~20s after start —
+  the landing, not the drive, is the drill) created its full bookkeeping set
+  (events.ndjson, state.json, task.md, holder.json, sessions.jsonl,
+  transcripts/) under `<repoRoot>/.afk-runner/runs/`; its memo carries the
+  local workDir and the worktree repoRoot.
+- The store was not touched: `runs` from the still-store-pointed
+  `agent-mcp-live-target` lists all 4 historical runs (including the completed
+  3.2 dogfood run) folding and rendering unchanged — no migration step.
+- Rollback = one config key flip; nothing else to undo.
+
+### Cost of the dogfood
+
+Two live runs: the attended cycle ($0.38, completed) and the interrupted
+rollback probe (partial, < $0.10 of intake work). Both artifacts left in place
+as drill evidence, matching the repo's live-proof idiom.
