@@ -51,7 +51,9 @@ pid-disciplined: children are killed by recorded pid only, never by name.
 Status: complete — evidence (§1.1–§1.3, §4.1), comparisons (§1.4, §2.1),
 catalogue (§3.1), doctrine (§4.2), recommendation (§5), and boundaries
 (§6) all landed (tasks 1.1–3.6); referenced from `docs/architecture/afk-runner.md`
-and the `CLAUDE.md` docs table (task 4.1).
+and the `CLAUDE.md` docs table (task 4.1). The recommendation has since been
+delivered (`afk-runner-agent-mcp`); the delivery's live smoke outcome is
+recorded in §7.
 
 ---
 
@@ -835,3 +837,71 @@ its anchors.
   zero targets. The change's order of work followed its own tasks:
   rig and live experiments first, evidence recorded, doc drafted,
   gates run.
+
+## 7. Delivery status: the live smoke (afk-runner-agent-mcp)
+
+The §5 recommendation is delivered: the (a)+(c) two-layer surface — the
+operator env knobs parsed and refused at the spawning verbs, composed per
+spawn into the `OPENCODE_CONFIG_CONTENT` that rides the one spawn seam —
+landed as the `afk-runner-agent-mcp` change
+(`openspec/changes/afk-runner-agent-mcp/`; the operator surface is
+documented in `docs/architecture/afk-runner.md` §"Agent MCP surface"). The
+hermetic suite pins the composed shape but cannot spawn the consumer (the
+lane's I/O guard denies child processes), and §1–§4 above verified the
+precedence and grant arms against targeted emissions, never the builder's
+combined document — so one live smoke preceded delivery, operator-run
+outside the suite per the workspace's live-proof convention (C7/C8):
+placeholder credentials only, pid-disciplined teardown (every child killed
+by recorded pid, never by name), `ps -p` census clean.
+
+Rig and shape (2026-09-09, the workflow's pinned binary `opencode-ai@1.18.7`):
+one `opencode run` spawn per arm — `--auto --format json --model
+smoke/agent --dir <empty dir> <prompt>` — with the child env composed
+through the delivered builder itself (`resolveAgentMcp` → `mcpFor` →
+`composeConfigContent` → `composeChildEnv`, the `runSpawn` path in
+`afk-runner/src/agent-spawn.ts`), a credentialed provider row
+(`LLM_API_KEY`/`LLM_BASE_URL` placeholder pair pointing at a loopback
+OpenAI-compatible stub that scripts one forced tool call), and a
+one-server local base map — a stdio stub server `smoke` exposing `echo`
+and `probe`, tracing every JSON-RPC message:
+
+```sh
+AGENT_MCP_SERVERS='{"smoke":{"type":"local","command":["<bun>","<mcp-stub.ts>","<trace>","<pidfile>"]}}'
+# arm B adds a second, dead-server entry:
+#   "deadsmoke":{"type":"local","command":["/usr/bin/false"]}
+```
+
+The smoke protocol's three assertions, all **verified** live on the
+delivered builder's combined document:
+
+- **Tools arrive under `<name>_*` naming** — the stub provider's request
+  body (the model-visible tool table) carried `smoke_echo` and
+  `smoke_probe` beside the built-ins, and the server trace holds the full
+  `initialize`/`tools/list` handshake from `clientInfo.name: "opencode"`
+  (version 1.18.7).
+- **One call round-trips** — the provider's forced `smoke_echo` call
+  reached the server as a `tools/call` with the unprefixed wire name
+  `echo` (arguments `{"text":"live-smoke-roundtrip"}`), the result
+  (`echo: live-smoke-roundtrip`) rode the next provider request back to
+  the model, and the turn completed exit 0 (~4 s wall).
+- **A second, dead-server entry degrades to bounded status without
+  failing the turn** — the child's own WARN line settled it
+  (`message="server unavailable" key=deadsmoke type=local status=failed`),
+  no `deadsmoke_*` tool ever reached the model-visible table, the live
+  server's tools and round trip were unaffected, and the turn completed
+  exit 0 (~3.5 s wall — bounded far under §4.1's 30 s ceiling).
+
+The composed content the arms delivered was exactly the designed document:
+keys `$schema`, `provider`, `model`, `mcp`, `permission` and nothing else;
+permission `{"smoke_*": "allow"}` (arm A) and both allows (arm B); the
+provider block present for the credentialed slash row; and none of the
+four carrier names (`AGENT_MCP_SERVERS`, `AGENT_MCP_ROLE_NARROWING`,
+`LLM_API_KEY`, `LLM_BASE_URL`) in the child env. The outcome rests beside
+the verified anchors that predicted it — §1.1–§1.2 (the content channel
+delivers and is authoritative) and §4.1 (grant and degradation behaviour)
+— re-proven here on the builder's own combined document for the first
+time. Per the recorded-not-guessed doctrine, a shape that failed this
+smoke would have re-opened the design rather than being adjusted by
+inspection; it passed, so the design stands as delivered, and the
+convention's anchor rule carries forward: re-verify on `opencode-ai` pin
+bumps.
