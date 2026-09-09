@@ -11,6 +11,7 @@ import { pipelineMachine } from '../../afk-runner/src/graph/pipeline.js'
 import { foldEvents } from '../../afk-runner/src/kernel/fold.js'
 import { memoFieldsOf } from '../../afk-runner/src/memo-project.js'
 import type { MemoFields } from '../../afk-runner/src/memo-project.js'
+import { PersistedRunStateSchema } from '../../afk-runner/src/run-state.js'
 
 function stampAll(inputs: readonly EventInput[]): SddEvent[] {
   return inputs.map((input, index) => stampEvent(input, index + 1, '2026-09-03T00:00:00.000Z'))
@@ -35,5 +36,51 @@ describe('memoFieldsOf — release-mode gate records (U3 D7)', () => {
     const expected: MemoFields['gate'] = { mode: 'release', version: 2 }
     expect(memo.status).toBe('running')
     expect(memo.gate).toEqual(expected)
+  })
+})
+
+describe('memoFieldsOf — tasks projection carries item text additively (afk-runner-task-todos D2)', () => {
+  const WALK: readonly EventInput[] = [
+    { altitude: 'L2', type: 'stage_enter', stage: 'intake' },
+    { altitude: 'L2', type: 'execution', action: 'armed' },
+    { altitude: 'L2', type: 'stage_enter', stage: 'implement' },
+  ]
+
+  it("a parking run's memo tasks projection carries each item's text beside status/attempts", () => {
+    const events = stampAll([
+      ...WALK,
+      { altitude: 'L2', type: 'task', action: 'started', id: '1', detail: 'Fix the chunking fallback' },
+      { altitude: 'L2', type: 'task', action: 'done', id: '1' },
+      { altitude: 'L2', type: 'task', action: 'started', id: '2', detail: 'second item' },
+    ])
+    const snapshot = foldEvents(pipelineMachine, events).snapshot
+    const memo = memoFieldsOf(events, snapshot.context, 'gate-pending', 'gate.awaiting')
+    expect(memo.tasks).toEqual({
+      '1': { status: 'done', attempts: 1, text: 'Fix the chunking fallback' },
+      '2': { status: 'running', attempts: 1, text: 'second item' },
+    })
+  })
+
+  it('a pre-change tasks record (no text field) still validates through the memo schema', () => {
+    const preChange = {
+      runId: 'r1',
+      repoRoot: '/repo',
+      workDir: '/repo/.sdd-runner',
+      changeName: 'add-thing',
+      stage: 'implement',
+      depth: null,
+      round: 0,
+      gate: null,
+      status: 'running',
+      createdAt: '2026-09-03T00:00:00.000Z',
+      updatedAt: '2026-09-03T00:00:00.000Z',
+      tasks: { '1': { status: 'done', attempts: 1 } },
+    }
+    expect(PersistedRunStateSchema.safeParse(preChange).success).toBe(true)
+    const withText = { ...preChange, tasks: { '1': { status: 'done', attempts: 1, text: 'item text' } } }
+    // the memo write round-trips through PersistedRunStateSchema.parse — the
+    // text must survive that parse, not merely be tolerated by it
+    const parsed = PersistedRunStateSchema.parse(withText)
+    expect(parsed.tasks?.['1']).toEqual({ status: 'done', attempts: 1, text: 'item text' })
   })
 })

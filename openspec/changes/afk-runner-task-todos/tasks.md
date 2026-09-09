@@ -17,7 +17,7 @@
 
 ## 4. Memo projection carries task text additively
 
-- [ ] 4.1 Failing test: a parking run's memo tasks projection carries each item's `text` beside status/attempts, and a memo without text fields still validates (pre-change shape); then implement the optional record field in `run-state.ts` (`memo-project` passes records wholesale). Verify: `bun test tests/afk-runner/memo-project.test.ts`
+- [x] 4.1 Failing test: a parking run's memo tasks projection carries each item's `text` beside status/attempts, and a memo without text fields still validates (pre-change shape); then implement the optional record field in `run-state.ts` (`memo-project` passes records wholesale). Verify: `bun test tests/afk-runner/memo-project.test.ts`
 
 ## 5. Board surfaces: walk text, feed detail, missingTodos
 

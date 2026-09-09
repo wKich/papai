@@ -57,12 +57,18 @@ export const PersistedRunStateSchema = z.object({
     .optional(),
   /**
    * U3 D9: the execution walk's task records projected from the fold —
-   * optional so memos persisted before execution parse unchanged.
+   * optional so memos persisted before execution parse unchanged. Each
+   * record optionally carries the item's text (afk-runner-task-todos D2)
+   * stamped by its started event's detail.
    */
   tasks: z
     .record(
       z.string(),
-      z.object({ status: z.enum(['running', 'done', 'failed']), attempts: z.number().int().positive() }),
+      z.object({
+        status: z.enum(['running', 'done', 'failed']),
+        attempts: z.number().int().positive(),
+        text: z.string().optional(),
+      }),
     )
     .nullable()
     .optional(),

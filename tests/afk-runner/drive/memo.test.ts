@@ -136,8 +136,8 @@ describe('execution memo tasks projection (U3 D9)', () => {
     expect(memo['status']).toBe('running')
     expect(memo['gate']).toMatchObject({ mode: 'escalation' })
     expect(memo['tasks']).toEqual({
-      '1': { status: 'done', attempts: 1 },
-      '2': { status: 'failed', attempts: 2 },
+      '1': { status: 'done', attempts: 1, text: '1.1 first item' },
+      '2': { status: 'failed', attempts: 2, text: '1.2 second item' },
     })
     const events = readEvents(path.join(runDir, 'events.ndjson'))
     const snapshot = foldEvents(pipelineMachine, events).snapshot
