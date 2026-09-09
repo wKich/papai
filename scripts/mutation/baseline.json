@@ -5,17 +5,23 @@
     "timeout": 0,
     "scored": 203
   },
+  "afk-runner/src/agent-config.ts": {
+    "score": 0.9186046511627907,
+    "killed": 79,
+    "timeout": 0,
+    "scored": 86
+  },
   "afk-runner/src/agent-layer.ts": {
-    "score": 0.9423076923076923,
-    "killed": 96,
+    "score": 0.9473684210526315,
+    "killed": 88,
     "timeout": 2,
-    "scored": 104
+    "scored": 95
   },
   "afk-runner/src/agent-noise-schemas.ts": {
-    "score": 0.5434782608695652,
-    "killed": 25,
+    "score": 0.6382978723404256,
+    "killed": 30,
     "timeout": 0,
-    "scored": 46
+    "scored": 47
   },
   "afk-runner/src/agent-reporter.ts": {
     "score": 0.7241379310344828,
@@ -89,11 +95,17 @@
     "timeout": 0,
     "scored": 45
   },
-  "afk-runner/src/cli.ts": {
-    "score": 0.5052631578947369,
-    "killed": 144,
+  "afk-runner/src/cli-summary.ts": {
+    "score": 0.5344827586206896,
+    "killed": 31,
     "timeout": 0,
-    "scored": 285
+    "scored": 58
+  },
+  "afk-runner/src/cli.ts": {
+    "score": 0.6446886446886447,
+    "killed": 176,
+    "timeout": 0,
+    "scored": 273
   },
   "afk-runner/src/config.ts": {
     "score": 0.7461538461538462,
@@ -150,10 +162,10 @@
     "scored": 38
   },
   "afk-runner/src/graph/pipeline-agent.ts": {
-    "score": 0.8333333333333334,
-    "killed": 10,
+    "score": 0.875,
+    "killed": 14,
     "timeout": 0,
-    "scored": 12
+    "scored": 16
   },
   "afk-runner/src/graph/pipeline-execution.ts": {
     "score": 0.5178571428571429,
@@ -202,6 +214,12 @@
     "killed": 158,
     "timeout": 0,
     "scored": 164
+  },
+  "afk-runner/src/mcp-servers.ts": {
+    "score": 0.9848484848484849,
+    "killed": 130,
+    "timeout": 0,
+    "scored": 132
   },
   "afk-runner/src/memo-project.ts": {
     "score": 0.7153846153846154,
@@ -1711,10 +1729,10 @@
   "plugins/task-provider-youtrack/task-helpers.ts": 0.5,
   "plugins/task-provider-youtrack/validate-config.ts": 1,
   "review-loop/src/agent-command.ts": {
-    "score": 0.8523489932885906,
-    "killed": 127,
+    "score": 0.86,
+    "killed": 129,
     "timeout": 0,
-    "scored": 149
+    "scored": 150
   },
   "review-loop/src/agent-runner.ts": {
     "score": 0.7867647058823529,
@@ -1727,6 +1745,12 @@
     "killed": 55,
     "timeout": 0,
     "scored": 70
+  },
+  "review-loop/src/claude-spawn-dir.ts": {
+    "score": 0.9230769230769231,
+    "killed": 12,
+    "timeout": 0,
+    "scored": 13
   },
   "review-loop/src/cli-errors.ts": {
     "score": 0.8103448275862069,
