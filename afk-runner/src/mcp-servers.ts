@@ -5,6 +5,7 @@
 
 import { z } from 'zod'
 
+import type { AgentRole } from './config.js'
 import {
   refuseMintedServers,
   refuseShadowingNames,
@@ -187,6 +188,27 @@ export const resolveAgentMcp = (
       `${name} is ignored beside the bare model ${JSON.stringify(model)}: a model with no provider segment composes no provider block, so the pair is never read`,
   )
   return { servers, narrowing, credentials: undefined, warnings }
+}
+
+/**
+ * The per-spawn resolved set (design D3): the base map minus the role's
+ * narrowing entry, resolved at the one seam that already holds the role
+ * beside `modelFor`. A role with no narrowing entry — and a surface with no
+ * narrowing map at all — carries the full base as the surface's own map; an
+ * empty shed list sheds nothing. Narrowing only removes (every shed name was
+ * proven present in the base map at resolution, `refuseMintedServers`), so
+ * this carries no refusals of its own, and a set narrowed to nothing is the
+ * empty set, never an error.
+ */
+export const mcpFor = (surface: AgentMcpSurface, role: AgentRole): McpServers => {
+  const shed = surface.narrowing?.[role]
+  if (shed === undefined || shed.length === 0) return surface.servers
+
+  const resolved: McpServers = {}
+  for (const [name, entry] of Object.entries(surface.servers)) {
+    if (!shed.includes(name)) resolved[name] = entry
+  }
+  return resolved
 }
 
 const safeJson = (raw: string, knob: string): unknown => {

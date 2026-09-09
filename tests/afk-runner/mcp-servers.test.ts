@@ -5,10 +5,12 @@
 
 import { describe, expect, test } from 'bun:test'
 
+import { AgentRoleSchema, type AgentRole } from '../../afk-runner/src/config.js'
 import {
   type AgentMcpSurface,
   type McpServerEntry,
   type McpServers,
+  mcpFor,
   parseMcpServers,
   parseRoleNarrowing,
   RESERVED_BUILTIN_TOOL_NAMES,
@@ -504,5 +506,85 @@ describe('resolveAgentMcp (D2 credential-pair matrix)', () => {
       resolveAgentMcp(guardedEnv({ AGENT_MCP_ROLE_NARROWING: '{"drafter":[]}', ...PAIR }), 'opencode'),
     ).toBeUndefined()
     expect(credentialReads).toEqual([])
+  })
+})
+
+/**
+ * `mcpFor` (task 2.4, design D3): the per-spawn resolved set — the base map
+ * minus the role's narrowing entry, resolved at the one seam that already
+ * holds the role beside `modelFor`. A role with no narrowing entry carries
+ * the full base; narrowing only removes (minting was refused at resolution),
+ * so a set narrowed to nothing is the empty set, never an error.
+ */
+describe('mcpFor (per-spawn resolved set)', () => {
+  const WORK: McpServerEntry = { type: 'local', command: ['bunx', 'mcp-server-fetch@1.0.0'] }
+  const INDEX: McpServerEntry = { type: 'remote', url: 'https://mcp.example.com/sse' }
+  const BASE: McpServers = { work: WORK, index: INDEX }
+
+  const surfaceOf = (narrowingRaw: string | undefined): AgentMcpSurface => {
+    const surface = resolveAgentMcp(
+      { AGENT_MCP_SERVERS: JSON.stringify(BASE), AGENT_MCP_ROLE_NARROWING: narrowingRaw },
+      'opencode',
+    )
+    if (surface === undefined) {
+      throw new Error('expected the surface active beside the bare model')
+    }
+    return surface
+  }
+
+  test("the spec's narrowing scenario: reviewer and skeptic shed the work server, every other role keeps both", async () => {
+    const surface = surfaceOf(JSON.stringify({ reviewer: ['work'], skeptic: ['work'] }))
+    const rows: readonly Row<{ readonly role: AgentRole; readonly expected: McpServers }>[] = [
+      { label: 'reviewer, the checking role, sheds the work server', role: 'reviewer', expected: { index: INDEX } },
+      { label: 'skeptic, the checking role, sheds the work server', role: 'skeptic', expected: { index: INDEX } },
+      { label: 'drafter, un-narrowed, keeps both', role: 'drafter', expected: BASE },
+      { label: 'decomposer, un-narrowed, keeps both', role: 'decomposer', expected: BASE },
+      { label: 'atomicity, un-narrowed, keeps both', role: 'atomicity', expected: BASE },
+      {
+        label: 'resolver, absent from the narrowing map, carries every base server',
+        role: 'resolver',
+        expected: BASE,
+      },
+      {
+        label: 'estimator, absent from the narrowing map, carries every base server',
+        role: 'estimator',
+        expected: BASE,
+      },
+      { label: 'planner, absent from the narrowing map, carries every base server', role: 'planner', expected: BASE },
+      {
+        label: 'implementer, absent from the narrowing map, carries every base server',
+        role: 'implementer',
+        expected: BASE,
+      },
+    ]
+    await assertEach(rows, (row) => {
+      expect(mcpFor(surface, row.role)).toEqual(row.expected)
+    })
+    // Resolution never mutates the surface: the base map survives every
+    // per-spawn resolution intact.
+    expect(surface.servers).toEqual(BASE)
+  })
+
+  test('a surface with no narrowing map at all: every role in the closed vocabulary carries the full base', async () => {
+    const surface = surfaceOf(undefined)
+    const rows: readonly Row<{ readonly role: AgentRole }>[] = AgentRoleSchema.options.map((role) => ({
+      label: `${role} carries the full base`,
+      role,
+    }))
+    await assertEach(rows, (row) => {
+      expect(mcpFor(surface, row.role)).toEqual(BASE)
+    })
+  })
+
+  test('an empty shed list sheds nothing: the entry exists but removes no server', () => {
+    const surface = surfaceOf('{"drafter":[]}')
+    expect(mcpFor(surface, 'drafter')).toEqual(BASE)
+    expect(mcpFor(surface, 'reviewer')).toEqual(BASE)
+  })
+
+  test('narrowing to nothing yields the empty set, never an error', () => {
+    const surface = surfaceOf(JSON.stringify({ skeptic: ['work', 'index'] }))
+    expect(mcpFor(surface, 'skeptic')).toEqual({})
+    expect(mcpFor(surface, 'reviewer')).toEqual(BASE)
   })
 })
