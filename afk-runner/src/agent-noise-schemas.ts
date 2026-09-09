@@ -46,6 +46,7 @@ export const SpawnedEvent = z.object({
   agent: z.string().min(1),
   role: z.string().min(1),
   model: z.string().min(1),
+  mcp: z.array(z.string().min(1)).readonly().optional(),
 })
 
 export const RetryingEvent = z.object({

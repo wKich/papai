@@ -23,6 +23,8 @@ import { INACTIVITY_TIMEOUT_MS } from '../../../afk-runner/src/config.js'
 import type { RunnerConfig } from '../../../afk-runner/src/config.js'
 import { EventInputSchema } from '../../../afk-runner/src/events.js'
 import type { EventInput } from '../../../afk-runner/src/events.js'
+import { resolveAgentMcp } from '../../../afk-runner/src/mcp-servers.js'
+import type { AgentMcpSurface } from '../../../afk-runner/src/mcp-servers.js'
 import { readSessionLedger, recordSessionId, updateSessionStatus } from '../../../afk-runner/src/session-ledger.js'
 import { ResolverOutputSchema } from '../../../afk-runner/src/work/review-loop.js'
 import type { ResolverOutput } from '../../../afk-runner/src/work/review-loop.js'
@@ -137,17 +139,22 @@ interface AgentHandle {
   readonly emitted: EventInput[]
 }
 
-function makeAgent(dir: string, fake: FakeSpawn, porcelain = ''): AgentHandle {
+function makeAgent(dir: string, fake: FakeSpawn, porcelain = '', mcpSurface?: AgentMcpSurface): AgentHandle {
   const emitted: EventInput[] = []
   const agent: AgentLayerDeps = {
     spawn: fake.spawn,
     config: makeConfig(dir),
     execGit: makeGitExec(porcelain),
+    mcpSurface,
     emit: (event) => {
       emitted.push(EventInputSchema.parse(event))
     },
   }
   return { agent, emitted }
+}
+
+function spawneds(emitted: readonly EventInput[]): Array<Extract<EventInput, { type: 'spawned' }>> {
+  return emitted.filter((e): e is Extract<EventInput, { type: 'spawned' }> => e.type === 'spawned')
 }
 
 function retryings(emitted: readonly EventInput[]): Array<{ reason: 'stall' | 'validation'; attempt: number }> {
@@ -386,6 +393,44 @@ describe('runStageAgent', () => {
     expect(doneEvents[0]).toMatchObject({ agent: 'reviewer-r1' })
     expect(doneEvents[0]?.usage).toBeDefined()
     expect(retryings(emitted)).toEqual([])
+  })
+
+  it("an active surface's spawn event carries exactly the resolved set's server names (afk-runner-agent-mcp D6)", async () => {
+    const dir = makeDir()
+    const fake = makeFakeSpawn('findings-1.json', [{ write: VALID_FINDINGS }])
+    const surface = resolveAgentMcp(
+      {
+        AGENT_MCP_SERVERS: JSON.stringify({
+          notes: { type: 'local', command: ['uvx', 'mcp-notes'] },
+          search: { type: 'remote', url: 'https://mcp.example/search' },
+        }),
+        AGENT_MCP_ROLE_NARROWING: JSON.stringify({ reviewer: ['notes'] }),
+      },
+      'default-model',
+    )
+    const { agent, emitted } = makeAgent(dir, fake, '', surface)
+    await runStageAgent(agent, makeOptions(dir, 'findings-1.json'))
+    const events = spawneds(emitted)
+    expect(events).toHaveLength(1)
+    expect(events[0]?.mcp).toEqual(['search'])
+  })
+
+  it('an absent surface leaves the spawn event byte-identical — no mcp field (afk-runner-agent-mcp D6)', async () => {
+    const dir = makeDir()
+    const fake = makeFakeSpawn('findings-1.json', [{ write: VALID_FINDINGS }])
+    const { agent, emitted } = makeAgent(dir, fake)
+    await runStageAgent(agent, makeOptions(dir, 'findings-1.json'))
+    const events = spawneds(emitted)
+    expect(events).toHaveLength(1)
+    expect(events[0]).toEqual({
+      altitude: 'L1',
+      type: 'spawned',
+      agent: 'reviewer-r1',
+      role: 'reviewer',
+      model: 'default-model',
+    })
+    assert(events[0] !== undefined)
+    expect(Object.hasOwn(events[0], 'mcp')).toBe(false)
   })
 
   it('retries a validation failure with the validator error appended to the prompt', async () => {

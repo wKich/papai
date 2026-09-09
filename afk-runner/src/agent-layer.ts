@@ -15,6 +15,8 @@ import { createAgentReporter } from './agent-reporter.js'
 import { INACTIVITY_TIMEOUT_MS, WALL_CLOCK_TIMEOUT_MS, modelFor } from './config.js'
 import type { AgentRole, ExecGitFn, RunnerConfig } from './config.js'
 import type { EventInput } from './events.js'
+import { mcpFor } from './mcp-servers.js'
+import type { AgentMcpSurface } from './mcp-servers.js'
 import {
   nextSessionAttempt,
   findKilledSession,
@@ -30,6 +32,13 @@ export interface AgentLayerDeps {
   readonly config: RunnerConfig
   readonly execGit: ExecGitFn
   readonly emit: (event: EventInput) => void
+  /**
+   * The resolved agent-MCP surface (afk-runner-agent-mcp D1): present = every
+   * spawn resolves `mcpFor(surface, role)` and emits the resolved set's
+   * server names on `spawned`; absent = inert — no `mcp` field, the event
+   * byte-identical to a pre-change spawn.
+   */
+  readonly mcpSurface?: AgentMcpSurface
 }
 
 export interface RunStageAgentOptions<T> {
@@ -148,7 +157,15 @@ function prepareSpawnContext<T>(
 ): SpawnContext {
   const prompt = spawnPrompt(options, lastError, continuation)
   const model = modelFor(deps.config, options.role)
-  deps.emit({ altitude: 'L1', type: 'spawned', agent: options.label, role: options.role, model })
+  const mcpNames = deps.mcpSurface === undefined ? undefined : Object.keys(mcpFor(deps.mcpSurface, options.role))
+  deps.emit({
+    altitude: 'L1',
+    type: 'spawned',
+    agent: options.label,
+    role: options.role,
+    model,
+    ...(mcpNames === undefined ? {} : { mcp: mcpNames }),
+  })
   const { spawnInput, ledgerAttempt, sessionLedger } = ledgerHooks(options, model)
   const logPath = transcriptPathFor(options.runDir, options.label, options.round, ledgerAttempt)
   mkdirSync(path.dirname(logPath), { recursive: true })
