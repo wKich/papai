@@ -6,22 +6,22 @@
     "scored": 203
   },
   "afk-runner/src/agent-layer.ts": {
-    "score": 0.9347826086956522,
-    "killed": 84,
+    "score": 0.9423076923076923,
+    "killed": 96,
     "timeout": 2,
-    "scored": 92
+    "scored": 104
   },
   "afk-runner/src/agent-noise-schemas.ts": {
-    "score": 0.5,
-    "killed": 21,
+    "score": 0.5434782608695652,
+    "killed": 25,
     "timeout": 0,
-    "scored": 42
+    "scored": 46
   },
   "afk-runner/src/agent-reporter.ts": {
-    "score": 0.7142857142857143,
-    "killed": 60,
+    "score": 0.7241379310344828,
+    "killed": 63,
     "timeout": 0,
-    "scored": 84
+    "scored": 87
   },
   "afk-runner/src/agent-schemas.ts": {
     "score": 0.42857142857142855,
@@ -276,10 +276,10 @@
     "scored": 25
   },
   "afk-runner/src/serve/run-detail.ts": {
-    "score": 0.7467811158798283,
-    "killed": 173,
+    "score": 0.7803921568627451,
+    "killed": 198,
     "timeout": 1,
-    "scored": 233
+    "scored": 255
   },
   "afk-runner/src/serve/server.ts": {
     "score": 0.6686046511627907,
@@ -480,10 +480,10 @@
     "scored": 135
   },
   "afk-runner/src/work/implement.ts": {
-    "score": 0.7058823529411765,
-    "killed": 95,
+    "score": 0.7412587412587412,
+    "killed": 105,
     "timeout": 1,
-    "scored": 136
+    "scored": 143
   },
   "afk-runner/src/work/intake.ts": {
     "score": 0.7755102040816326,
