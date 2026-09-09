@@ -3,6 +3,8 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
+import { attendanceAggregateOf, gateAttendance } from './analyze-attendance.js'
+import type { AttendanceAggregate, GateAttendance } from './analyze-attendance.js'
 import {
   classChurn,
   concernPersistence,
@@ -38,6 +40,7 @@ export interface RunAnalysis {
   readonly eraContaminated: boolean
   readonly trajectory: Metric<readonly DigestRecord[]>
   readonly gates: Metric<GateForensics>
+  readonly attendance: Metric<GateAttendance>
   readonly retries: Metric<RetryTaxonomy>
   readonly stageFailures: Metric<StageFailureTaxonomy>
   readonly duplicateIdRate: Metric<number>
@@ -61,6 +64,7 @@ export function analyzeRun(bundle: RunBundle, now: Date): RunAnalysis {
     eraContaminated: consistency.eraContaminated,
     trajectory: trajectoryMetric(bundle),
     gates: gateForensics(bundle, now),
+    attendance: gateAttendance(bundle, now),
     retries: retryTaxonomy(bundle),
     stageFailures: stageFailureTaxonomy(bundle),
     duplicateIdRate: duplicateIdRate(bundle),
@@ -80,6 +84,7 @@ export interface CorpusAggregates {
   readonly autoDecisionsByRule: Readonly<Record<string, number>>
   readonly duplicateResolutionEntries: number
   readonly r2Eligibility: R2Eligibility | null
+  readonly gateAttendance: AttendanceAggregate | null
   readonly gatesNeverAnswered: number
   readonly strandedComplete: readonly string[]
   readonly mergedUnimplemented: readonly string[]
@@ -129,6 +134,7 @@ function aggregatesOf(
     }
   }
   const r2Parts = clean.flatMap((run) => (run.r2Eligibility.status === 'known' ? [run.r2Eligibility.value] : []))
+  const attendanceParts = clean.flatMap((run) => (run.attendance.status === 'known' ? [run.attendance.value] : []))
   return {
     runsAggregated: clean.length,
     eraContaminated: runs.filter((run) => run.eraContaminated).map((run) => run.runId),
@@ -145,6 +151,7 @@ function aggregatesOf(
             gateStates: r2Parts.reduce((acc, part) => acc + part.gateStates, 0),
             byCause: r2CauseMixOf(r2Parts),
           },
+    gateAttendance: attendanceAggregateOf(attendanceParts),
     gatesNeverAnswered: clean.reduce(
       (acc, run) => acc + (run.gates.status === 'known' ? run.gates.value.neverAnswered.length : 0),
       0,

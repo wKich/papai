@@ -265,6 +265,19 @@ describe('executeCreate — activity condition gating', () => {
     expect(result.error).toContain('not available')
   })
 
+  test('activity condition is refused when no delivery context carries the capability flag', () => {
+    seedInstance()
+
+    // Handler-level calls without a delivery context (proof-check runs) carry
+    // no assembly-time flag, so activity conditions must stay unavailable —
+    // the tool layer is the only thing that grants them.
+    const result = executeCreate(ACT_USER, { prompt: 'watch activity', condition: activityCondition })
+
+    assert.ok('error' in result, 'expected an error result')
+    expect(result.error).toContain('activity')
+    expect(result.error).toContain('not available')
+  })
+
   test('activity condition is refused when the delivery context has no task instance', () => {
     const result = executeCreate(
       ACT_USER,

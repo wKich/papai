@@ -45,6 +45,7 @@ function liteMemo(runId: string): PersistedLite {
     gate: null,
     changeName: runId,
     updatedAt: at(60_000),
+    repoRoot: null,
   }
 }
 

@@ -155,6 +155,52 @@ describe('resolveRunnerConfig (config ladder)', () => {
   })
 })
 
+describe('resolveRunnerConfig (central-store relocation contract — afk-runner-store)', () => {
+  it('an absolute workDir relocates bookkeeping to that path; nothing else lands under <repoRoot>/.afk-runner/', async () => {
+    const { resolveRunnerConfig } = await import('../../afk-runner/src/config.js')
+    const repoRoot = makeDir()
+    const store = makeDir()
+    fs.mkdirSync(path.join(repoRoot, '.afk-runner'))
+    writeConfig(path.join(repoRoot, '.afk-runner'), {
+      repoRoot,
+      workDir: store,
+      model: 'store-model',
+      budget: 7,
+    })
+    const resolved = await resolveRunnerConfig(repoRoot, {})
+    expect(resolved.workDir).toBe(store)
+    expect(fs.existsSync(path.join(store, 'runs'))).toBe(false)
+    expect(fs.readdirSync(path.join(repoRoot, '.afk-runner'))).toEqual(['config.json'])
+  })
+
+  it('the lookup candidate stays <repoRoot>/.afk-runner/config.json — a config inside the store is never consulted', async () => {
+    const { resolveRunnerConfig } = await import('../../afk-runner/src/config.js')
+    const repoRoot = makeDir()
+    const store = makeDir()
+    fs.mkdirSync(path.join(repoRoot, '.afk-runner'))
+    writeConfig(path.join(repoRoot, '.afk-runner'), {
+      repoRoot,
+      workDir: store,
+      model: 'worktree-model',
+      budget: 7,
+    })
+    // a decoy config inside the declared store must not influence launch resolution
+    writeConfig(store, { repoRoot: store, workDir: '.afk-runner', model: 'store-model', budget: 99 })
+    const resolved = await resolveRunnerConfig(repoRoot, {})
+    expect(resolved.model).toBe('worktree-model')
+    expect(resolved.budget).toBe(7)
+    expect(resolved.workDir).toBe(store)
+  })
+
+  it('loadRunnerConfig keeps the absolute workDir absolute, resolved against itself', async () => {
+    const dir = makeDir()
+    const store = makeDir()
+    const configPath = writeConfig(dir, { repoRoot: dir, workDir: store, model: 'test-model' })
+    const config = await loadRunnerConfig(configPath)
+    expect(config.workDir).toBe(store)
+  })
+})
+
 describe('autonomy derivation', () => {
   it('derives single-mode assist autonomy with budget as the one ceiling', async () => {
     const dir = makeDir()

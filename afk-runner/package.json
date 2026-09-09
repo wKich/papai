@@ -11,8 +11,8 @@
     "start": "bun run src/cli.ts"
   },
   "dependencies": {
-    "xstate": "5.25.0",
-    "zod": "^4.0.0"
+    "xstate": "5.32.6",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "typescript": "^7.0.2"

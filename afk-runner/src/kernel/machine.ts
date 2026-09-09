@@ -9,6 +9,7 @@ import type { ExecutableActionsFrom, SnapshotFrom } from 'xstate'
 import { digestRecordOf } from '../legacy-fold.js'
 import type { AutoDecisionRecord } from '../legacy-fold.js'
 import type { KernelContext, KernelEvent, RoundTally, StageStatus, TallyCounts } from './types.js'
+import { initialKernelContext } from './types.js'
 
 export type {
   ChildRecord,
@@ -162,7 +163,26 @@ export const kernelSetup = setup({
   },
 })
 
-export type KernelMachine = ReturnType<typeof kernelSetup.createMachine>
+/**
+ * The shared machine type is deliberately loose: every graph composes
+ * `kernelRootHandlers` with its own `states` topology, so the constraint-level
+ * config shape (state value `{}`) is the vocabulary all machines share.
+ *
+ * xstate ≥5.28's routable-states event union degenerates the
+ * generic-signature instantiation (`ReturnType<typeof kernelSetup.createMachine>`)
+ * to `any` when TypeScript instantiates it at its config constraint. Deriving
+ * the type from a config-union-typed probe call instead resolves to the same
+ * loose machine type concretely.
+ */
+type KernelMachineConfig = Parameters<typeof kernelSetup.createMachine>[0]
+
+const kernelMachineProbeConfig: KernelMachineConfig = {
+  id: 'kernel-machine-probe',
+  context: initialKernelContext({}),
+}
+const kernelMachineProbe = kernelSetup.createMachine(kernelMachineProbeConfig)
+
+export type KernelMachine = typeof kernelMachineProbe
 export type KernelSnapshot = SnapshotFrom<KernelMachine>
 export type KernelActions = readonly ExecutableActionsFrom<KernelMachine>[]
 export type KernelStep = [snapshot: KernelSnapshot, actions: KernelActions]
@@ -174,8 +194,6 @@ export type KernelStep = [snapshot: KernelSnapshot, actions: KernelActions]
  * `stage.exit`, extended to the full derived state. Graphs compose this
  * record as their root `on`.
  */
-type KernelMachineConfig = Parameters<typeof kernelSetup.createMachine>[0]
-
 export const kernelRootHandlers: NonNullable<KernelMachineConfig['on']> = {
   'stage.exit': { actions: ['markStageDone'] },
   'stage.failed': { actions: ['recordFailure'] },

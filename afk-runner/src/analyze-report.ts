@@ -3,6 +3,8 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
+import { attendanceAggregateOf } from './analyze-attendance.js'
+import type { AttendanceAggregate } from './analyze-attendance.js'
 import type { CorpusReport, RunAnalysis } from './analyze-corpus.js'
 import type { R2Cause, R2CauseMix } from './analyze-findings.js'
 import type { Metric } from './analyze.js'
@@ -63,6 +65,31 @@ function gatesLine(run: RunAnalysis): string {
     if (rules.length > 0) parts.push(`auto rules: ${rules}`)
     return parts.join(' · ')
   })
+}
+
+function attendanceLine(run: RunAnalysis): string {
+  return metricLine(run.attendance, (att): string => {
+    const summary = attendanceAggregateOf([att])
+    if (summary === null) return 'no gates'
+    const parts: string[] = [`human ${ratioLine(summary.human, summary.answered)}`]
+    if (summary.humanWaitMedianMs !== null && summary.humanWaitUpperBoundMs !== null) {
+      parts.push(`wait median ${ageWord(summary.humanWaitMedianMs)} up ${ageWord(summary.humanWaitUpperBoundMs)}`)
+    }
+    const pending = att.pending.map((gate) => `v${gate.version} age ${ageWord(gate.ageMs)}`).join(', ')
+    if (pending.length > 0) parts.push(`pending ${pending}`)
+    const unknown = att.unknown.map((gate) => `v${gate.version} (${gate.reason})`).join(', ')
+    if (unknown.length > 0) parts.push(`unknown ${unknown}`)
+    return parts.join(' · ')
+  })
+}
+
+function attendanceSummaryLine(aggregate: AttendanceAggregate): string {
+  const percent = Math.round(aggregate.humanSettleRate * 100)
+  const wait =
+    aggregate.humanWaitMedianMs === null || aggregate.humanWaitUpperBoundMs === null
+      ? ''
+      : ` · wait median ${ageWord(aggregate.humanWaitMedianMs)} up ${ageWord(aggregate.humanWaitUpperBoundMs)}`
+  return `  gate attendance: human ${ratioLine(aggregate.human, aggregate.answered)} (${percent}%)${wait} · policy ${aggregate.policy} · waiter ${aggregate.waiter} · pending ${aggregate.pendingGates} · unknown ${aggregate.unknownGates}`
 }
 
 function ratioLine(numerator: number, denominator: number): string {
@@ -130,6 +157,7 @@ function runSection(run: RunAnalysis): readonly string[] {
   ]
   lines.push(`  trajectory: ${trajectoryLine(run)}`)
   lines.push(`  gates: ${gatesLine(run)}`)
+  lines.push(`  attendance: ${attendanceLine(run)}`)
   lines.push(`  duplicate-id rate: ${metricLine(run.duplicateIdRate, (rate) => rate.toFixed(2))}`)
   lines.push(`  lens overlap: ${metricLine(run.lensOverlapRate, (rate) => rate.toFixed(2))}`)
   lines.push(`  class churn: ${metricLine(run.classChurn, (rate) => rate.toFixed(2))}`)
@@ -180,6 +208,11 @@ function corpusSection(report: CorpusReport): readonly string[] {
     } cap-hit states`,
   )
   lines.push(`  gates never answered: ${aggregates.gatesNeverAnswered}`)
+  lines.push(
+    aggregates.gateAttendance === null
+      ? '  gate attendance: unknown'
+      : attendanceSummaryLine(aggregates.gateAttendance),
+  )
   return lines
 }
 

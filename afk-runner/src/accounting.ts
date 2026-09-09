@@ -63,6 +63,8 @@ export interface AccountedRow {
   readonly identity: string
   /** Terminal/live status, or `gate:<mode> v<version>` when parked at an unanswered gate. */
   readonly status: string
+  /** The worktree that started the run — rendered when the store is shared (afk-runner-store). */
+  readonly repoRoot: string | null
   readonly tokens: number | null
   readonly wallMs: number | null
   readonly updatedAt: string
@@ -141,6 +143,7 @@ function rowOf(input: RunAccountingInput, tokens: number | null, wallMs: number 
     runId: input.runId,
     identity: identityOf(input.runId, input.changeName),
     status,
+    repoRoot: input.repoRoot,
     tokens,
     wallMs,
     updatedAt: input.updatedAt,
@@ -237,15 +240,25 @@ function pad(value: string, width: number): string {
   return value.length >= width ? value : value.padEnd(width)
 }
 
+/** True when the roster holds runs from more than one worktree — the shared-store case that earns a repo column. */
+function isSharedRoster(rows: readonly AccountedRow[]): boolean {
+  const roots = new Set(rows.filter((row) => row.repoRoot !== null).map((row) => row.repoRoot))
+  return roots.size > 1
+}
+
 /** The roster + footer the `runs` verb prints. */
 export function renderRunsReport(summary: AccountingSummary): string {
   const identityWidth = Math.max('run'.length, ...summary.rows.map((row) => row.identity.length))
   const statusWidth = Math.max('status'.length, ...summary.rows.map((row) => row.status.length))
+  const shared = isSharedRoster(summary.rows)
+  const repoWidth = shared ? Math.max('repo'.length, ...summary.rows.map((row) => (row.repoRoot ?? '—').length)) : 0
+  const repoColumn = (row: AccountedRow): string => (shared ? `  ${pad(row.repoRoot ?? '—', repoWidth)}` : '')
+  const header = `${pad('run', identityWidth)}  ${pad('status', statusWidth)}${shared ? `  ${pad('repo', repoWidth)}` : ''}  tokens  wall`
   const lines: string[] = [
-    `${pad('run', identityWidth)}  ${pad('status', statusWidth)}  tokens  wall`,
+    header,
     ...summary.rows.map(
       (row) =>
-        `${pad(row.identity, identityWidth)}  ${pad(row.status, statusWidth)}  ${pad(formatTokens(row.tokens), 6)}  ${formatDuration(row.wallMs)}`,
+        `${pad(row.identity, identityWidth)}  ${pad(row.status, statusWidth)}${repoColumn(row)}  ${pad(formatTokens(row.tokens), 6)}  ${formatDuration(row.wallMs)}`,
     ),
   ]
   if (summary.rows.length > 0) {

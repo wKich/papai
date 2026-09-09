@@ -1122,6 +1122,12 @@ const EXECUTABLE_STORY_MAPPINGS: Partial<Record<CatalogScenarioId, ExecutableSto
       'tests/stories/scheduling/deferred.story.test.ts#SCN-deferred-fire-scheduled: a due scheduled prompt delivers a proactive message',
     ],
   },
+  // Corrected mechanism (rule 6): #418 adopted the #401 bug-3 lane-b baseline-on-create
+  // decision, so a filter alert no longer fires for tasks already matching on its first
+  // evaluation cycle — it records the matched set and fires nothing (no backlog replay).
+  // The scenario now baselines on a first quiet poll (the not-yet-declared chat route
+  // enforces silence), creates the overdue task, and observes the newly-matched edge fire
+  // on the second poll. Same two seams (capability-ids + scheduler-due-seed).
   'SCN-deferred-fire-alert': {
     verifiedAt: '2026-07-21',
     storyIds: [

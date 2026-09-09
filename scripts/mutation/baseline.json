@@ -11,11 +11,17 @@
     "timeout": 2,
     "scored": 92
   },
-  "afk-runner/src/agent-reporter.ts": {
-    "score": 0.6712328767123288,
-    "killed": 49,
+  "afk-runner/src/agent-noise-schemas.ts": {
+    "score": 0.5,
+    "killed": 21,
     "timeout": 0,
-    "scored": 73
+    "scored": 42
+  },
+  "afk-runner/src/agent-reporter.ts": {
+    "score": 0.7142857142857143,
+    "killed": 60,
+    "timeout": 0,
+    "scored": 84
   },
   "afk-runner/src/agent-schemas.ts": {
     "score": 0.42857142857142855,
@@ -120,8 +126,8 @@
     "scored": 2
   },
   "afk-runner/src/event-schemas.ts": {
-    "score": 0.7482014388489209,
-    "killed": 104,
+    "score": 0.7553956834532374,
+    "killed": 105,
     "timeout": 0,
     "scored": 139
   },
@@ -239,6 +245,48 @@
     "timeout": 0,
     "scored": 46
   },
+  "afk-runner/src/serve/args.ts": {
+    "score": 0.9482758620689655,
+    "killed": 53,
+    "timeout": 2,
+    "scored": 58
+  },
+  "afk-runner/src/serve/fs-seam.ts": {
+    "score": 1,
+    "killed": 6,
+    "timeout": 0,
+    "scored": 6
+  },
+  "afk-runner/src/serve/load.ts": {
+    "score": 0.88,
+    "killed": 22,
+    "timeout": 0,
+    "scored": 25
+  },
+  "afk-runner/src/serve/run-detail.ts": {
+    "score": 0.6666666666666666,
+    "killed": 75,
+    "timeout": 1,
+    "scored": 114
+  },
+  "afk-runner/src/serve/server.ts": {
+    "score": 0.632,
+    "killed": 79,
+    "timeout": 0,
+    "scored": 125
+  },
+  "afk-runner/src/serve/sweep.ts": {
+    "score": 0.8243243243243243,
+    "killed": 61,
+    "timeout": 0,
+    "scored": 74
+  },
+  "afk-runner/src/serve/view-model.ts": {
+    "score": 0.719626168224299,
+    "killed": 154,
+    "timeout": 0,
+    "scored": 214
+  },
   "afk-runner/src/session-id.ts": {
     "score": 0.7647058823529411,
     "killed": 13,
@@ -276,10 +324,10 @@
     "scored": 51
   },
   "afk-runner/src/work/atomicity.ts": {
-    "score": 0.8163265306122449,
-    "killed": 38,
+    "score": 0.8269230769230769,
+    "killed": 41,
     "timeout": 2,
-    "scored": 49
+    "scored": 52
   },
   "afk-runner/src/work/auto-policy.ts": {
     "score": 0.76,
@@ -294,10 +342,10 @@
     "scored": 120
   },
   "afk-runner/src/work/decompose.ts": {
-    "score": 0.7551020408163265,
-    "killed": 35,
+    "score": 0.7692307692307693,
+    "killed": 38,
     "timeout": 2,
-    "scored": 49
+    "scored": 52
   },
   "afk-runner/src/work/draft.ts": {
     "score": 0.5408163265306123,
@@ -408,10 +456,10 @@
     "scored": 135
   },
   "afk-runner/src/work/implement.ts": {
-    "score": 0.676923076923077,
-    "killed": 87,
+    "score": 0.7058823529411765,
+    "killed": 95,
     "timeout": 1,
-    "scored": 130
+    "scored": 136
   },
   "afk-runner/src/work/intake.ts": {
     "score": 0.7755102040816326,
@@ -498,10 +546,10 @@
     "scored": 11
   },
   "afk-runner/src/work/slice-commit.ts": {
-    "score": 0.7391304347826086,
-    "killed": 34,
+    "score": 0.7647058823529411,
+    "killed": 39,
     "timeout": 0,
-    "scored": 46
+    "scored": 51
   },
   "afk-runner/src/work/steer.ts": {
     "score": 0.2230769230769231,
@@ -1657,6 +1705,24 @@
     "timeout": 0,
     "scored": 58
   },
+  "review-loop/src/line-handler.ts": {
+    "score": 0.7551020408163265,
+    "killed": 111,
+    "timeout": 0,
+    "scored": 147
+  },
+  "review-loop/src/progress-log.ts": {
+    "score": 1,
+    "killed": 4,
+    "timeout": 0,
+    "scored": 4
+  },
+  "review-loop/src/todo-capture.ts": {
+    "score": 1,
+    "killed": 37,
+    "timeout": 0,
+    "scored": 37
+  },
   "src/analytics/provider-scope-factory.ts": {
     "score": 0.6571428571428571,
     "killed": 69,
@@ -1681,12 +1747,42 @@
     "timeout": 0,
     "scored": 72
   },
+  "src/chat/telegram/chunking.ts": {
+    "score": 0.86,
+    "killed": 38,
+    "timeout": 5,
+    "scored": 50
+  },
+  "src/chat/telegram/index.ts": {
+    "score": 0.5478723404255319,
+    "killed": 103,
+    "timeout": 0,
+    "scored": 188
+  },
+  "src/chat/telegram/mention-prefix.ts": {
+    "score": 0.8933333333333333,
+    "killed": 67,
+    "timeout": 0,
+    "scored": 75
+  },
+  "src/chat/telegram/reply-helpers.ts": {
+    "score": 0.5083798882681564,
+    "killed": 89,
+    "timeout": 2,
+    "scored": 179
+  },
+  "src/chat/telegram/send-message.ts": {
+    "score": 0.7948717948717948,
+    "killed": 31,
+    "timeout": 0,
+    "scored": 39
+  },
   "src/coding-sessions/configure.ts": 0.6666666666666666,
   "src/completion/verified-completion.ts": {
-    "score": 0.788135593220339,
-    "killed": 93,
+    "score": 0.7985074626865671,
+    "killed": 107,
     "timeout": 0,
-    "scored": 118
+    "scored": 134
   },
   "src/config.ts": 0.6535433070866141,
   "src/context-vault/summarizer.ts": {
@@ -1722,11 +1818,23 @@
     "timeout": 0,
     "scored": 28
   },
-  "src/debug/llm-trace-collector.ts": {
-    "score": 0.8461538461538461,
-    "killed": 143,
+  "src/debug/llm-trace-builders.ts": {
+    "score": 1,
+    "killed": 48,
     "timeout": 0,
-    "scored": 169
+    "scored": 48
+  },
+  "src/debug/llm-trace-collector.ts": {
+    "score": 0.8554913294797688,
+    "killed": 146,
+    "timeout": 2,
+    "scored": 173
+  },
+  "src/debug/schemas.ts": {
+    "score": 0.40476190476190477,
+    "killed": 17,
+    "timeout": 0,
+    "scored": 42
   },
   "src/debug/settings-api-router.ts": {
     "score": 0.5170940170940171,
@@ -1785,16 +1893,16 @@
     "scored": 32
   },
   "src/deferred-prompts/proactive-llm-helpers.ts": {
-    "score": 0.6952380952380952,
-    "killed": 73,
+    "score": 0.734375,
+    "killed": 94,
     "timeout": 0,
-    "scored": 105
+    "scored": 128
   },
   "src/deferred-prompts/proactive-llm.ts": {
-    "score": 0.7619047619047619,
-    "killed": 32,
+    "score": 1,
+    "killed": 36,
     "timeout": 0,
-    "scored": 42
+    "scored": 36
   },
   "src/deferred-prompts/proof-checks-observe.ts": {
     "score": 0.668918918918919,
@@ -1857,10 +1965,10 @@
     "scored": 100
   },
   "src/llm-orchestrator-send.ts": {
-    "score": 0.75,
-    "killed": 51,
+    "score": 0.7764705882352941,
+    "killed": 66,
     "timeout": 0,
-    "scored": 68
+    "scored": 85
   },
   "src/llm-orchestrator-support.ts": {
     "score": 0.5714285714285714,
@@ -1923,6 +2031,12 @@
     "scored": 109
   },
   "src/memory.ts": 0.6538461538461539,
+  "src/message-embedding-sweep.ts": {
+    "score": 0.6942148760330579,
+    "killed": 82,
+    "timeout": 2,
+    "scored": 121
+  },
   "src/model-context.ts": {
     "score": 0.6310679611650486,
     "killed": 65,

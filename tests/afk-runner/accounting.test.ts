@@ -97,6 +97,7 @@ interface RosterOverrides {
   readonly gate?: { mode: string; version: number } | null
   readonly changeName?: string
   readonly updatedAt?: string
+  readonly repoRoot?: string | null
   readonly events?: readonly SddEvent[] | null
 }
 
@@ -107,6 +108,7 @@ function roster(over: RosterOverrides = {}): RunAccountingInput {
     gate: over.gate ?? null,
     changeName: over.changeName ?? 'add-thing',
     updatedAt: over.updatedAt ?? at(3_600_000),
+    repoRoot: over.repoRoot ?? null,
     events: over.events ?? [],
     ...over,
   }
