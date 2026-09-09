@@ -47,6 +47,8 @@ export interface GateCard {
 export interface RunView {
   readonly runId: string
   readonly changeName: string
+  /** The worktree that started the run — the shared-store attribution key (null on legacy memos). */
+  readonly repoRoot: string | null
   readonly attention: RunAttention
   readonly status: string
   readonly stage: string | null
@@ -193,6 +195,7 @@ export function buildRunView(input: RunProjectionInput): RunView {
   return {
     runId,
     changeName: memo.changeName,
+    repoRoot: memo.repoRoot,
     attention: attentionOf(gate, folded, memo),
     status: statusOf(gate, folded, memo),
     stage: folded?.position ?? null,

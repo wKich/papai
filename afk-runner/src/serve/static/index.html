@@ -373,12 +373,15 @@ See LICENSE in the project root for details.
           return
         }
         const maxTokens = Math.max(1, ...portfolio.cards.map((card) => card.spend.tokens ?? 0))
+        const repoRoots = new Set(portfolio.cards.map((card) => card.repoRoot).filter((root) => root !== null))
+        const sharedStore = repoRoots.size > 1
         for (const card of portfolio.cards) {
           const node = el('div', `card ${card.attention}`)
           const top = el('div', 'row')
           top.append(el('span', 'name', card.changeName || card.runId))
           top.append(el('span', `pill ${card.attention}`, card.status))
           node.append(top)
+          if (sharedStore) node.append(el('div', 'meta', card.repoRoot ?? '—'))
           const meta = [card.stage, card.round === null ? null : `round ${card.round.current}/${card.round.cap}`]
             .filter((part) => part !== null)
             .join(' · ')

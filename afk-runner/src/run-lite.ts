@@ -11,6 +11,8 @@ export interface PersistedLite {
   readonly gate: { readonly mode: string; readonly version: number } | null
   readonly changeName: string
   readonly updatedAt: string
+  /** The worktree that started the run — the shared-store attribution key (null on memos predating the field). */
+  readonly repoRoot: string | null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -34,10 +36,12 @@ export function readLiteRecord(raw: string): Omit<PersistedLite, 'runId'> | null
   const version = gateRecord === null ? undefined : gateRecord['version']
   const changeName = parsed['changeName']
   const updatedAt = parsed['updatedAt']
+  const repoRoot = parsed['repoRoot']
   return {
     status,
     gate: typeof mode === 'string' && typeof version === 'number' ? { mode, version } : null,
     changeName: typeof changeName === 'string' ? changeName : '',
     updatedAt: typeof updatedAt === 'string' ? updatedAt : '',
+    repoRoot: typeof repoRoot === 'string' ? repoRoot : null,
   }
 }

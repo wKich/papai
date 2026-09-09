@@ -36,23 +36,23 @@ follow-up proposals gated on this change's evidence artifacts.
 
 ## 2. Phase 1 — central-store contract
 
-- [ ] 2.1 Red-first: extend `tests/afk-runner/config.test.ts` pinning the
+- [x] 2.1 Red-first: extend `tests/afk-runner/config.test.ts` pinning the
       relocation contract of the `afk-runner-store` spec — a config file with an
       absolute `workDir` resolves bookkeeping to that path (nothing created under
       `<repoRoot>/.afk-runner/` beyond the config itself), the lookup candidate
       stays `<repoRoot>/.afk-runner/config.json`, and a `config.json` inside the
       declared store is never consulted for launch resolution. Watch the new
       cases fail or pin already-passing behavior explicitly. → `bun test tests/afk-runner/config.test.ts`
-- [ ] 2.2 Audit `afk-runner/src/` for `workDir ⊆ repoRoot` assumptions (path
+- [x] 2.2 Audit `afk-runner/src/` for `workDir ⊆ repoRoot` assumptions (path
       joins, relative resolutions); every finding gets its failing test first,
       then the fix. Record the audit result (even zero findings) in `notes.md`.
       → `bun run typecheck && bun test tests/afk-runner/`
-- [ ] 2.3 New `tests/afk-runner/shared-store.test.ts`: a synthetic store
+- [x] 2.3 New `tests/afk-runner/shared-store.test.ts`: a synthetic store
       holding runs started from two distinct repoRoots — the `runs` roster and
       the serve portfolio render both distinguished by their memos' `repoRoot`,
       run-id resolution works over the store, and both runs keep independent
       directories. Red-first where behavior is new. → `bun test tests/afk-runner/shared-store.test.ts`
-- [ ] 2.4 Sweep the serve/config suites for regressions. → `bun test tests/afk-runner/serve tests/afk-runner/config-strict.test.ts`
+- [x] 2.4 Sweep the serve/config suites for regressions. → `bun test tests/afk-runner/serve tests/afk-runner/config-strict.test.ts`
 
 ## 3. Phase 1 — dogfood and docs
 

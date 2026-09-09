@@ -56,4 +56,39 @@ the scratch/short runs contribute 1–2 gates each at 1m–13m; the three
 
 ## Phase 1 — central-store dogfood
 
-(to be recorded by tasks 3.1–3.3)
+### WorkDir ⊆ repoRoot audit (task 2.2, 2026-09-09)
+
+Swept every path construction in `afk-runner/src/` for an assumption that
+bookkeeping sits under the repo root. **Zero defects found.**
+
+- Bookkeeping paths all flow from the resolved config —
+  `path.join(workDir, 'runs', …)` in `run.ts`, `run-state.ts`, `run-index.ts`,
+  `run-stop.ts`, `run-resume.ts`, `run-lite.ts`, `accounting.ts`,
+  `work/report.ts`, `serve/load.ts`, `serve/sweep.ts`, `analyze-io.ts`, `cli.ts`
+  — and runDir-derived joins (`gate-waiter.ts`, `stop-controller.ts`,
+  `session-ledger.ts`, `drive/loop.ts` `dirname(logPath)`) inherit the same
+  root. No verb re-derives workDir from repoRoot.
+- `config.ts:141` resolves `workDir` via `path.resolve(repoRoot, workDir)` —
+  an absolute value wins; pinned as contract by the new `config.test.ts`
+  cases (task 2.1), including "nothing under `<repoRoot>/.afk-runner/` beyond
+  the config" and "the store's own config.json is never a launch surface".
+- Near-finding examined and cleared: `work/gate-prelude.ts:96` computes
+  `path.relative(repoRoot, runDir)` for the R3 assumption-boundary join. With a
+  relocated store this yields a `../`-prefixed string, but the join is
+  transform-consistent — the artifact-event paths it is compared against are
+  recorded through the same `path.relative(repoRoot, …)` (`work/materialize.ts`)
+  — and any mismatch classifies fail-closed (high-blast), never vacuously
+  low-blast. Not a defect.
+- The write guard (`write-guard.ts`) judges git-dirty repo paths; a store
+  outside the repo never appears in `git status`, so guard semantics are
+  unchanged by relocation.
+- The memo already persists `repoRoot` (`run.ts` `seedRepoState`) — the field
+  the shared-store spec needs to attribute runs to worktrees.
+- Agent scratch/report paths (`agent-layer.ts` → `agentWritePath`) resolve
+  against the agent's cwd, not the run dir — unaffected.
+
+Verification: `bun run typecheck` clean; `bun test tests/afk-runner/` green.
+
+### Dogfood record (tasks 3.1–3.3)
+
+(to be recorded)
