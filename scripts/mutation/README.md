@@ -38,6 +38,19 @@ install time. Because the score fingerprint hashes `bun.lock` and
 `bun test:mutate --update-baseline`) — floors may sit lower than their v9
 values where the new instrumenter counts more mutants.
 
+A **product dependency** bump can invalidate individual floors the same way,
+without touching any lockfile the fingerprint sees: zod 4.5 (merged after a
+floor was recorded) made `discriminatedUnion` validate options eagerly at
+construction, so 19 construction-crash static mutants in
+`afk-runner/src/event-schemas.ts` flipped Killed → RuntimeError — a crash at
+first `.parse()` inside a test is a kill, a crash at module load is a
+RuntimeError, which scoring excludes (`score-merger.ts`). Survivors were
+unchanged, but killed 105 → 86 read as a true regression. `seedMerge` is
+monotonic and never lowers a rich floor, so re-basing one is
+delete-then-seed: drop the stale key from `baseline.json`, then
+`bun test:mutate:file <path> --update-baseline` records the fresh measurement
+(PR #431).
+
 ## Commands
 
 ```bash

@@ -22,7 +22,12 @@ import type { KernelContext } from '../../../afk-runner/src/kernel/machine.js'
 import { resumeRun } from '../../../afk-runner/src/run-resume.js'
 import { startRun } from '../../../afk-runner/src/run.js'
 import type { ImplementDeps } from '../../../afk-runner/src/work/implement.js'
-import { firstOwedItem, implementOutcomeOf, runImplementWork } from '../../../afk-runner/src/work/implement.js'
+import {
+  firstOwedItem,
+  implementOutcomeOf,
+  runImplementWork,
+  taskStartedDetail,
+} from '../../../afk-runner/src/work/implement.js'
 import { parseTaskItems } from '../../../afk-runner/src/work/tasks-md.js'
 import type { TaskItem } from '../../../afk-runner/src/work/tasks-md.js'
 import { agentWritePath } from '../../../review-loop/src/agent-runner.js'
@@ -139,6 +144,11 @@ function stageTokens(events: readonly SddEvent[]): string[] {
 /** The first prompt a spawn seam recorded for a basename — empty when it never spawned. */
 function firstPromptOf(pipeline: FakePipeline, basename: string): string {
   return pipeline.spawnPrompts[basename]?.[0] ?? ''
+}
+
+/** Every prompt recorded for the given basenames, flattened in order. */
+function promptsOf(pipeline: FakePipeline, ...basenames: string[]): string[] {
+  return basenames.flatMap((basename) => pipeline.spawnPrompts[basename] ?? [])
 }
 
 /** The log index of a task's done record — -1 when the walk never recorded it. */
@@ -634,6 +644,101 @@ describe('structural precondition halt — missing/unreadable tasks.md (walk-rob
 function commitCalls(gitCalls: readonly string[][]): string[][] {
   return gitCalls.filter((args) => args[0] === 'add' || args[0] === 'commit')
 }
+
+/** Every started task event's detail, in log order. */
+function startedDetailsOf(events: readonly SddEvent[]): (string | undefined)[] {
+  return events
+    .filter(
+      (event): event is Extract<SddEvent, { type: 'task' }> => event.type === 'task' && event.action === 'started',
+    )
+    .map((event) => event.detail)
+}
+
+describe('started-event detail and the todo-tool mandate (afk-runner-task-todos D1/D3)', () => {
+  function startedDetailOf(appended: readonly SddEvent[], id: string): string | undefined {
+    const started = appended.find(
+      (event): event is Extract<SddEvent, { type: 'task' }> =>
+        event.type === 'task' && event.action === 'started' && event.id === id,
+    )
+    return started?.detail
+  }
+
+  it('the started event carries the item text in detail, truncated at 200 chars', async () => {
+    const h = unitHarness({
+      tasksMd: [`- [ ] 1.1 ${'y'.repeat(450)}`, ''].join('\n'),
+      tasks: {},
+    })
+    await runImplementWork(h.deps, { changeName: 'add-thing' }, h.io)
+    expect(startedDetailOf(h.appended, '1')).toHaveLength(200)
+    expect(startedDetailOf(h.appended, '1')).toBe(`1.1 ${'y'.repeat(196)}`)
+  })
+
+  it('a short item text rides the detail verbatim', async () => {
+    const h = unitHarness({ tasks: {} })
+    await runImplementWork(h.deps, { changeName: 'add-thing' }, h.io)
+    expect(startedDetailOf(h.appended, '1')).toBe('1.1 first item')
+  })
+
+  it('taskStartedDetail collapses line breaks to one line before truncating at the bound', () => {
+    expect(taskStartedDetail('fix the chunking fallback')).toBe('fix the chunking fallback')
+    const multiline = `line one\nline two\r\nline three`
+    expect(taskStartedDetail(multiline)).toBe(`line one line two line three`)
+    expect(taskStartedDetail('z'.repeat(300))).toHaveLength(200)
+    expect(taskStartedDetail('z'.repeat(300))).toBe('z'.repeat(200))
+  })
+
+  it('the fake pipeline walk stamps every item text: fresh, fix-shaped, and validation-retry prompts keep the mandate', async () => {
+    const pipeline = makeFakePipeline({
+      artifactOverrides: { 'decompose-tasks.json': TASKS_MD },
+      sidecarOverrides: {
+        'implement-t1.json': JSON.stringify({ files_written: ['src/one.ts'] }),
+        'implement-t2.json': JSON.stringify({ files_written: ['src/two.ts'] }),
+        'implement-t3.json': JSON.stringify({ files_written: ['src/three.ts'] }),
+      },
+      sidecarSequences: {
+        // first implementer attempt writes an invalid sidecar, second passes:
+        // the validation-retry rebuild of the base prompt must keep the line
+        'implement-t1.json': ['{"files_written":[]}', JSON.stringify({ files_written: ['src/one.ts'] })],
+      },
+    })
+    const started = await startRun(pipeline.deps, { taskText: TASK_TEXT, execute: true })
+    expect(started.halted).toBe('gate-pending')
+    const runDir = pipeline.runDirOf(started.runId)
+    fs.writeFileSync(
+      path.join(runDir, 'gate-1.md'),
+      '<!-- gate-1.md -->\n\n## Final gate\n\n## Gate response\n\nAPPROVE\n',
+    )
+    const clock = fakeClock()
+    await abortReleaseAndWait(
+      resumeRun({ ...pipeline.deps, gateWait: { tick: clock.tick } }, started.runId),
+      clock,
+      runDir,
+    )
+    const events = readEvents(path.join(runDir, 'events.ndjson'))
+    expect(startedDetailsOf(events)).toEqual(['1.1 first item', '1.2 second item', '1.3 third item'])
+    // fresh prompts (t2, t3) and both validation-retry attempts (t1) carry the mandate
+    const prompts = promptsOf(pipeline, 'implement-t1.json', 'implement-t2.json', 'implement-t3.json')
+    expect(prompts).toHaveLength(4)
+    for (const prompt of prompts) {
+      expect(prompt).toContain('Plan the item with the todo tool before editing; keep the todo list current')
+    }
+    expect(pipeline.spawnPrompts['implement-t1.json']).toHaveLength(2)
+    expect(promptsOf(pipeline, 'implement-t1.json')[1]).toContain('Previous attempt failed validation')
+  })
+
+  it('fix-shaped prompts carry the mandate line too (guard array, not the fresh branch)', async () => {
+    const h = unitHarness({
+      tasks: ALL_DONE,
+      runFiles: {
+        'verify-1.log': ['(fail) expects two to be three', 'src/old.ts:31:7'].join('\n'),
+      },
+      gitLogStdout: ['@@1.2 second item', 'src/old.ts', '@@1.1 first item', 'src/one.ts'].join('\n'),
+    })
+    await runImplementWork(h.deps, { changeName: 'add-thing' }, h.io)
+    expect(h.prompts[0]).toContain('Fix one task of the change add-thing')
+    expect(h.prompts[0]).toContain('Plan the item with the todo tool before editing; keep the todo list current')
+  })
+})
 
 /** Fake clock: each tick resolves only when the test releases it. */
 function fakeClock(): {

@@ -132,10 +132,10 @@
     "scored": 2
   },
   "afk-runner/src/event-schemas.ts": {
-    "score": 0.7553956834532374,
-    "killed": 105,
+    "score": 0.7166666666666667,
+    "killed": 86,
     "timeout": 0,
-    "scored": 139
+    "scored": 120
   },
   "afk-runner/src/events.ts": {
     "score": 0.9565217391304348,

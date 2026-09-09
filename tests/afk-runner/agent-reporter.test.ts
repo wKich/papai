@@ -143,3 +143,19 @@ describe('createAgentReporter todo capture (agent-todos-capture D3/D4)', () => {
     expect(event.todos[19]?.content).toBe('item 19')
   })
 })
+
+describe('createAgentReporter sawTodos flag (afk-runner-task-todos D4)', () => {
+  it('is false until the todos hook fires and true after any firing, deduped or not', () => {
+    const { reporter } = harness()
+    expect(reporter.sawTodos()).toBe(false)
+    reporter.slot?.('resolver-r1', 'resolver-r1 ▶ read foo.ts · 4s · 3 tools')
+    reporter.usage?.({ input: 1, output: 1, reasoning: 0, cost: 0 })
+    expect(reporter.sawTodos()).toBe(false)
+    const todos = [{ content: 'RED: add rows', status: 'in_progress' }]
+    reporter.todos?.(todos)
+    expect(reporter.sawTodos()).toBe(true)
+    // an identical (deduped, non-emitting) snapshot still counts as a firing
+    reporter.todos?.(todos)
+    expect(reporter.sawTodos()).toBe(true)
+  })
+})

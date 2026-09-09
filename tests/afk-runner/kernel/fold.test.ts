@@ -1001,3 +1001,77 @@ describe('kernel fold — execution residues (U3 D1/D4)', () => {
     })
   })
 })
+
+describe('kernel fold — task records carry the item text (afk-runner-task-todos D1/D2)', () => {
+  it('toKernelEvent maps a started detail onto the kernel task.started event; absent detail stays absent', () => {
+    expect(
+      toKernelEvent(stamp({ altitude: 'L2', type: 'task', action: 'started', id: '1', detail: 'Fix the fallback' }, 1)),
+    ).toEqual({ type: 'task.started', id: '1', detail: 'Fix the fallback' })
+    expect(toKernelEvent(stamp({ altitude: 'L2', type: 'task', action: 'started', id: '1' }, 2))).toEqual({
+      type: 'task.started',
+      id: '1',
+    })
+  })
+
+  it('a started detail stamps TaskRecord.text and done/failed preserve it through the rebuilt record', () => {
+    const done = foldEvents(pipelineMachine, [
+      stamp({ altitude: 'L2', type: 'task', action: 'started', id: '1', detail: 'Fix the chunking fallback' }, 1),
+      stamp({ altitude: 'L2', type: 'task', action: 'done', id: '1' }, 2),
+    ])
+    expect(done.snapshot.context.tasks['1']).toEqual({
+      status: 'done',
+      attempts: 1,
+      text: 'Fix the chunking fallback',
+    })
+    const failed = foldEvents(pipelineMachine, [
+      stamp({ altitude: 'L2', type: 'task', action: 'started', id: '2', detail: 'second item' }, 1),
+      stamp({ altitude: 'L2', type: 'task', action: 'failed', id: '2', detail: 'verify red' }, 2),
+    ])
+    expect(failed.snapshot.context.tasks['2']).toEqual({
+      status: 'failed',
+      attempts: 1,
+      text: 'second item',
+    })
+  })
+
+  it('a pre-change started event (no detail) folds a text-free record, and a re-start re-stamps the text', () => {
+    const pre = foldEvents(pipelineMachine, [
+      stamp({ altitude: 'L2', type: 'task', action: 'started', id: '1' }, 1),
+      stamp({ altitude: 'L2', type: 'task', action: 'done', id: '1' }, 2),
+    ])
+    expect(pre.snapshot.context.tasks['1']).toEqual({ status: 'done', attempts: 1 })
+    const restamped = foldEvents(pipelineMachine, [
+      stamp({ altitude: 'L2', type: 'task', action: 'started', id: '1', detail: 'first item' }, 1),
+      stamp({ altitude: 'L2', type: 'task', action: 'failed', id: '1' }, 2),
+      stamp({ altitude: 'L2', type: 'task', action: 'started', id: '1', detail: 'first item' }, 3),
+    ])
+    expect(restamped.snapshot.context.tasks['1']).toEqual({
+      status: 'running',
+      attempts: 2,
+      text: 'first item',
+    })
+  })
+})
+
+describe('kernel fold — todos_missing tolerance pin (afk-runner-task-todos D5)', () => {
+  const missingEvent = (seq: number): SddEvent =>
+    stamp({ altitude: 'L0', type: 'todos_missing', agent: 'implement-t2' }, seq)
+
+  it('toKernelEvent returns null: the fold counts the event tolerated and the snapshot is unchanged', () => {
+    expect(toKernelEvent(missingEvent(1))).toBeNull()
+    const base = [
+      stamp({ altitude: 'L2', type: 'round_open', round: 1, cap: 3 }, 1),
+      stamp({ altitude: 'L2', type: 'stage_enter', stage: 'intake' }, 2),
+      missingEvent(3),
+      stamp({ altitude: 'L2', type: 'stage_exit', stage: 'intake' }, 4),
+      missingEvent(5),
+    ]
+    const without = foldEvents(
+      pipelineMachine,
+      base.filter((event) => event.type !== 'todos_missing'),
+    )
+    const withMissing = foldEvents(pipelineMachine, base)
+    expect(withMissing.accounting).toEqual({ total: 5, mapped: 3, tolerated: 2 })
+    expect(withMissing.snapshot).toEqual(without.snapshot)
+  })
+})

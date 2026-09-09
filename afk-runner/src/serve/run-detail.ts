@@ -44,6 +44,8 @@ export interface TaskWalkEntry {
   readonly id: string
   readonly status: string
   readonly attempts: number
+  /** The item's text from the folded record (afk-runner-task-todos D6) — null when the log carries none. */
+  readonly text: string | null
 }
 
 export interface RecentEvent {
@@ -82,6 +84,8 @@ export interface RunDetailView {
   readonly rounds: readonly RoundHistory[]
   readonly tasks: readonly TaskWalkEntry[]
   readonly todos: readonly AgentTodosEntry[]
+  /** Implementers whose spawn completed without emitting todos (afk-runner-task-todos D6) — labels, no synthesized items. */
+  readonly missingTodos: readonly string[]
   readonly strips: readonly AgentStrip[]
   readonly stageAccounts: readonly StageAccount[]
   readonly recentEvents: readonly RecentEvent[]
@@ -100,11 +104,12 @@ function roundHistoryOf(record: DigestRecord): RoundHistory {
   return { round: record.round, verdict: record.verdict, raised: record.counts, open: openCountsOf(record) }
 }
 
-/** A feed line's detail clause stays a line: bounded like a gate row gap. */
+/** A feed line's detail clause stays a line: line breaks collapse, bounded like a gate row gap. */
 const MAX_DETAIL_LEN = 160
 
 function boundedDetail(detail: string): string {
-  return detail.length > MAX_DETAIL_LEN ? `${detail.slice(0, MAX_DETAIL_LEN - 1)}…` : detail
+  const oneLine = detail.replace(/[\r\n]+/gu, ' ')
+  return oneLine.length > MAX_DETAIL_LEN ? `${oneLine.slice(0, MAX_DETAIL_LEN - 1)}…` : oneLine
 }
 
 /** Compact tokens for one feed line, mirroring the client's ticker format. */
@@ -122,7 +127,10 @@ function summarizeEvent(event: SddEvent): string {
   if (event.type === 'gate') {
     return `gate ${event.action} ${event.mode} v${event.version}${event.outcome === undefined ? '' : ` → ${event.outcome}`}`
   }
-  if (event.type === 'task') return `task ${event.action} ${event.id}`
+  if (event.type === 'task') {
+    const detail = event.detail === undefined ? '' : ` — ${boundedDetail(event.detail)}`
+    return `task ${event.action} ${event.id}${detail}`
+  }
   if (event.type === 'convergence') return `convergence r${event.round} ${event.verdict}`
   if (event.type === 'spawned') return `spawned ${event.agent} · ${event.role} · ${event.model}`
   if (event.type === 'finding') {
@@ -157,6 +165,20 @@ function todosOf(events: readonly SddEvent[] | null): readonly AgentTodosEntry[]
     latest.set(event.agent, { agent: event.agent, updatedAt: event.ts, items: event.todos })
   }
   return [...latest.values()]
+}
+
+/**
+ * Labels carrying a `todos_missing` mark (afk-runner-task-todos D6), deduped
+ * in first-appearance order — the todos panel's no-todos-emitted note input.
+ * Names only: the panel never presents runner-synthesized todo content.
+ */
+function missingTodosOf(events: readonly SddEvent[] | null): readonly string[] {
+  if (events === null) return []
+  const labels = new Set<string>()
+  for (const event of events) {
+    if (event.type === 'todos_missing') labels.add(event.agent)
+  }
+  return [...labels]
 }
 
 /**
@@ -205,6 +227,7 @@ export function buildRunDetail(input: RunDetailInput): RunDetailView {
           id,
           status: record.status,
           attempts: record.attempts,
+          text: record.text ?? null,
         }))
   return {
     runId,
@@ -218,6 +241,7 @@ export function buildRunDetail(input: RunDetailInput): RunDetailView {
     rounds: folded === null ? [] : folded.context.perRound.map(roundHistoryOf),
     tasks,
     todos: todosOf(events),
+    missingTodos: missingTodosOf(events),
     strips: events === null ? [] : agentStripsOf(events),
     stageAccounts: events === null ? [] : stageAccountsOf(events, now),
     recentEvents: recentEventsOf(events),

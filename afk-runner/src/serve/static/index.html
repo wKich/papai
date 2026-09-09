@@ -465,7 +465,7 @@ See LICENSE in the project root for details.
       }
 
       function renderTodos(detail, host) {
-        if (detail.todos.length === 0) return
+        if (detail.todos.length === 0 && detail.missingTodos.length === 0) return
         host.append(el('h2', null, 'agent todos (agent-emitted)'))
         const panel = el('div', 'todos')
         for (const entry of detail.todos) {
@@ -482,6 +482,12 @@ See LICENSE in the project root for details.
             line.append(document.createTextNode(item.content))
             panel.append(line)
           }
+        }
+        for (const label of detail.missingTodos) {
+          const head = el('div', 'todo-agent')
+          head.append(el('span', null, label))
+          head.append(el('span', 'todo-age', ' · no todos emitted'))
+          panel.append(head)
         }
         host.append(panel)
       }
@@ -656,7 +662,7 @@ See LICENSE in the project root for details.
           table.append(header)
           for (const task of detail.tasks) {
             const row = el('tr')
-            row.append(el('td', null, task.id))
+            row.append(el('td', null, task.text === null ? task.id : `${task.id} · ${task.text}`))
             row.append(el('td', null, task.status))
             row.append(el('td', null, String(task.attempts)))
             table.append(row)

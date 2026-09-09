@@ -69,12 +69,20 @@ const noop = (): void => {
  * event-bus emissions (design D1). Only `slot`, `usage` and `todos` carry
  * data; the imperative display methods are no-ops because sdd-runner's
  * renderer drives its own dynamic block from the event bus.
+ *
+ * The afk-runner-side `sawTodos()` extension (afk-runner-task-todos D4)
+ * exposes whether the todos hook ever fired — the zero-snapshot detection
+ * input — without touching the review-loop `ProgressReporter` type.
  */
-export function createAgentReporter(label: string, emit: (event: EventInput) => void): ProgressReporter {
+export function createAgentReporter(
+  label: string,
+  emit: (event: EventInput) => void,
+): ProgressReporter & { sawTodos(): boolean } {
   // Dedup state is per-reporter, i.e. per agent session (D4): identical
   // consecutive snapshots emit once; the compare runs on the bounded shape
   // that would be emitted.
   let lastTodosJson: string | null = null
+  let todosSeen = false
   return {
     get dynamic(): boolean {
       return false
@@ -90,6 +98,7 @@ export function createAgentReporter(label: string, emit: (event: EventInput) => 
       emit(buildStepFinishEvent(label, delta))
     },
     todos: (items: readonly TodoItem[]): void => {
+      todosSeen = true
       const bounded = items
         .slice(0, MAX_TODO_ITEMS)
         .map((item) => ({ content: item.content.slice(0, MAX_TODO_CONTENT_CHARS), status: item.status }))
@@ -103,5 +112,8 @@ export function createAgentReporter(label: string, emit: (event: EventInput) => 
       return ''
     },
     diff: noop,
+    sawTodos(): boolean {
+      return todosSeen
+    },
   }
 }

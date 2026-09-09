@@ -171,6 +171,83 @@ function makeOptions(dir: string, basename: string): RunStageAgentOptions<{ find
   }
 }
 
+describe('todos_missing emission matrix (afk-runner-task-todos D4)', () => {
+  const TODO_LINE = JSON.stringify({
+    type: 'tool_use',
+    part: {
+      tool: 'todowrite',
+      callID: 'c1',
+      state: {
+        status: 'completed',
+        input: { todos: [{ content: 'RED: add rows', status: 'in_progress', priority: 'high' }] },
+      },
+    },
+  })
+
+  function makeImplementerOptions(dir: string, basename: string): RunStageAgentOptions<{ findings: Finding[] }> {
+    return {
+      ...makeOptions(dir, basename),
+      role: 'implementer' as const,
+      label: 'implement-t1',
+    }
+  }
+
+  function todosMissing(emitted: readonly EventInput[]): string[] {
+    return emitted
+      .filter((e): e is Extract<EventInput, { type: 'todos_missing' }> => e.type === 'todos_missing')
+      .map((e) => e.agent)
+  }
+
+  it('implementer + zero snapshots on the success path → exactly one todos_missing after done, before settle-out', async () => {
+    const dir = makeDir()
+    const fake = makeFakeSpawn('implement-t1.json', [{ write: VALID_FINDINGS }])
+    const { agent, emitted } = makeAgent(dir, fake)
+    await runStageAgent(agent, makeImplementerOptions(dir, 'implement-t1.json'))
+    expect(todosMissing(emitted)).toEqual(['implement-t1'])
+    const doneAt = emitted.findIndex((e) => e.type === 'done')
+    const missingAt = emitted.findIndex((e) => e.type === 'todos_missing')
+    expect(doneAt).toBeGreaterThanOrEqual(0)
+    expect(missingAt).toBeGreaterThan(doneAt)
+  })
+
+  it('implementer that emitted a todo snapshot is not marked', async () => {
+    const dir = makeDir()
+    const fake = makeFakeSpawn('implement-t1.json', [{ write: VALID_FINDINGS, lines: [TODO_LINE] }])
+    const { agent, emitted } = makeAgent(dir, fake)
+    await runStageAgent(agent, makeImplementerOptions(dir, 'implement-t1.json'))
+    expect(todosMissing(emitted)).toEqual([])
+  })
+
+  it('a non-implementer role completing without snapshots is never marked', async () => {
+    const dir = makeDir()
+    const fake = makeFakeSpawn('findings-1.json', [{ write: VALID_FINDINGS }])
+    const { agent, emitted } = makeAgent(dir, fake)
+    await runStageAgent(agent, makeOptions(dir, 'findings-1.json'))
+    expect(emitted.filter((e) => e.type === 'done')).toHaveLength(1)
+    expect(todosMissing(emitted)).toEqual([])
+  })
+
+  it('a validation-failed attempt emits no done and no mark (exhaustion throws instead)', async () => {
+    const dir = makeDir()
+    const fake = makeFakeSpawn('implement-t1.json', [
+      { write: '{"findings":[{"id":"F1"}]}' },
+      { write: '{"findings":[{"id":"F1"}]}' },
+    ])
+    const { agent, emitted } = makeAgent(dir, fake)
+    await expect(runStageAgent(agent, makeImplementerOptions(dir, 'implement-t1.json'))).rejects.toThrow(/validation/u)
+    expect(emitted.filter((e) => e.type === 'done')).toEqual([])
+    expect(todosMissing(emitted)).toEqual([])
+  })
+
+  it('a killed attempt takes the catch path and emits no mark (a crash is not non-compliance)', async () => {
+    const dir = makeDir()
+    const fake = makeFakeSpawn('implement-t1.json', [{ result: { exitCode: 1, timedOut: true } }])
+    const { agent, emitted } = makeAgent(dir, fake)
+    await expect(runStageAgent(agent, makeImplementerOptions(dir, 'implement-t1.json'))).rejects.toThrow()
+    expect(todosMissing(emitted)).toEqual([])
+  })
+})
+
 describe('sidecar schemas', () => {
   it('accepts well-formed findings and rejects a finding without a gap quote', () => {
     const good = FindingsSidecarSchema.safeParse(JSON.parse(VALID_FINDINGS))

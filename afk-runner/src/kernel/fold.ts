@@ -42,7 +42,9 @@ function gateKernelEventOf(event: SddEvent): KernelEvent | null {
 function executionKernelEventOf(event: SddEvent): KernelEvent | null {
   if (event.type === 'execution') return { type: 'execution.armed' }
   if (event.type !== 'task') return null
-  if (event.action === 'started') return { type: 'task.started', id: event.id }
+  if (event.action === 'started') {
+    return { type: 'task.started', id: event.id, ...(event.detail === undefined ? {} : { detail: event.detail }) }
+  }
   if (event.action === 'done') return { type: 'task.done', id: event.id }
   return { type: 'task.failed', id: event.id }
 }

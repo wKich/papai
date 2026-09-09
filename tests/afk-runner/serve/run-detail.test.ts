@@ -129,6 +129,87 @@ describe('serve run-detail — the agent todos projection', () => {
   })
 })
 
+describe('serve run-detail — walk text, feed detail, missingTodos (afk-runner-task-todos D6)', () => {
+  it('walk entries carry text from the folded record, null when the log carries none', () => {
+    const events = [
+      ev({ altitude: 'L2', type: 'execution', action: 'armed' }, 1, at(1 * 60_000)),
+      ev(
+        { altitude: 'L2', type: 'task', action: 'started', id: '1', detail: 'Fix the chunking fallback' },
+        2,
+        at(2 * 60_000),
+      ),
+      ev({ altitude: 'L2', type: 'task', action: 'done', id: '1' }, 3, at(3 * 60_000)),
+      ev({ altitude: 'L2', type: 'task', action: 'started', id: '2' }, 4, at(4 * 60_000)),
+    ]
+    const detail = detailOf(events)
+    expect(detail.tasks).toEqual([
+      { id: '1', status: 'done', attempts: 1, text: 'Fix the chunking fallback' },
+      { id: '2', status: 'running', attempts: 1, text: null },
+    ])
+  })
+
+  it('task feed lines append bounded detail: the started text and the failed tail', () => {
+    const events = [
+      ev(
+        { altitude: 'L2', type: 'task', action: 'started', id: '1', detail: 'Fix the chunking fallback' },
+        1,
+        at(1 * 60_000),
+      ),
+      ev(
+        {
+          altitude: 'L2',
+          type: 'task',
+          action: 'failed',
+          id: '1',
+          detail: ['boom line one', 'boom line two'].join('\n'),
+        },
+        2,
+        at(2 * 60_000),
+      ),
+    ]
+    const detail = detailOf(events)
+    expect(detail.recentEvents.map((event) => event.summary)).toEqual([
+      'task started 1 — Fix the chunking fallback',
+      'task failed 1 — boom line one boom line two',
+    ])
+  })
+
+  it('a task event without detail renders the identifier-only line exactly as before', () => {
+    const events = [ev({ altitude: 'L2', type: 'task', action: 'done', id: '3' }, 1, at(1 * 60_000))]
+    expect(detailOf(events).recentEvents.map((event) => event.summary)).toEqual(['task done 3'])
+  })
+
+  it('an overlong detail is bounded in the feed line', () => {
+    const events = [
+      ev({ altitude: 'L2', type: 'task', action: 'started', id: '1', detail: 'd'.repeat(300) }, 1, at(1 * 60_000)),
+    ]
+    const summary = lastSummaryOf(detailOf(events))
+    expect(summary.startsWith(`task started 1 — ${'d'.repeat(159)}`)).toBe(true)
+    expect(summary.endsWith('…')).toBe(true)
+    expect(summary.length).toBe(`task started 1 — `.length + 160)
+  })
+
+  it('missingTodos lists deduped labels from todos_missing events; absent when the log carries none', () => {
+    const withMarks = [
+      ev({ altitude: 'L2', type: 'stage_enter', stage: 'implement' }, 1, at(1 * 60_000)),
+      ev({ altitude: 'L0', type: 'todos_missing', agent: 'implement-t2' }, 2, at(2 * 60_000)),
+      ev({ altitude: 'L0', type: 'todos_missing', agent: 'implement-t5' }, 3, at(3 * 60_000)),
+      ev({ altitude: 'L0', type: 'todos_missing', agent: 'implement-t2' }, 4, at(4 * 60_000)),
+    ]
+    expect(detailOf(withMarks).missingTodos).toEqual(['implement-t2', 'implement-t5'])
+    const withoutMarks = [ev({ altitude: 'L2', type: 'stage_enter', stage: 'implement' }, 1, at(1 * 60_000))]
+    expect(detailOf(withoutMarks).missingTodos).toEqual([])
+    const degraded = buildRunDetail({
+      runId: 'degraded',
+      memo: liteMemo('degraded'),
+      events: null,
+      now: NOW_MS,
+      gateContent: null,
+    })
+    expect(degraded.missingTodos).toEqual([])
+  })
+})
+
 describe('serve run-detail — the per-stage accounting table', () => {
   it('renders stage rows from the same delta attribution as the run totals', () => {
     const events = [

@@ -59,6 +59,17 @@ export function implementOutcomeOf(
   return 'outstanding'
 }
 
+/** The item-text detail bound (afk-runner-task-todos D1): the sanitizeRowGap/todo-content precedent. */
+const MAX_TASK_DETAIL_CHARS = 200
+
+/** The started event's detail: the item's tasks.md text collapsed to one line, truncated at the bound. */
+export function taskStartedDetail(text: string): string {
+  return text
+    .replace(/[\r\n]+/gu, ' ')
+    .trim()
+    .slice(0, MAX_TASK_DETAIL_CHARS)
+}
+
 /** The spawn prompt: fresh work states the item; fix mode embeds the failing tail (D4) — a veto fix states the operator's redirect (D7). */
 function spawnPromptOf(
   deps: ImplementDeps,
@@ -71,7 +82,10 @@ function spawnPromptOf(
   basename: string,
 ): string {
   const reportLine = `Write your JSON report to ${agentWritePath(deps.cwd, basename)}: {"files_written": [<paths relative to the repo root>]}`
-  const guardLines = ['Work test-first under the repo write protections; do not run git.']
+  const guardLines = [
+    'Work test-first under the repo write protections; do not run git.',
+    'Plan the item with the todo tool before editing; keep the todo list current as work proceeds.',
+  ]
   if (target.failingTail === null) {
     return [
       `Implement exactly one task of the change ${input.changeName}:`,
@@ -171,6 +185,7 @@ export async function runImplementWork(deps: ImplementDeps, input: ImplementInpu
     type: 'task',
     action: 'started',
     id: target.item.id,
+    detail: taskStartedDetail(target.item.text),
   })
   await runStageAgent(deps.agent, {
     role: 'implementer',

@@ -83,3 +83,14 @@ export const AgentTodosEvent = z.object({
   agent: z.string().min(1),
   todos: z.array(z.object({ content: z.string(), status: z.string() })),
 })
+
+/**
+ * Zero-snapshot compliance mark (afk-runner-task-todos D4/D5): appended once
+ * when an implementer spawn settles without a single todo snapshot emission.
+ * Tolerated L0 telemetry — never a failure, never machine state.
+ */
+export const TodosMissingEvent = z.object({
+  altitude: z.literal('L0'),
+  type: z.literal('todos_missing'),
+  agent: z.string().min(1),
+})
