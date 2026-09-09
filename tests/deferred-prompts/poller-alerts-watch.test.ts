@@ -5,10 +5,22 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { createAlertPrompt, getAlertPrompt } from '../../src/deferred-prompts/alerts.js'
+import {
+  createAlertPrompt,
+  getAlertPrompt,
+  updateAlertBaseline,
+  updateAlertMatchState,
+  updateAlertPrompt,
+} from '../../src/deferred-prompts/alerts.js'
 import { LIGHTWEIGHT_SNAPSHOT_FIELDS, RICH_SNAPSHOT_FIELDS } from '../../src/deferred-prompts/change-gate.js'
-import { collectPureWatchFiring, watchTaskChanged } from '../../src/deferred-prompts/poller-alerts-watch.js'
+import {
+  collectFieldFirings,
+  collectPureWatchFiring,
+  needsFirstCycleBaseline,
+  watchTaskChanged,
+} from '../../src/deferred-prompts/poller-alerts-watch.js'
 import { TRACKED_FIELDS_ROW } from '../../src/deferred-prompts/snapshots.js'
+import type { AlertPrompt } from '../../src/deferred-prompts/types.js'
 import type { Task } from '../../src/providers/types.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
@@ -148,5 +160,185 @@ describe('collectPureWatchFiring', () => {
     const firing = collectPureWatchFiring([alert], tasks, snapshots, new Date())
 
     expect(firing).toHaveLength(0)
+  })
+})
+
+describe('collectFieldFirings — filter-alert baseline-on-create', () => {
+  const USER = 'filter-baseline-user'
+
+  beforeEach(async () => {
+    mockLogger()
+    await setupTestDb()
+  })
+
+  const makeFilterAlert = (): ReturnType<typeof createAlertPrompt> =>
+    createAlertPrompt(USER, 'Notify on new matching task', { field: 'task.status', op: 'eq', value: 'todo' })
+
+  test('baselines the matched set on the first cycle and fires nothing despite a pre-existing backlog', () => {
+    const alert = makeFilterAlert()
+    const tasks = [makeTask('t1'), makeTask('t2')]
+
+    const firing = collectFieldFirings([alert], tasks, snapshotsFrom({}), new Date(), RICH_SNAPSHOT_FIELDS)
+
+    expect(firing).toHaveLength(0)
+    expect(getAlertPrompt(alert.id, USER)!.matchedTaskIds).toEqual(['t1', 't2'])
+  })
+
+  test('fires for a task newly matching in a later cycle', () => {
+    const alert = makeFilterAlert()
+
+    collectFieldFirings([alert], [makeTask('t1')], snapshotsFrom({}), new Date(), RICH_SNAPSHOT_FIELDS)
+    const persisted = getAlertPrompt(alert.id, USER)!
+    const firing = collectFieldFirings(
+      [persisted],
+      [makeTask('t1'), makeTask('t2')],
+      snapshotsFrom({}),
+      new Date(),
+      RICH_SNAPSHOT_FIELDS,
+    )
+
+    expect(firing).toHaveLength(1)
+    expect(firing[0]!.newMatchedTasks.map((task) => task.id)).toEqual(['t2'])
+    expect(firing[0]!.matchedNow).toEqual(['t1', 't2'])
+  })
+
+  test('pre-existing matches never fire again on later cycles', () => {
+    const alert = makeFilterAlert()
+    const tasks = [makeTask('t1'), makeTask('t2')]
+
+    collectFieldFirings([alert], tasks, snapshotsFrom({}), new Date(), RICH_SNAPSHOT_FIELDS)
+    const persisted = getAlertPrompt(alert.id, USER)!
+    const firing = collectFieldFirings([persisted], tasks, snapshotsFrom({}), new Date(), RICH_SNAPSHOT_FIELDS)
+
+    expect(firing).toHaveLength(0)
+    expect(getAlertPrompt(alert.id, USER)!.matchedTaskIds).toEqual(['t1', 't2'])
+  })
+
+  test('an alert that has fired with a drifted-empty matched set is not re-baselined', () => {
+    const alert = makeFilterAlert()
+    updateAlertMatchState(alert.id, USER, '2026-01-01T00:00:00.000Z', [])
+    const persisted = getAlertPrompt(alert.id, USER)!
+
+    const firing = collectFieldFirings(
+      [persisted],
+      [makeTask('t1')],
+      snapshotsFrom({}),
+      new Date(),
+      RICH_SNAPSHOT_FIELDS,
+    )
+
+    expect(firing).toHaveLength(1)
+    expect(firing[0]!.newMatchedTasks.map((task) => task.id)).toEqual(['t1'])
+  })
+
+  test('a condition edit on an alert that has fired re-baselines instead of replaying the backlog', () => {
+    const alert = makeFilterAlert()
+    updateAlertMatchState(alert.id, USER, '2026-01-01T00:00:00.000Z', ['t1'])
+    updateAlertPrompt(alert.id, USER, { condition: { field: 'task.status', op: 'neq', value: 'done' } })
+    const edited = getAlertPrompt(alert.id, USER)!
+
+    const firing = collectFieldFirings(
+      [edited],
+      [makeTask('t1'), makeTask('t2')],
+      snapshotsFrom({}),
+      new Date(),
+      RICH_SNAPSHOT_FIELDS,
+    )
+
+    expect(firing).toHaveLength(0)
+    expect(getAlertPrompt(alert.id, USER)!.matchedTaskIds).toEqual(['t1', 't2'])
+  })
+
+  test('an alert baselined on an empty first cycle fires for the first task matching in a later cycle', () => {
+    const alert = makeFilterAlert()
+
+    collectFieldFirings([alert], [], snapshotsFrom({}), new Date(), RICH_SNAPSHOT_FIELDS)
+    const persisted = getAlertPrompt(alert.id, USER)!
+    const firing = collectFieldFirings(
+      [persisted],
+      [makeTask('t1')],
+      snapshotsFrom({}),
+      new Date(),
+      RICH_SNAPSHOT_FIELDS,
+    )
+
+    expect(firing).toHaveLength(1)
+    expect(firing[0]!.newMatchedTasks.map((task) => task.id)).toEqual(['t1'])
+    expect(firing[0]!.matchedNow).toEqual(['t1'])
+  })
+
+  test('an alert whose match set drained to empty fires when a task re-enters', () => {
+    const alert = makeFilterAlert()
+
+    collectFieldFirings([alert], [makeTask('t1')], snapshotsFrom({}), new Date(), RICH_SNAPSHOT_FIELDS)
+    collectFieldFirings([getAlertPrompt(alert.id, USER)!], [], snapshotsFrom({}), new Date(), RICH_SNAPSHOT_FIELDS)
+    const drained = getAlertPrompt(alert.id, USER)!
+
+    const firing = collectFieldFirings([drained], [makeTask('t1')], snapshotsFrom({}), new Date(), RICH_SNAPSHOT_FIELDS)
+
+    expect(firing).toHaveLength(1)
+    expect(firing[0]!.newMatchedTasks.map((task) => task.id)).toEqual(['t1'])
+  })
+
+  test('pure-watch alerts routed through collectFieldFirings keep the snapshot baseline', () => {
+    const alert = createAlertPrompt(USER, 'Watch one task', { field: 'task.id', op: 'eq', value: 't1' })
+
+    const firing = collectFieldFirings([alert], [makeTask('t1')], snapshotsFrom({}), new Date(), RICH_SNAPSHOT_FIELDS)
+
+    expect(firing).toHaveLength(0)
+    expect(getAlertPrompt(alert.id, USER)!.matchedTaskIds).toEqual(['t1'])
+    // Pure watches never carry the baseline marker: the filter loop must skip
+    // them, or it would stamp lastActivityCursor as a filter baseline.
+    expect(getAlertPrompt(alert.id, USER)!.lastActivityCursor).toBeNull()
+  })
+})
+
+describe('needsFirstCycleBaseline', () => {
+  const USER = 'first-cycle-baseline-user'
+  const PAST = '2026-01-01T00:00:00.000Z'
+
+  beforeEach(async () => {
+    mockLogger()
+    await setupTestDb()
+  })
+
+  const filterAlert = (): ReturnType<typeof createAlertPrompt> =>
+    createAlertPrompt(USER, 'Notify on new matching task', { field: 'task.status', op: 'eq', value: 'todo' })
+
+  const watchAlert = (): ReturnType<typeof createAlertPrompt> =>
+    createAlertPrompt(USER, 'Watch one task', { field: 'task.id', op: 'eq', value: 't1' })
+
+  // lastTriggeredAt set, cursor null: the alert has fired, so its match set is
+  // already past-baseline.
+  const firedAlert = (): AlertPrompt => {
+    const created = filterAlert()
+    updateAlertMatchState(created.id, USER, PAST, ['t1'])
+    return getAlertPrompt(created.id, USER)!
+  }
+
+  // lastTriggeredAt null, cursor set: the alert already baselined once and its
+  // match set is live bookkeeping, not a fresh creation state.
+  const baselinedAlert = (): AlertPrompt => {
+    const created = filterAlert()
+    updateAlertBaseline(created.id, USER, ['t1'], PAST)
+    return getAlertPrompt(created.id, USER)!
+  }
+
+  const persisted = (alert: ReturnType<typeof createAlertPrompt>): AlertPrompt => getAlertPrompt(alert.id, USER)!
+
+  test('a fresh filter alert needs the first-cycle baseline', () => {
+    expect(needsFirstCycleBaseline([persisted(filterAlert())])).toBe(true)
+  })
+
+  test('pure watches, fired alerts, and baselined alerts never force the gate open', () => {
+    expect(needsFirstCycleBaseline([persisted(watchAlert())])).toBe(false)
+    expect(needsFirstCycleBaseline([firedAlert()])).toBe(false)
+    expect(needsFirstCycleBaseline([baselinedAlert()])).toBe(false)
+    expect(needsFirstCycleBaseline([persisted(watchAlert()), firedAlert(), baselinedAlert()])).toBe(false)
+  })
+
+  test('one needing alert among non-needing ones still forces evaluation (some, not every)', () => {
+    expect(needsFirstCycleBaseline([firedAlert(), persisted(filterAlert())])).toBe(true)
+    expect(needsFirstCycleBaseline([persisted(watchAlert()), persisted(filterAlert())])).toBe(true)
   })
 })
