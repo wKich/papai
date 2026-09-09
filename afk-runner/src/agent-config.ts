@@ -3,6 +3,7 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
+import { MAX_ARG_STRLEN } from '../../review-loop/src/claude-argv.js'
 import type { AgentMcpCredentials, AgentMcpSurface, McpServers } from './mcp-servers.js'
 
 /**
@@ -15,8 +16,8 @@ import type { AgentMcpCredentials, AgentMcpSurface, McpServers } from './mcp-ser
  * copy-never-import discipline bars importing the spike workspace, and the
  * SDK would buy only type-checking of an externally-owned shape across that
  * boundary. The provider block, the permission base, the `mcp` block, and
- * the whole-document serialization live here; the D1 size bound over the
- * serialized full-base composition lands with its own task.
+ * the whole-document serialization live here, beside the D1 size bound
+ * over the serialized full-base composition.
  */
 
 /** One provider entry of the delivered content's `provider` map. */
@@ -223,22 +224,55 @@ export interface ComposedConfigContent {
 const CONFIG_SCHEMA = 'https://opencode.ai/config.json'
 
 /**
- * Composes and serializes the per-spawn content (design D3): a pure function
- * over the model ref, the resolved surface, and the spawn's resolved set —
- * the three facts the spawn seam already holds. The returned string is the
- * value of the child's `OPENCODE_CONFIG_CONTENT`: it carries credentials
- * (the provider pair, server `headers` and `environment` values) and is
- * never logged, echoed, or carried in any event payload.
+ * Composes the delivered document for one resolved set — the assembly step
+ * the size bound's measurement and the serialization share.
  */
-export const composeConfigContent = (model: string, surface: AgentMcpSurface, resolved: McpServers): string => {
+const composeDocument = (model: string, surface: AgentMcpSurface, resolved: McpServers): ComposedConfigContent => {
   const provider = providerBlockFor(model, surface.credentials)
   const mcp = mcpBlockFor(resolved)
-  const document: ComposedConfigContent = {
+  return {
     $schema: CONFIG_SCHEMA,
     ...(provider === undefined ? {} : { provider }),
     model,
     ...(mcp === undefined ? {} : { mcp }),
     permission: permissionBaseFor(surface, resolved),
   }
-  return JSON.stringify(document)
+}
+
+/**
+ * The D1 size bound: the serialized **full-base** composition (provider
+ * block included when active) measured against the OS per-string
+ * environment ceiling — `MAX_ARG_STRLEN`, imported from review-loop's
+ * `claude-argv.js`, the same constant the over-limit claude system prompt
+ * refuses with. The full base is the upper bound of every per-spawn
+ * composition: narrowing only removes `mcp` entries and swaps `"allow"`
+ * values for the shorter `"deny"`, so one measurement bounds every spawn.
+ * An over-limit map refuses naming `AGENT_MCP_SERVERS` — the alternative
+ * is an opaque `E2BIG` at the first spawn.
+ */
+const refuseOversizeBase = (model: string, surface: AgentMcpSurface): void => {
+  const bytes = Buffer.byteLength(JSON.stringify(composeDocument(model, surface, surface.servers)), 'utf8')
+  if (bytes > MAX_ARG_STRLEN) {
+    throw new Error(
+      `AGENT_MCP_SERVERS composes ${bytes.toLocaleString('en-US')} bytes of configuration content, over the ` +
+        `${MAX_ARG_STRLEN.toLocaleString('en-US')}-byte MAX_ARG_STRLEN per-string environment ceiling, so the ` +
+        'OPENCODE_CONFIG_CONTENT the child needs could not even be set — the spawn would die on an opaque ' +
+        'E2BIG. Shrink the base map.',
+    )
+  }
+}
+
+/**
+ * Composes and serializes the per-spawn content (design D3): a pure function
+ * over the model ref, the resolved surface, and the spawn's resolved set —
+ * the three facts the spawn seam already holds. The returned string is the
+ * value of the child's `OPENCODE_CONFIG_CONTENT`: it carries credentials
+ * (the provider pair, server `headers` and `environment` values) and is
+ * never logged, echoed, or carried in any event payload. The D1 size bound
+ * runs first, measured over the full base — the upper bound of this
+ * spawn's composition whatever the role's narrowing removed.
+ */
+export const composeConfigContent = (model: string, surface: AgentMcpSurface, resolved: McpServers): string => {
+  refuseOversizeBase(model, surface)
+  return JSON.stringify(composeDocument(model, surface, resolved))
 }

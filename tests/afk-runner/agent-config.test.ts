@@ -21,6 +21,7 @@ import {
   mcpFor,
   resolveAgentMcp,
 } from '../../afk-runner/src/mcp-servers.js'
+import { MAX_ARG_STRLEN } from '../../review-loop/src/claude-argv.js'
 import { assertEach, type Row } from '../utils/grouped-assertions.js'
 
 /**
@@ -404,5 +405,80 @@ describe('composeConfigContent (design D3 composed document)', () => {
     const content = composeConfigContent('opencode', surface, mcpFor(surface, 'drafter'))
     expect(content).not.toContain(API_KEY)
     expect(content).not.toContain(BASE_URL)
+  })
+})
+
+/**
+ * The D1 size bound (task 3.4 of afk-runner-agent-mcp, design D1): the
+ * serialized **full-base** composition — provider block included when
+ * active — is measured against `MAX_ARG_STRLEN`, imported from
+ * review-loop's `claude-argv.js`, the same constant the over-limit claude
+ * system prompt refuses with. An over-limit map refuses naming
+ * `AGENT_MCP_SERVERS` (the alternative is an opaque `E2BIG` at the first
+ * spawn); the full base is the upper bound of every per-spawn composition,
+ * because narrowing only removes `mcp` entries and swaps `"allow"` values
+ * for the shorter `"deny"`.
+ */
+describe('composeConfigContent (design D1 size bound)', () => {
+  // One server whose declaration alone pushes the serialized full-base
+  // document past the ceiling whatever else the document carries.
+  const OVERSIZE: McpServerEntry = {
+    type: 'remote',
+    url: `https://mcp.example.com/sse?pad=${'x'.repeat(MAX_ARG_STRLEN)}`,
+  }
+  const NOTES: McpServerEntry = { type: 'local', command: ['bunx', 'mcp-server-notes@2.0.0'] }
+
+  const activeSurface = (env: Record<string, string>, model: string): AgentMcpSurface => {
+    const surface = resolveAgentMcp(env, model)
+    if (surface === undefined) {
+      throw new Error(`expected the surface active beside the model ${JSON.stringify(model)}`)
+    }
+    return surface
+  }
+
+  test('an over-limit full-base row refuses with the knob named, not an opaque E2BIG', async () => {
+    const rows: readonly Row<{
+      readonly label: string
+      readonly model: string
+      readonly env: Record<string, string>
+    }>[] = [
+      {
+        label: 'the bare row: the bound is measured without a provider block',
+        model: 'opencode',
+        env: { AGENT_MCP_SERVERS: JSON.stringify({ bulk: OVERSIZE }) },
+      },
+      {
+        label: 'the slash row: the provider block is included in the measured composition',
+        model: 'kaneo/glm-4.7',
+        env: {
+          AGENT_MCP_SERVERS: JSON.stringify({ bulk: OVERSIZE }),
+          LLM_API_KEY: 'sk-runner-1234567890abcdef',
+          LLM_BASE_URL: 'https://llm.example.com/v1',
+        },
+      },
+    ]
+    await assertEach(rows, (row) => {
+      const surface = activeSurface(row.env, row.model)
+      expect(() => composeConfigContent(row.model, surface, mcpFor(surface, 'drafter'))).toThrow('AGENT_MCP_SERVERS')
+      expect(() => composeConfigContent(row.model, surface, mcpFor(surface, 'drafter'))).toThrow('MAX_ARG_STRLEN')
+    })
+  })
+
+  test("the bound is measured on the full base even when the spawn's own resolved set is narrowed", () => {
+    // The reviewer's resolved set sheds the one oversized server, so the
+    // spawn's own document would sit far under the ceiling — the refusal
+    // still fires on the full base, the upper bound of every per-spawn
+    // composition.
+    const surface = activeSurface(
+      {
+        AGENT_MCP_SERVERS: JSON.stringify({ bulk: OVERSIZE, notes: NOTES }),
+        AGENT_MCP_ROLE_NARROWING: JSON.stringify({ reviewer: ['bulk'] }),
+      },
+      'opencode',
+    )
+    // The narrowing really did shed the oversized entry, so only the
+    // full-base measurement can be what refuses.
+    expect(mcpFor(surface, 'reviewer')).toEqual({ notes: NOTES })
+    expect(() => composeConfigContent('opencode', surface, mcpFor(surface, 'reviewer'))).toThrow('AGENT_MCP_SERVERS')
   })
 })
