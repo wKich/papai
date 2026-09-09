@@ -4,9 +4,16 @@
 // See LICENSE in the project root for details.
 
 import { describe, expect, it } from 'bun:test'
+import assert from 'node:assert'
+import fs from 'node:fs'
 import path from 'node:path'
 
+import { composeConfigContent } from '../../../afk-runner/src/agent-config.js'
 import { workForOf } from '../../../afk-runner/src/graph/pipeline-work.js'
+import { mcpFor } from '../../../afk-runner/src/mcp-servers.js'
+import type { AgentMcpSurface } from '../../../afk-runner/src/mcp-servers.js'
+import { startRun } from '../../../afk-runner/src/run.js'
+import type { SpawnFn } from '../../../review-loop/src/agent-runner.js'
 import type { FakePipeline } from '../fixtures/fake-pipeline.js'
 import { TASK_TEXT, makeFakePipeline } from '../fixtures/fake-pipeline.js'
 
@@ -84,5 +91,58 @@ describe('workForOf — the work registry over the pipeline states', () => {
       outstanding: { enter: 'implement' },
       done: { enter: 'verify' },
     })
+  })
+})
+
+describe('agent-MCP surface threading through the factory sites (afk-runner-agent-mcp 4.3)', () => {
+  const SURFACE: AgentMcpSurface = {
+    servers: {
+      notes: { type: 'local', command: ['uvx', 'mcp-notes'] },
+      search: { type: 'remote', url: 'https://mcp.example.test/search' },
+    },
+    narrowing: { reviewer: ['notes'] },
+    credentials: undefined,
+    warnings: [],
+  }
+
+  /**
+   * A full run under an active surface whose spawns' child envs are captured
+   * by output basename — the RunDeps → PipelineWorkDeps → factory threading
+   * observed end to end through `startRun`.
+   */
+  async function runWithSurface(): Promise<{
+    readonly envs: ReadonlyMap<string, Record<string, string>>
+    readonly halted: string
+  }> {
+    const pipeline: FakePipeline = makeFakePipeline()
+    const envs = new Map<string, Record<string, string>>()
+    const spawn: SpawnFn = (command, args, options, onLine) => {
+      const basename = String(args[args.length - 1]).match(/\.review-loop\/([\w-]+\.json)/u)?.[1] ?? 'unknown.json'
+      if (options.env !== undefined) envs.set(basename, options.env)
+      return pipeline.deps.spawn(command, args, options, onLine)
+    }
+    const taskFile = path.join(pipeline.repoRoot, 'task.md')
+    fs.writeFileSync(taskFile, TASK_TEXT)
+    const halted = await startRun({ ...pipeline.deps, spawn, mcpSurface: SURFACE }, { taskFile })
+    return { envs, halted: halted.halted }
+  }
+
+  it('an agentSeamsOf spawn (intake estimator) receives the composed child env', async () => {
+    const { envs, halted } = await runWithSurface()
+    expect(halted).toBe('final')
+    const env = envs.get('depth.json')
+    assert(env !== undefined)
+    expect(env['OPENCODE_CONFIG_CONTENT']).toBe(
+      composeConfigContent('test-model', SURFACE, mcpFor(SURFACE, 'estimator')),
+    )
+  })
+
+  it('an agentOf spawn (decompose stage) receives the composed child env likewise', async () => {
+    const { envs } = await runWithSurface()
+    const env = envs.get('decompose-tasks.json')
+    assert(env !== undefined)
+    expect(env['OPENCODE_CONFIG_CONTENT']).toBe(
+      composeConfigContent('test-model', SURFACE, mcpFor(SURFACE, 'decomposer')),
+    )
   })
 })

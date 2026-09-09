@@ -21,6 +21,7 @@ export function agentSeamsOf(deps: PipelineWorkDeps, io: WorkIO): AgentLayerDeps
     spawn: deps.spawn,
     config: deps.config,
     execGit: deps.execGit,
+    ...(deps.mcpSurface === undefined ? {} : { mcpSurface: deps.mcpSurface }),
     emit: (event: EventInput): void => {
       io.append(event)
     },

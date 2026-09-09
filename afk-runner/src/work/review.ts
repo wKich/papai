@@ -183,6 +183,7 @@ function buildReviewScope(input: ReviewWorkInput, io: WorkIO): ReviewScope {
     spawn: input.agent.spawn,
     config: input.agent.config,
     execGit: input.agent.execGit,
+    ...(input.agent.mcpSurface === undefined ? {} : { mcpSurface: input.agent.mcpSurface }),
     emit,
   }
   return {
