@@ -263,6 +263,22 @@ describe('buildAgentCommand (claude argv branch)', () => {
     expect(compose).toThrow(/extraArgs/u)
   })
 
+  test('a set opencodeEnv is refused with an error naming the knob', () => {
+    const compose = (): unknown =>
+      buildAgentCommand({
+        backend: 'claude',
+        model: 'm',
+        cwd: CWD,
+        prompt: 'p',
+        extraArgs: [],
+        label: 'reviewer',
+        claude: claudeContext(),
+        opencodeEnv: { PATH: '/usr/bin:/bin', OPENCODE_CONFIG_CONTENT: '{}' },
+      })
+    expect(compose).toThrow(AgentCommandError)
+    expect(compose).toThrow(/opencodeEnv/u)
+  })
+
   test('backend claude without the claude context is refused with a named composition error', () => {
     expect(() =>
       buildAgentCommand({

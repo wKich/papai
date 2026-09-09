@@ -4,7 +4,7 @@
 // See LICENSE in the project root for details.
 
 import { existsSync } from 'node:fs'
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import type { ClaudeCredentialName, ClaudeInvocationProfile } from './backend-select.js'
@@ -50,32 +50,6 @@ export interface ClaudeSpawnContext {
   /** The native profile's empty-MCP document path; `null` on bare. */
   mcpConfigPath: string | null
   envSource: Record<string, string | undefined>
-}
-
-/** What the dir-creation seam answers: the ready child dir and its empty-MCP document, if any. */
-export interface ClaudeSpawnDir {
-  configDir: string
-  /** `--mcp-config` value on the native profile; `null` on bare. */
-  mcpConfigPath: string | null
-}
-
-/** The per-spawn config-dir creation seam (D8), injectable so tests need no filesystem. */
-export type CreateClaudeSpawnDir = (context: import('./agent-runner.js').ClaudeRunContext) => Promise<ClaudeSpawnDir>
-
-/**
- * The default seam: each spawn gets its own `mkdtemp` child under the run
- * parent — per-spawn, because the loop runs up to `poolSize` claude processes
- * concurrently and shared CLI state files were never recorded under that — and
- * the native profile's empty-MCP document is written into it by the same seam.
- */
-export const defaultCreateClaudeSpawnDir: CreateClaudeSpawnDir = async (context) => {
-  const configDir = await mkdtemp(path.join(context.configDirRoot, 'spawn-'))
-  if (context.profile !== 'native') {
-    return { configDir, mcpConfigPath: null }
-  }
-  const mcpConfigPath = path.join(configDir, 'empty-mcp.json')
-  await writeFile(mcpConfigPath, `${JSON.stringify({ mcpServers: {} })}\n`, { mode: 0o600 })
-  return { configDir, mcpConfigPath }
 }
 
 /** One candidate conventions file's content, or undefined when absent/empty. */
@@ -132,7 +106,9 @@ export interface AgentCommandOptions {
    * The opencode child's entire replacement environment, caller-composed — the
    * builder never reads ambient `process.env` (afk-runner-agent-mcp D3).
    * Returned verbatim as `AgentCommand.env`; absent stays `undefined`, so
-   * `realSpawn` inherits `process.env` byte-identically.
+   * `realSpawn` inherits `process.env` byte-identically. The claude branch
+   * refuses a set map: afk-runner threads no claude backend, and a silent
+   * ignore would hide an operator mistake.
    */
   opencodeEnv?: Record<string, string>
 }
@@ -202,6 +178,27 @@ export function claudeChildEnv(context: ClaudeSpawnContext): Record<string, stri
   return env
 }
 
+/**
+ * The opencode-route knobs a claude invocation refuses rather than silently
+ * drops (afk-runner-agent-mcp D3): afk-runner threads no claude backend, and
+ * an ignored knob would hide an operator mistake.
+ */
+function refuseOpencodeRouteKnobs(options: AgentCommandOptions): void {
+  if (options.extraArgs.length > 0) {
+    throw new AgentCommandError(
+      `extraArgs is opencode-argv-shaped and cannot ride a claude invocation (got ${options.extraArgs.join(' ')}); ` +
+        'remove the knob or run the opencode backend — a silent pass-through could append argv after the allowlist block.',
+    )
+  }
+  if (options.opencodeEnv !== undefined) {
+    throw new AgentCommandError(
+      `opencodeEnv is an opencode-route knob and cannot ride a claude invocation (got ${Object.keys(options.opencodeEnv).join(' ')}); ` +
+        'remove the knob or run the opencode backend — the claude child env is composed from the spawn context alone, ' +
+        'and a silent ignore would hide an operator mistake.',
+    )
+  }
+}
+
 function claudeCommand(options: AgentCommandOptions): AgentCommand {
   const context = options.claude
   if (context === undefined) {
@@ -210,12 +207,7 @@ function claudeCommand(options: AgentCommandOptions): AgentCommand {
         'the run must resolve credentials and a config-dir parent before any role subprocess starts.',
     )
   }
-  if (options.extraArgs.length > 0) {
-    throw new AgentCommandError(
-      `extraArgs is opencode-argv-shaped and cannot ride a claude invocation (got ${options.extraArgs.join(' ')}); ` +
-        'remove the knob or run the opencode backend — a silent pass-through could append argv after the allowlist block.',
-    )
-  }
+  refuseOpencodeRouteKnobs(options)
 
   const system = options.systemPrompt
   if (system !== undefined && Buffer.byteLength(system, 'utf8') > MAX_ARG_STRLEN) {

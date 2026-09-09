@@ -11,14 +11,12 @@ import type { z } from 'zod'
 import {
   agentWritePath,
   buildAgentCommand,
-  defaultCreateClaudeSpawnDir,
   findMisplacedScratches,
   loadClaudeConventions,
   type ClaudeSpawnContext,
-  type ClaudeSpawnDir,
-  type CreateClaudeSpawnDir,
 } from './agent-command.js'
 import { scrubCredentialValue, type ClaudeRunContext } from './backend-select.js'
+import { defaultCreateClaudeSpawnDir, type ClaudeSpawnDir, type CreateClaudeSpawnDir } from './claude-spawn-dir.js'
 import { createClaudeStreamDecoder } from './claude-stream.js'
 import type { AgentBackend } from './config.js'
 import { createLineHandler, enqueueLog } from './line-handler.js'
@@ -31,7 +29,7 @@ export { agentWritePath, findMisplacedScratches } from './agent-command.js'
 export type { LineSink, SpawnFn, SpawnResult } from './spawn.js'
 export { emptyUsage } from './run-stats.js'
 export type { AgentUsage } from './run-stats.js'
-export type { ClaudeSpawnDir, CreateClaudeSpawnDir } from './agent-command.js'
+export type { ClaudeSpawnDir, CreateClaudeSpawnDir } from './claude-spawn-dir.js'
 export type { ClaudeRunContext } from './backend-select.js'
 export { createLineHandler } from './line-handler.js'
 export type { LineHandler, SessionLedgerSeam } from './line-handler.js'
