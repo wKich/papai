@@ -35,11 +35,17 @@
     "timeout": 0,
     "scored": 25
   },
-  "afk-runner/src/analyze-corpus.ts": {
-    "score": 0.8024691358024691,
-    "killed": 65,
+  "afk-runner/src/analyze-attendance.ts": {
+    "score": 0.7828571428571428,
+    "killed": 137,
     "timeout": 0,
-    "scored": 81
+    "scored": 175
+  },
+  "afk-runner/src/analyze-corpus.ts": {
+    "score": 0.8409090909090909,
+    "killed": 74,
+    "timeout": 0,
+    "scored": 88
   },
   "afk-runner/src/analyze-findings.ts": {
     "score": 0.8586572438162544,
@@ -60,10 +66,10 @@
     "scored": 168
   },
   "afk-runner/src/analyze-report.ts": {
-    "score": 0.2939189189189189,
-    "killed": 87,
+    "score": 0.3218390804597701,
+    "killed": 112,
     "timeout": 0,
-    "scored": 296
+    "scored": 348
   },
   "afk-runner/src/analyze-truth.ts": {
     "score": 0.7910447761194029,
