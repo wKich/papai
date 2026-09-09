@@ -9,14 +9,14 @@ export * from './agent-schemas.js'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 
-import { agentWritePath, runAgent } from '../../review-loop/src/agent-runner.js'
-import type { AgentUsage, SpawnFn } from '../../review-loop/src/agent-runner.js'
+import { agentWritePath } from '../../review-loop/src/agent-runner.js'
+import type { AgentUsage } from '../../review-loop/src/agent-runner.js'
 import { createAgentReporter } from './agent-reporter.js'
-import { INACTIVITY_TIMEOUT_MS, WALL_CLOCK_TIMEOUT_MS, modelFor } from './config.js'
+import { runSpawn } from './agent-spawn.js'
+import type { ContinuationSpawn, SpawnDeps } from './agent-spawn.js'
+import { modelFor } from './config.js'
 import type { AgentRole, ExecGitFn, RunnerConfig } from './config.js'
-import type { EventInput } from './events.js'
 import { mcpFor } from './mcp-servers.js'
-import type { AgentMcpSurface } from './mcp-servers.js'
 import {
   nextSessionAttempt,
   findKilledSession,
@@ -27,18 +27,9 @@ import {
 import { changeFolderPrefix, guardWorkingTree, snapshotWorkingTree } from './write-guard.js'
 import type { WriteGuard } from './write-guard.js'
 
-export interface AgentLayerDeps {
-  readonly spawn: SpawnFn
+export interface AgentLayerDeps extends SpawnDeps {
   readonly config: RunnerConfig
   readonly execGit: ExecGitFn
-  readonly emit: (event: EventInput) => void
-  /**
-   * The resolved agent-MCP surface (afk-runner-agent-mcp D1): present = every
-   * spawn resolves `mcpFor(surface, role)` and emits the resolved set's
-   * server names on `spawned`; absent = inert — no `mcp` field, the event
-   * byte-identical to a pre-change spawn.
-   */
-  readonly mcpSurface?: AgentMcpSurface
 }
 
 export interface RunStageAgentOptions<T> {
@@ -84,10 +75,6 @@ export { AgentValidationError } from './errors.js'
 import { AgentValidationError } from './errors.js'
 
 const MAX_VALIDATION_ATTEMPTS = 2
-
-interface ContinuationSpawn {
-  readonly sessionId: string
-}
 
 /** Continuation prompt (D2): restates the output target; never the original prompt. */
 function buildContinuationPrompt(options: { readonly cwd: string; readonly outputPath: string }): string {
@@ -219,45 +206,6 @@ async function attemptStageAgent<T>(
     settleSessionAttempt(options.runDir, spawnInput, ledgerAttempt, 'killed')
     throw error instanceof Error ? error : new Error(String(error))
   }
-}
-
-interface SpawnInputs {
-  readonly prompt: string
-  readonly model: string
-  readonly absoluteOutput: string
-  readonly logPath: string
-  readonly sessionLedger: { recordSessionId: (id: string, preferred: number) => void }
-  readonly ledgerAttempt: number
-  readonly reporter: ReturnType<typeof createAgentReporter>
-  readonly continuation: ContinuationSpawn | null
-  readonly attempt: number
-}
-
-function runSpawn<T>(
-  deps: AgentLayerDeps,
-  options: RunStageAgentOptions<T>,
-  inputs: SpawnInputs,
-): Promise<{ value: unknown; usage: AgentUsage }> {
-  return runAgent({
-    spawn: deps.spawn,
-    model: inputs.model,
-    cwd: options.cwd,
-    prompt: inputs.prompt,
-    outputPath: inputs.absoluteOutput,
-    outputSchema: z.unknown(),
-    label: options.label,
-    logPath: inputs.logPath,
-    extraArgs: inputs.continuation === null ? [] : ['--session', inputs.continuation.sessionId],
-    noRetry: inputs.continuation !== null,
-    timeoutMs: WALL_CLOCK_TIMEOUT_MS,
-    inactivityTimeoutMs: INACTIVITY_TIMEOUT_MS,
-    reporter: inputs.reporter,
-    sessionLedger: inputs.sessionLedger,
-    sessionAttempt: inputs.ledgerAttempt,
-    onRetry: () => {
-      deps.emit({ altitude: 'L1', type: 'retrying', agent: options.label, reason: 'stall', attempt: inputs.attempt })
-    },
-  })
 }
 
 export async function runStageAgent<T>(

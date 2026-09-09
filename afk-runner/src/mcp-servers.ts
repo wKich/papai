@@ -211,6 +211,46 @@ export const mcpFor = (surface: AgentMcpSurface, role: AgentRole): McpServers =>
   return resolved
 }
 
+/**
+ * The family's four env carriers (afk-runner-agent-mcp D3): the two knobs
+ * this module parses and the credential pair `resolveAgentMcp` reads.
+ * Deleted from every composed child env — a passed spawn env is the child's
+ * entire replacement environment (replace-never-merge), which makes the
+ * deletion free, and without it per-role narrowing would widen credential
+ * exposure instead of narrowing it: the spread would hand every child the
+ * whole base map's credentials, including the servers this spawn's narrowing
+ * shed, plus the ambient credential pair.
+ */
+const AGENT_MCP_CARRIER_ENV_NAMES = [
+  'AGENT_MCP_SERVERS',
+  'AGENT_MCP_ROLE_NARROWING',
+  'LLM_API_KEY',
+  'LLM_BASE_URL',
+] as const
+
+/**
+ * Composes the opencode child's entire replacement env (afk-runner-agent-mcp
+ * D3): the env source's set entries with the four carriers deleted and the
+ * serialized content set as `OPENCODE_CONFIG_CONTENT` — overwriting any
+ * ambient value, exactly the overlay precedence the content's authority
+ * requires. The returned map carries credentials (the content itself) and is
+ * never logged, echoed, or carried in any event payload. Pure over its
+ * inputs: the caller reads the env source only for an active surface — an
+ * inactive one composes nothing and leaves spawn inheritance untouched (D5).
+ */
+export const composeChildEnv = (
+  envSource: Record<string, string | undefined>,
+  content: string,
+): Record<string, string> => {
+  const env: Record<string, string> = {}
+  for (const [name, value] of Object.entries(envSource)) {
+    if (value !== undefined) env[name] = value
+  }
+  for (const name of AGENT_MCP_CARRIER_ENV_NAMES) Reflect.deleteProperty(env, name)
+  env['OPENCODE_CONFIG_CONTENT'] = content
+  return env
+}
+
 const safeJson = (raw: string, knob: string): unknown => {
   try {
     return JSON.parse(raw)
