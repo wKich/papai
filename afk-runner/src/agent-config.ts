@@ -9,12 +9,14 @@ import type { AgentMcpCredentials, AgentMcpSurface, McpServers } from './mcp-ser
  * The content composer (afk-runner-agent-mcp design D2/D3): pure functions
  * emitting the pieces of the config content afk-runner delivers to its
  * opencode children through `OPENCODE_CONFIG_CONTENT`. The emitted shape is
- * a locally-typed plain JSON object — the sibling's proven block copied not
- * imported (`opencode-agent/src/openai-config.ts`), because the research's
+ * a locally-typed plain JSON object — the sibling's proven blocks copied not
+ * imported (`opencode-agent/src/openai-config.ts`,
+ * `opencode-agent/src/mcp-servers.ts`), because the research's
  * copy-never-import discipline bars importing the spike workspace, and the
  * SDK would buy only type-checking of an externally-owned shape across that
- * boundary. This file holds the provider half; the permission keys, the
- * `mcp` block, and the serialization land with their own tasks.
+ * boundary. The provider block, the permission base, the `mcp` block, and
+ * the whole-document serialization live here; the D1 size bound over the
+ * serialized full-base composition lands with its own task.
  */
 
 /** One provider entry of the delivered content's `provider` map. */
@@ -142,4 +144,101 @@ export const permissionBaseFor = (surface: AgentMcpSurface, resolved: McpServers
     if (Object.hasOwn(resolved, name)) permission[`${name}_*`] = 'allow'
   }
   return permission
+}
+
+/** A local entry of the delivered content's `mcp` map: the parsed declaration, verbatim. */
+interface ComposedLocalMcpEntry {
+  readonly type: 'local'
+  readonly command: readonly string[]
+  readonly environment?: Readonly<Record<string, string>>
+}
+
+/**
+ * A remote entry of the delivered content's `mcp` map: the declaration with
+ * `oauth: false` pinned by the emission itself.
+ */
+interface ComposedRemoteMcpEntry {
+  readonly type: 'remote'
+  readonly url: string
+  readonly headers?: Readonly<Record<string, string>>
+  readonly oauth: false
+}
+
+/** One entry of the delivered content's `mcp` map (design D3). */
+export type ComposedMcpEntry = ComposedLocalMcpEntry | ComposedRemoteMcpEntry
+
+/** The `mcp` map of the delivered content: server name → emitted entry. */
+export type ComposedMcpMap = Readonly<Record<string, ComposedMcpEntry>>
+
+/**
+ * The `mcp` block of the delivered content (design D3): the spawn's resolved
+ * set's entries — locals verbatim (their `environment` included), every
+ * remote pinned `oauth: false`. That pin is the emission half of the rule
+ * whose parse half refuses the key in every spelling (the sibling's
+ * `mcpBlock`, copied not imported): parse refuses it, emission sets it, so a
+ * maintainer who omitted it still gets clean `failed`-with-error degradation
+ * instead of a run parked at `needs_auth` — an unattended run can complete
+ * no browser flow. An empty resolved set emits no block at all: an empty
+ * map contributes no entries to the overlay, and the sibling's proven
+ * emission omits the key.
+ *
+ * Assignment-style emission is safe exactly because D1's parse refused the
+ * prototype-pollution names over the raw parsed own keys — every name a
+ * `block[name] = entry` write would silently drop has already refused.
+ */
+export const mcpBlockFor = (resolved: McpServers): ComposedMcpMap | undefined => {
+  const names = Object.keys(resolved)
+  if (names.length === 0) return undefined
+
+  const block: Record<string, ComposedMcpEntry> = {}
+  for (const name of names) {
+    const entry = resolved[name]
+    if (entry === undefined) continue
+    block[name] = entry.type === 'remote' ? { ...entry, oauth: false as const } : entry
+  }
+  return block
+}
+
+/**
+ * The whole delivered document (design D3): exactly `$schema`, `provider`
+ * (the slash row only — omitted for a bare model), `model` (the same ref
+ * the argv carries), `mcp` (omitted for an empty resolved set), and
+ * `permission` — nothing else. No `agent` profile blocks (afk-runner's
+ * spawns carry no `--agent`, and profile permission maps would change
+ * built-in tool behaviour), no `small_model` (the runner holds no second
+ * model), no facts the runner does not hold. The sibling's key order is
+ * copied (`buildOpencodeConfig`) — order carries no semantics in the
+ * overlay, but matching the proven emission keeps the two documents legible
+ * side by side.
+ */
+export interface ComposedConfigContent {
+  readonly $schema: string
+  readonly provider?: ComposedProviderMap
+  readonly model: string
+  readonly mcp?: ComposedMcpMap
+  readonly permission: ComposedPermissionMap
+}
+
+/** The sibling's schema pointer (`buildOpencodeConfig`), copied not imported. */
+const CONFIG_SCHEMA = 'https://opencode.ai/config.json'
+
+/**
+ * Composes and serializes the per-spawn content (design D3): a pure function
+ * over the model ref, the resolved surface, and the spawn's resolved set —
+ * the three facts the spawn seam already holds. The returned string is the
+ * value of the child's `OPENCODE_CONFIG_CONTENT`: it carries credentials
+ * (the provider pair, server `headers` and `environment` values) and is
+ * never logged, echoed, or carried in any event payload.
+ */
+export const composeConfigContent = (model: string, surface: AgentMcpSurface, resolved: McpServers): string => {
+  const provider = providerBlockFor(model, surface.credentials)
+  const mcp = mcpBlockFor(resolved)
+  const document: ComposedConfigContent = {
+    $schema: CONFIG_SCHEMA,
+    ...(provider === undefined ? {} : { provider }),
+    model,
+    ...(mcp === undefined ? {} : { mcp }),
+    permission: permissionBaseFor(surface, resolved),
+  }
+  return JSON.stringify(document)
 }

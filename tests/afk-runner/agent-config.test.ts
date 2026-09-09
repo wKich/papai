@@ -5,7 +5,13 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { type ComposedPermissionMap, permissionBaseFor, providerBlockFor } from '../../afk-runner/src/agent-config.js'
+import {
+  composeConfigContent,
+  type ComposedPermissionMap,
+  mcpBlockFor,
+  permissionBaseFor,
+  providerBlockFor,
+} from '../../afk-runner/src/agent-config.js'
 import { AgentRoleSchema, type AgentRole } from '../../afk-runner/src/config.js'
 import {
   type AgentMcpCredentials,
@@ -213,5 +219,190 @@ describe('permissionBaseFor (design D4 permission base)', () => {
       expect(Object.keys(row.permission).length).toBe(wildcards.size)
       expect(Object.hasOwn(row.permission, '*')).toBe(false)
     })
+  })
+})
+
+/**
+ * `mcpBlockFor` and `composeConfigContent` (task 3.3 of afk-runner-agent-mcp,
+ * design D3): the `mcp` block — the spawn's resolved set's entries, every
+ * remote forced `oauth: false` — and the whole-document serialization. The
+ * composed content is exactly `$schema`, `provider` (the slash row only),
+ * `model` (the same ref the argv carries), `mcp`, and `permission` — nothing
+ * else: no `agent` profile blocks, no `small_model`, no facts the runner
+ * does not hold.
+ */
+describe('mcpBlockFor (design D3 mcp block)', () => {
+  test("the resolved set's entries: locals verbatim, every remote pinned oauth: false", () => {
+    const resolved: McpServers = {
+      notes: {
+        type: 'local',
+        command: ['bunx', 'mcp-server-notes@2.0.0'],
+        environment: { NOTES_DIR: '/tmp/afk-notes' },
+      },
+      index: {
+        type: 'remote',
+        url: 'https://mcp.example.com/sse',
+        headers: { Authorization: 'Bearer runner-token' },
+      },
+    }
+    // The parse half refused `oauth` in every spelling, so the pinned
+    // `false` is the emission's own fact, never an operator's passed
+    // through — and a maintainer who omitted it still gets clean
+    // `failed`-with-error degradation instead of a run parked at
+    // `needs_auth`, which no unattended run can leave.
+    expect(mcpBlockFor(resolved)).toEqual({
+      notes: {
+        type: 'local',
+        command: ['bunx', 'mcp-server-notes@2.0.0'],
+        environment: { NOTES_DIR: '/tmp/afk-notes' },
+      },
+      index: {
+        type: 'remote',
+        url: 'https://mcp.example.com/sse',
+        headers: { Authorization: 'Bearer runner-token' },
+        oauth: false,
+      },
+    })
+  })
+
+  test('an empty resolved set emits no mcp block at all', () => {
+    // The sibling's own rule (`mcpBlock`, `opencode-agent/src/mcp-servers.ts`):
+    // an empty map contributes no entries to the overlay, so the key is
+    // omitted rather than emitted as `{}` — a role narrowed to everything
+    // still gets its document (the deny keys), just no `mcp` map.
+    expect(mcpBlockFor({})).toBeUndefined()
+  })
+})
+
+describe('composeConfigContent (design D3 composed document)', () => {
+  const WORK: McpServerEntry = { type: 'local', command: ['bunx', 'mcp-server-work@1.0.0'] }
+  const INDEX: McpServerEntry = { type: 'remote', url: 'https://mcp.example.com/sse' }
+  const BASE: McpServers = { work: WORK, index: INDEX }
+  const API_KEY = 'sk-runner-1234567890abcdef'
+  const BASE_URL = 'https://llm.example.com/v1'
+
+  const activeSurface = (env: Record<string, string>, model: string): AgentMcpSurface => {
+    const surface = resolveAgentMcp(env, model)
+    if (surface === undefined) {
+      throw new Error(`expected the surface active beside the model ${JSON.stringify(model)}`)
+    }
+    return surface
+  }
+
+  // The round-trip half of the serialization assertions: the emitted string
+  // must parse back to a JSON object before any shape judgement runs on it.
+  const parseContentObject = (content: string): object => {
+    const parsed: unknown = JSON.parse(content)
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      throw new Error('the composed content must serialize to a JSON object')
+    }
+    return parsed
+  }
+
+  test('end to end: the slash and bare rows emit exactly the composed keys and nothing else', async () => {
+    const rows: readonly Row<{
+      readonly label: string
+      readonly model: string
+      readonly role: AgentRole
+      readonly env: Record<string, string>
+      readonly absent: readonly string[]
+      readonly expected: Record<string, unknown>
+    }>[] = [
+      {
+        label: 'the slash row: provider block, the argv model ref, the narrowed mcp set, the permission base',
+        model: 'kaneo/glm-4.7',
+        role: 'reviewer',
+        env: {
+          AGENT_MCP_SERVERS: JSON.stringify(BASE),
+          AGENT_MCP_ROLE_NARROWING: JSON.stringify({ reviewer: ['work'] }),
+          LLM_API_KEY: API_KEY,
+          LLM_BASE_URL: BASE_URL,
+        },
+        absent: ['agent', 'small_model'],
+        expected: {
+          $schema: 'https://opencode.ai/config.json',
+          provider: {
+            kaneo: {
+              npm: '@ai-sdk/openai-compatible',
+              name: 'OpenAI-compatible',
+              options: { apiKey: API_KEY, baseURL: BASE_URL, setCacheKey: true },
+              models: { 'glm-4.7': { name: 'glm-4.7' } },
+            },
+          },
+          model: 'kaneo/glm-4.7',
+          mcp: { index: { type: 'remote', url: 'https://mcp.example.com/sse', oauth: false } },
+          permission: { 'work_*': 'deny', 'index_*': 'allow' },
+        },
+      },
+      {
+        label:
+          'the bare row: no provider block even beside the set pair — the pair was warned and dropped at resolution',
+        model: 'opencode',
+        role: 'drafter',
+        env: {
+          AGENT_MCP_SERVERS: JSON.stringify(BASE),
+          LLM_API_KEY: API_KEY,
+          LLM_BASE_URL: BASE_URL,
+        },
+        absent: ['provider', 'agent', 'small_model'],
+        expected: {
+          $schema: 'https://opencode.ai/config.json',
+          model: 'opencode',
+          mcp: {
+            work: { type: 'local', command: ['bunx', 'mcp-server-work@1.0.0'] },
+            index: { type: 'remote', url: 'https://mcp.example.com/sse', oauth: false },
+          },
+          permission: { 'work_*': 'allow', 'index_*': 'allow' },
+        },
+      },
+    ]
+    await assertEach(rows, (row) => {
+      const surface = activeSurface(row.env, row.model)
+      // The per-spawn composition seam D3 names: the model ref the argv
+      // carries, the surface, and the role's resolved set from `mcpFor`.
+      const content = composeConfigContent(row.model, surface, mcpFor(surface, row.role))
+      // Serialization is part of the unit under test: the assertions run
+      // over the parsed emitted string, so a document that cannot
+      // round-trip its own JSON fails here rather than at the first spawn.
+      const document = parseContentObject(content)
+      expect(document).toEqual(row.expected)
+      // The "nothing else" half: exactly the composed keys — no `agent`
+      // profile blocks, no `small_model`, no facts the runner does not
+      // hold. Every key outside this set is absent by this assertion, the
+      // named rows belt-and-braces for the two the sibling's own emission
+      // carries and this one must not.
+      expect(Object.keys(document)).toEqual(Object.keys(row.expected))
+      for (const key of row.absent) {
+        expect(Object.hasOwn(document, key)).toBe(false)
+      }
+    })
+  })
+
+  test('a role narrowed to everything composes the deny base with no mcp map at all', () => {
+    const surface = activeSurface(
+      {
+        AGENT_MCP_SERVERS: JSON.stringify(BASE),
+        AGENT_MCP_ROLE_NARROWING: JSON.stringify({ skeptic: ['work', 'index'] }),
+      },
+      'opencode',
+    )
+    const content = composeConfigContent('opencode', surface, mcpFor(surface, 'skeptic'))
+    const document = parseContentObject(content)
+    expect(document).toEqual({
+      $schema: 'https://opencode.ai/config.json',
+      model: 'opencode',
+      permission: { 'work_*': 'deny', 'index_*': 'deny' },
+    })
+    expect(Object.keys(document)).toEqual(['$schema', 'model', 'permission'])
+  })
+
+  test('the bare row never carries the warned-and-dropped credential values anywhere in the content', () => {
+    const surface = activeSurface(
+      { AGENT_MCP_SERVERS: JSON.stringify(BASE), LLM_API_KEY: API_KEY, LLM_BASE_URL: BASE_URL },
+      'opencode',
+    )
+    const content = composeConfigContent('opencode', surface, mcpFor(surface, 'drafter'))
+    expect(content).not.toContain(API_KEY)
+    expect(content).not.toContain(BASE_URL)
   })
 })
