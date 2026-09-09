@@ -78,5 +78,5 @@ follow-up proposals gated on this change's evidence artifacts.
 
 ## 4. Final sweep
 
-- [ ] 4.1 Full suite, checks, and strict validation; confirm `notes.md` carries
+- [x] 4.1 Full suite, checks, and strict validation; confirm `notes.md` carries
       both evidence sets (attendance numbers + dogfood record). → `bun test && bun run typecheck && bun run lint && openspec validate afk-runner-service --strict`
