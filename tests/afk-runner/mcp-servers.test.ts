@@ -6,10 +6,13 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
+  type AgentMcpSurface,
   type McpServerEntry,
+  type McpServers,
   parseMcpServers,
   parseRoleNarrowing,
   RESERVED_BUILTIN_TOOL_NAMES,
+  resolveAgentMcp,
 } from '../../afk-runner/src/mcp-servers.js'
 import { assertEach, type Row } from '../utils/grouped-assertions.js'
 
@@ -334,5 +337,172 @@ describe('parseRoleNarrowing (AGENT_MCP_ROLE_NARROWING)', () => {
       expect(() => parseRoleNarrowing(row.knob, servers)).toThrow('AGENT_MCP_ROLE_NARROWING')
       expect(() => parseRoleNarrowing(row.knob, servers)).toThrow(row.problem)
     })
+  })
+})
+
+/**
+ * `resolveAgentMcp` (task 2.3, design D2): the verb-time resolution of the
+ * whole surface — both knobs, then the credential-pair matrix against the
+ * resolved config's model ref. The pair (`LLM_API_KEY` + `LLM_BASE_URL`) is
+ * read only when the surface is active: an inactive surface never touches
+ * credentials at all, so inertness stays absolute (D5).
+ */
+describe('resolveAgentMcp (D2 credential-pair matrix)', () => {
+  const SERVERS: McpServers = { work: { type: 'local', command: ['bunx', 'mcp-server-fetch@1.0.0'] } }
+  const BASE_MAP = JSON.stringify(SERVERS)
+  const KEY = 'sk-live-abcdef123456'
+  const BASE_URL = 'https://llm.example.com/v1'
+
+  const envOf = (extra: Record<string, string | undefined>): Record<string, string | undefined> => ({
+    AGENT_MCP_SERVERS: BASE_MAP,
+    ...extra,
+  })
+
+  const activeSurfaceOf = (env: Record<string, string | undefined>, model: string): AgentMcpSurface => {
+    const surface = resolveAgentMcp(env, model)
+    if (surface === undefined) {
+      throw new Error(`expected the surface active for model ${JSON.stringify(model)}`)
+    }
+    return surface
+  }
+
+  const refusalOf = (env: Record<string, string | undefined>, model: string): string => {
+    try {
+      resolveAgentMcp(env, model)
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error)
+    }
+    throw new Error(`expected resolveAgentMcp to refuse model ${JSON.stringify(model)}`)
+  }
+
+  /**
+   * An env proxy that records every read of the credential pair's names —
+   * the one observable proof an inactive resolution never touches
+   * credentials (the pair must not even be read, so the values' presence
+   * alone cannot stand in for the assertion).
+   */
+  const credentialReads: string[] = []
+  const guardedEnv = (env: Record<string, string | undefined>): Record<string, string | undefined> =>
+    new Proxy(env, {
+      get(target: Record<string, string | undefined>, prop: string | symbol): string | undefined {
+        if (prop === 'LLM_API_KEY' || prop === 'LLM_BASE_URL') {
+          credentialReads.push(prop)
+          return target[prop]
+        }
+        return typeof prop === 'string' ? target[prop] : undefined
+      },
+    })
+
+  test('slash-shaped model with both halves of the pair set: active with the pair', () => {
+    expect(resolveAgentMcp(envOf({ LLM_API_KEY: KEY, LLM_BASE_URL: BASE_URL }), 'ollama/llama3')).toEqual({
+      servers: SERVERS,
+      narrowing: undefined,
+      credentials: { apiKey: KEY, baseURL: BASE_URL },
+      warnings: [],
+    })
+
+    // A model id may itself contain slashes — still one slash-shaped ref
+    // (the sibling's parseModelRef rule: only the first segment is the
+    // provider).
+    expect(
+      activeSurfaceOf(envOf({ LLM_API_KEY: KEY, LLM_BASE_URL: BASE_URL }), 'openrouter/anthropic/claude-3.5')
+        .credentials,
+    ).toEqual({ apiKey: KEY, baseURL: BASE_URL })
+
+    // The narrowing knob threads through the same resolution.
+    expect(
+      activeSurfaceOf(
+        envOf({
+          LLM_API_KEY: KEY,
+          LLM_BASE_URL: BASE_URL,
+          AGENT_MCP_ROLE_NARROWING: JSON.stringify({ reviewer: ['work'] }),
+        }),
+        'ollama/llama3',
+      ).narrowing,
+    ).toEqual({ reviewer: ['work'] })
+  })
+
+  test('slash-shaped model with either half missing refuses naming the missing key', async () => {
+    const rows: readonly Row<{
+      readonly env: Record<string, string | undefined>
+      readonly missing: readonly string[]
+    }>[] = [
+      { label: 'the api key missing', env: { LLM_BASE_URL: BASE_URL }, missing: ['LLM_API_KEY'] },
+      { label: 'the base url missing', env: { LLM_API_KEY: KEY }, missing: ['LLM_BASE_URL'] },
+      { label: 'both halves missing', env: {}, missing: ['LLM_API_KEY', 'LLM_BASE_URL'] },
+      {
+        label: 'a present-but-empty api key reads as unset',
+        env: { LLM_API_KEY: '', LLM_BASE_URL: BASE_URL },
+        missing: ['LLM_API_KEY'],
+      },
+      {
+        label: 'a blank base url reads as unset',
+        env: { LLM_API_KEY: KEY, LLM_BASE_URL: '   ' },
+        missing: ['LLM_BASE_URL'],
+      },
+    ]
+    await assertEach(rows, (row) => {
+      const message = refusalOf(envOf(row.env), 'ollama/llama3')
+      expect(message).toContain('contradiction')
+      // The exact missing clause pins which keys the refusal names.
+      expect(message).toContain(`missing ${row.missing.join(', ')}`)
+      // The refusal names keys — never the set half's value.
+      expect(message).not.toContain(KEY)
+      expect(message).not.toContain(BASE_URL)
+    })
+  })
+
+  test('bare model with the pair set: active, no provider facts, warns naming the ignored keys — never their values', async () => {
+    const rows: readonly Row<{
+      readonly env: Record<string, string | undefined>
+      readonly named: readonly string[]
+    }>[] = [
+      {
+        label: 'both halves set',
+        env: { LLM_API_KEY: KEY, LLM_BASE_URL: BASE_URL },
+        named: ['LLM_API_KEY', 'LLM_BASE_URL'],
+      },
+      { label: 'only the api key set', env: { LLM_API_KEY: KEY }, named: ['LLM_API_KEY'] },
+      { label: 'only the base url set', env: { LLM_BASE_URL: BASE_URL }, named: ['LLM_BASE_URL'] },
+    ]
+    await assertEach(rows, (row) => {
+      const surface = activeSurfaceOf(envOf(row.env), 'opencode')
+      expect(surface.credentials).toBeUndefined()
+      expect(surface.servers).toEqual(SERVERS)
+      expect(surface.warnings).toHaveLength(row.named.length)
+      for (const name of row.named) {
+        expect(surface.warnings.some((warning) => warning.includes(name))).toBe(true)
+      }
+      for (const warning of surface.warnings) {
+        expect(warning).not.toContain(KEY)
+        expect(warning).not.toContain(BASE_URL)
+      }
+    })
+  })
+
+  test('bare model with neither set: active, no provider facts, no warnings', () => {
+    expect(resolveAgentMcp(envOf({}), 'opencode')).toEqual({
+      servers: SERVERS,
+      narrowing: undefined,
+      credentials: undefined,
+      warnings: [],
+    })
+  })
+
+  test('an inactive surface beside a set pair reads nothing, warns on nothing', () => {
+    const PAIR = { LLM_API_KEY: KEY, LLM_BASE_URL: BASE_URL }
+
+    // Unset, blank, and {} base maps are all the inactive surface — even
+    // beside a fully set pair and a slash-shaped model that would use it.
+    expect(resolveAgentMcp(guardedEnv({ ...PAIR }), 'ollama/llama3')).toBeUndefined()
+    expect(resolveAgentMcp(guardedEnv({ AGENT_MCP_SERVERS: '   ', ...PAIR }), 'opencode')).toBeUndefined()
+    expect(resolveAgentMcp(guardedEnv({ AGENT_MCP_SERVERS: '{}', ...PAIR }), 'opencode')).toBeUndefined()
+    // A present narrowing knob is validated in full whatever the base map's
+    // state (D5) and still resolves inactive — an empty shed list is the one
+    // shape an inactive base map accepts.
+    expect(
+      resolveAgentMcp(guardedEnv({ AGENT_MCP_ROLE_NARROWING: '{"drafter":[]}', ...PAIR }), 'opencode'),
+    ).toBeUndefined()
+    expect(credentialReads).toEqual([])
   })
 })

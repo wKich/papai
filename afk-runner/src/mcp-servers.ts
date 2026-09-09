@@ -5,7 +5,14 @@
 
 import { z } from 'zod'
 
-import { AgentRoleSchema } from './config.js'
+import {
+  refuseMintedServers,
+  refuseShadowingNames,
+  refuseUnknownRoles,
+  refuseUnintendable,
+} from './mcp-server-rules.js'
+
+export { RESERVED_BUILTIN_TOOL_NAMES } from './mcp-server-rules.js'
 
 /**
  * `AGENT_MCP_SERVERS` — the MCP server base map knob (afk-runner-agent-mcp
@@ -17,24 +24,9 @@ import { AgentRoleSchema } from './config.js'
  *
  * Its own module rather than a section of `config.ts`: that file is the
  * five-key config-ladder loader, and this is env-knob seam holding
- * credential-bearing values — the wrong seam for either half.
+ * credential-bearing values — the wrong seam for either half. The
+ * rule-naming refusals the parses lean on live in `mcp-server-rules.ts`.
  */
-
-/**
- * Server names must be safe to embed in a tool-name prefix: OpenCode surfaces
- * a server's tools as `<name>_<tool>`, and the runner generates `"<name>_*"`
- * permission keys from the same name.
- */
-const NAME_PATTERN = /^[A-Za-z0-9_-]+$/u
-
-/**
- * The prototype-pollution name class. The alphabet admits all three, but a
- * zod record rebuild and assignment-style emission (`block[name] = entry`)
- * both silently drop `__proto__`, letting a declared server vanish without a
- * word — so they are refused over the raw parsed own keys, the one place the
- * name is still visible before a rebuild drops it.
- */
-const PROTOTYPE_POLLUTION_NAMES: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype'])
 
 const localSchema = z.strictObject({
   type: z.literal('local'),
@@ -64,17 +56,28 @@ export type McpServers = Record<string, McpServerEntry>
 export type RoleNarrowing = Readonly<Record<string, readonly string[]>>
 
 /**
- * The reserved-prefix list (design D1): the on-record underscore-bearing
- * built-in tool names. A base-map name whose `<name>_*` wildcard globs one of
- * these would deny or allow a built-in tool — the non-MCP invariance broken
- * by a fully legal name — so their prefixes may not name a server. Recorded,
- * not guessed: today exactly `external_directory`
- * (`opencode-agent/src/permissions.ts`), reserving the name `external`;
- * re-record from the permissions source on an `opencode-ai` pin bump — a
- * built-in not yet on the list is the stated residual, never a silently
- * assumed absence.
+ * The credential pair of D2's slash row: the OpenAI-compatible
+ * `LLM_API_KEY` + `LLM_BASE_URL` pair read from the environment — env-only,
+ * never persisted, never logged; only the composed content carries it, and
+ * only the child's environment carries that.
  */
-export const RESERVED_BUILTIN_TOOL_NAMES: readonly string[] = ['external_directory']
+export interface AgentMcpCredentials {
+  readonly apiKey: string
+  readonly baseURL: string
+}
+
+/**
+ * The resolved operator surface (design D1/D2): the parsed base map and
+ * narrowing plus the credential-pair verdict for the resolved config's model
+ * ref. `undefined` is the inactive surface — no servers, no content, and no
+ * credential read (inertness is absolute, D5).
+ */
+export interface AgentMcpSurface {
+  readonly servers: McpServers
+  readonly narrowing: RoleNarrowing | undefined
+  readonly credentials: AgentMcpCredentials | undefined
+  readonly warnings: readonly string[]
+}
 
 /**
  * Parses `AGENT_MCP_SERVERS`.
@@ -131,36 +134,59 @@ export const parseRoleNarrowing = (
 }
 
 /**
- * The refusals that name a **rule** rather than a schema path, checked before
- * the schema so the message can say what the operator did wrong rather than
- * what Zod found.
+ * The verb-time resolution of the whole surface (design D1/D2): both knobs
+ * parse-and-refuse here (the narrowing validated in full whatever the base
+ * map's state, D5), then — only for an active surface — D2's
+ * credential-pair matrix runs against the resolved config's model ref:
  *
- * A non-object document is left to the schema: its own refusal is the clearer
- * one, and there is no name or `oauth` to judge.
+ * - `<provider>/<model>` with both `LLM_API_KEY` and `LLM_BASE_URL` set —
+ *   active with the pair;
+ * - a slash-shaped model with either half missing — refuse naming the
+ *   missing key: the delivered content must carry the provider definition,
+ *   and half a credential pair is a contradiction (the review-loop claude
+ *   route's both-or-neither rule);
+ * - a bare model (no `/`, e.g. the `opencode` default) with any of the pair
+ *   set — active with no provider facts and one warning per set key naming
+ *   the ignored key (never its value), and the run proceeds: the pair names
+ *   are the repo's established carriers for other tooling too, so an
+ *   ambient pair beside the bare compiled default is the mainstream
+ *   activation shape, not a misconfiguration;
+ * - a bare model with neither set — active with no provider facts.
+ *
+ * The inactive surface returns `undefined` before any credential read: an
+ * inactive surface never touches credentials at all.
  */
-const refuseUnintendable = (document: unknown): void => {
-  if (typeof document !== 'object' || document === null || Array.isArray(document)) return
+export const resolveAgentMcp = (
+  env: Record<string, string | undefined>,
+  model: string,
+): AgentMcpSurface | undefined => {
+  const servers = parseMcpServers(env['AGENT_MCP_SERVERS'])
+  const narrowing = parseRoleNarrowing(env['AGENT_MCP_ROLE_NARROWING'], servers)
+  if (servers === undefined) return undefined
 
-  for (const [name, entry] of Object.entries(document) as [string, unknown][]) {
-    if (PROTOTYPE_POLLUTION_NAMES.has(name)) {
+  const apiKey = credentialOf(env, 'LLM_API_KEY')
+  const baseURL = credentialOf(env, 'LLM_BASE_URL')
+
+  if (model.includes('/')) {
+    if (apiKey === undefined || baseURL === undefined) {
+      const missing: string[] = []
+      if (apiKey === undefined) missing.push('LLM_API_KEY')
+      if (baseURL === undefined) missing.push('LLM_BASE_URL')
       throw new Error(
-        `AGENT_MCP_SERVERS refuses the prototype-pollution server name ${JSON.stringify(name)}: a record rebuild or assignment emission silently drops it, and the declared server would vanish without a refusal`,
+        `the active MCP surface delivers the provider definition for the model ${JSON.stringify(model)}, which requires both LLM_API_KEY and LLM_BASE_URL — half a credential pair is a contradiction: missing ${missing.join(', ')}`,
       )
     }
-    if (!NAME_PATTERN.test(name)) {
-      throw new Error(
-        `AGENT_MCP_SERVERS server names must match [A-Za-z0-9_-]+ — tools arrive as <name>_<tool> and grants are keyed <name>_*: got ${JSON.stringify(name)}`,
-      )
-    }
-    if (typeof entry === 'object' && entry !== null && Object.hasOwn(entry, 'oauth')) {
-      // Refused in every spelling, not just the object one: an `oauth` value
-      // of any kind can only ever express an intent an unattended run cannot
-      // honour, and a silently ignored key reads as accepted.
-      throw new Error(
-        `AGENT_MCP_SERVERS refuses the oauth field on ${JSON.stringify(name)}: OAuth remotes park at needs_auth, and an unattended run can complete no browser flow`,
-      )
-    }
+    return { servers, narrowing, credentials: { apiKey, baseURL }, warnings: [] }
   }
+
+  const ignored: string[] = []
+  if (apiKey !== undefined) ignored.push('LLM_API_KEY')
+  if (baseURL !== undefined) ignored.push('LLM_BASE_URL')
+  const warnings = ignored.map(
+    (name) =>
+      `${name} is ignored beside the bare model ${JSON.stringify(model)}: a model with no provider segment composes no provider block, so the pair is never read`,
+  )
+  return { servers, narrowing, credentials: undefined, warnings }
 }
 
 const safeJson = (raw: string, knob: string): unknown => {
@@ -172,64 +198,13 @@ const safeJson = (raw: string, knob: string): unknown => {
 }
 
 /**
- * The two shadowing refusals (design D1): D4 turns every base-map name into
- * a `<name>_*` permission key, and those keys glob the binary's one flat
- * tool-name namespace — so a name may neither reach another base-map name's
- * tools (the recorded later-rule-wins ordering would let whichever key lands
- * later flip the other's verdict, whichever order they are emitted in) nor a
- * built-in tool name on record.
+ * A credential is set iff present and non-blank — a present-but-empty value
+ * reads as unset, the same doctrine the claude route's credential selection
+ * applies (CI forwards unset secrets as `''`). The value itself, when set,
+ * is carried verbatim.
  */
-const refuseShadowingNames = (names: readonly string[]): void => {
-  for (const name of names) {
-    const builtin = RESERVED_BUILTIN_TOOL_NAMES.find((tool) => tool.startsWith(`${name}_`))
-    if (builtin !== undefined) {
-      throw new Error(
-        `AGENT_MCP_SERVERS refuses the built-in-shadowing server name ${JSON.stringify(name)}: its ${JSON.stringify(`${name}_*`)} permission wildcard would also gate the built-in tool ${JSON.stringify(builtin)}`,
-      )
-    }
-  }
-  for (const name of names) {
-    const shadowed = names.find((other) => other !== name && other.startsWith(`${name}_`))
-    if (shadowed !== undefined) {
-      throw new Error(
-        `AGENT_MCP_SERVERS refuses the shadowing server name ${JSON.stringify(name)}: its ${JSON.stringify(`${name}_*`)} permission wildcard also globs the tools of ${JSON.stringify(shadowed)} — base-map names must not be underscore-prefixes of one another`,
-      )
-    }
-  }
-}
-
-/**
- * The role vocabulary is closed (`AgentRoleSchema`), checked over the raw
- * parsed own keys so the refusal names the key — and so a
- * prototype-pollution key like `__proto__` refuses as the unknown role it is
- * before a record rebuild can silently drop it.
- */
-const refuseUnknownRoles = (document: unknown): void => {
-  if (typeof document !== 'object' || document === null || Array.isArray(document)) return
-
-  for (const role of Object.keys(document)) {
-    if (!AgentRoleSchema.safeParse(role).success) {
-      throw new Error(
-        `AGENT_MCP_ROLE_NARROWING refuses the unknown agent role ${JSON.stringify(role)}: role keys must come from the closed vocabulary (${AgentRoleSchema.options.join(', ')})`,
-      )
-    }
-  }
-}
-
-/**
- * Narrowing only removes (design D1): a name the base map lacks cannot be
- * shed, and honouring it would mint a server the operator never declared.
- * Validated in full whatever the base map's state — against an inactive base
- * every carried name refuses (design D5).
- */
-const refuseMintedServers = (narrowing: RoleNarrowing, servers: McpServers | undefined): void => {
-  for (const [role, names] of Object.entries(narrowing)) {
-    for (const name of names) {
-      if (servers === undefined || !Object.hasOwn(servers, name)) {
-        throw new Error(
-          `AGENT_MCP_ROLE_NARROWING cannot mint servers: ${JSON.stringify(name)} (shed for ${role}) is absent from the AGENT_MCP_SERVERS base map`,
-        )
-      }
-    }
-  }
+const credentialOf = (env: Record<string, string | undefined>, name: string): string | undefined => {
+  const value = env[name]
+  if (value === undefined || value.trim().length === 0) return undefined
+  return value
 }
