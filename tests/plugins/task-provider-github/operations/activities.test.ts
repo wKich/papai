@@ -293,6 +293,31 @@ describe('githubListTaskEvents — comment activity merge', () => {
     expect(activities.map((activity) => activity.category)).toEqual(['status'])
   })
 
+  test('an explicit comment category still fetches comments and surfaces the comment activity', async () => {
+    mockLogger()
+    const calls: CapturedRequest[] = []
+    setMockFetch(
+      routedRequests(calls, {
+        [eventsPath]: (): { data: unknown } => ({
+          data: [issueEvent({ id: 1, event: 'closed', created_at: '2011-04-11T10:00:00Z' })],
+        }),
+        [commentsPath]: (): { data: unknown } => ({
+          data: [issueComment({ id: 100, created_at: '2011-04-11T11:00:00Z' })],
+        }),
+      }).handler,
+    )
+    const activities = await githubListTaskEvents(config, '1347', { categories: ['comment'] })
+    expect(calls.map((call) => call.url.pathname)).toContain(commentsPath)
+    expect(activities).toEqual([
+      {
+        id: '100',
+        timestamp: '2011-04-11T11:00:00Z',
+        author: 'octocat',
+        category: 'comment',
+      },
+    ])
+  })
+
   test('merges events and comments into one ascending-timestamp sequence', async () => {
     mockLogger()
     const calls: CapturedRequest[] = []

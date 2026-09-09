@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import {
   createAlertPrompt,
   getAlertPrompt,
+  updateAlertBaseline,
   updateAlertMatchState,
   updateAlertPrompt,
 } from '../../src/deferred-prompts/alerts.js'
@@ -15,9 +16,11 @@ import { LIGHTWEIGHT_SNAPSHOT_FIELDS, RICH_SNAPSHOT_FIELDS } from '../../src/def
 import {
   collectFieldFirings,
   collectPureWatchFiring,
+  needsFirstCycleBaseline,
   watchTaskChanged,
 } from '../../src/deferred-prompts/poller-alerts-watch.js'
 import { TRACKED_FIELDS_ROW } from '../../src/deferred-prompts/snapshots.js'
+import type { AlertPrompt } from '../../src/deferred-prompts/types.js'
 import type { Task } from '../../src/providers/types.js'
 import { mockLogger, setupTestDb } from '../utils/test-helpers.js'
 
@@ -284,5 +287,58 @@ describe('collectFieldFirings — filter-alert baseline-on-create', () => {
 
     expect(firing).toHaveLength(0)
     expect(getAlertPrompt(alert.id, USER)!.matchedTaskIds).toEqual(['t1'])
+    // Pure watches never carry the baseline marker: the filter loop must skip
+    // them, or it would stamp lastActivityCursor as a filter baseline.
+    expect(getAlertPrompt(alert.id, USER)!.lastActivityCursor).toBeNull()
+  })
+})
+
+describe('needsFirstCycleBaseline', () => {
+  const USER = 'first-cycle-baseline-user'
+  const PAST = '2026-01-01T00:00:00.000Z'
+
+  beforeEach(async () => {
+    mockLogger()
+    await setupTestDb()
+  })
+
+  const filterAlert = (): ReturnType<typeof createAlertPrompt> =>
+    createAlertPrompt(USER, 'Notify on new matching task', { field: 'task.status', op: 'eq', value: 'todo' })
+
+  const watchAlert = (): ReturnType<typeof createAlertPrompt> =>
+    createAlertPrompt(USER, 'Watch one task', { field: 'task.id', op: 'eq', value: 't1' })
+
+  // lastTriggeredAt set, cursor null: the alert has fired, so its match set is
+  // already past-baseline.
+  const firedAlert = (): AlertPrompt => {
+    const created = filterAlert()
+    updateAlertMatchState(created.id, USER, PAST, ['t1'])
+    return getAlertPrompt(created.id, USER)!
+  }
+
+  // lastTriggeredAt null, cursor set: the alert already baselined once and its
+  // match set is live bookkeeping, not a fresh creation state.
+  const baselinedAlert = (): AlertPrompt => {
+    const created = filterAlert()
+    updateAlertBaseline(created.id, USER, ['t1'], PAST)
+    return getAlertPrompt(created.id, USER)!
+  }
+
+  const persisted = (alert: ReturnType<typeof createAlertPrompt>): AlertPrompt => getAlertPrompt(alert.id, USER)!
+
+  test('a fresh filter alert needs the first-cycle baseline', () => {
+    expect(needsFirstCycleBaseline([persisted(filterAlert())])).toBe(true)
+  })
+
+  test('pure watches, fired alerts, and baselined alerts never force the gate open', () => {
+    expect(needsFirstCycleBaseline([persisted(watchAlert())])).toBe(false)
+    expect(needsFirstCycleBaseline([firedAlert()])).toBe(false)
+    expect(needsFirstCycleBaseline([baselinedAlert()])).toBe(false)
+    expect(needsFirstCycleBaseline([persisted(watchAlert()), firedAlert(), baselinedAlert()])).toBe(false)
+  })
+
+  test('one needing alert among non-needing ones still forces evaluation (some, not every)', () => {
+    expect(needsFirstCycleBaseline([firedAlert(), persisted(filterAlert())])).toBe(true)
+    expect(needsFirstCycleBaseline([persisted(watchAlert()), persisted(filterAlert())])).toBe(true)
   })
 })

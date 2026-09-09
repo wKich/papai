@@ -676,7 +676,7 @@ describe('pollAlertsOnce — error notice history recording', () => {
   })
 
   test('does not record history when delivery of the error notice fails', async () => {
-    createAlertPrompt(USER_ID, 'Notify on done', { field: 'task.status', op: 'eq', value: 'done' })
+    createPastBaselineAlert(USER_ID, 'Notify on done', { field: 'task.status', op: 'eq', value: 'done' })
     const provider = createMockProvider({
       listProjects: mock(() => Promise.resolve([{ id: 'proj-1', name: 'Test', url: 'http://test/proj/1' }])),
       listTasks: mock(() =>

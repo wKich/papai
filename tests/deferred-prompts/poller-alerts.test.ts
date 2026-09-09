@@ -20,6 +20,7 @@ import {
 import * as alertsModule from '../../src/deferred-prompts/alerts.js'
 import { LIGHTWEIGHT_SNAPSHOT_FIELDS } from '../../src/deferred-prompts/change-gate.js'
 import { pollAlertsOnce } from '../../src/deferred-prompts/poller-alerts.js'
+import * as proactiveLlmModule from '../../src/deferred-prompts/proactive-llm.js'
 import type { BuildProviderFn } from '../../src/deferred-prompts/proactive-llm.js'
 import { getSnapshotsForUser, updateSnapshots } from '../../src/deferred-prompts/snapshots.js'
 import type { AlertCondition, AlertPrompt } from '../../src/deferred-prompts/types.js'
@@ -1108,6 +1109,31 @@ describe('pollAlertsOnce — alert task activity', () => {
     await pollAlertsOnce(chat, activityBuildProviderFn(state))
 
     expect(sentMessages).toHaveLength(1)
+    expect(getAlertPrompt(alert.id, ACTIVITY_USER)!.lastActivityCursor).toBe(T2)
+  })
+
+  test('a pure-activity batch whose dispatch fails sends no error notice and keeps the cursor for retry', async () => {
+    const state = makeActivityProvider()
+    state.setHistory('task-1', [activity('e1', T1), activity('e2', T2)])
+    const alert = createActivityAlert({ kind: 'activity', taskId: 'task-1' })
+    const buildProviderFn = activityBuildProviderFn(state)
+
+    await pollAlertsOnce(chat, buildProviderFn)
+    expect(sentMessages).toHaveLength(0)
+    expect(getAlertPrompt(alert.id, ACTIVITY_USER)!.lastActivityCursor).toBe(T2)
+
+    state.setHistory('task-1', [activity('e1', T1), activity('e2', T2), activity('e3', T3)])
+    const dispatchSpy = spyOn(proactiveLlmModule, 'dispatchExecution').mockImplementation(() =>
+      Promise.reject(new Error('LLM exploded')),
+    )
+
+    await pollAlertsOnce(chat, buildProviderFn)
+
+    // The field-alert path reports the failure to the user, but an
+    // activity-only batch has no field diff to narrate — it stays silent so
+    // the next poll retries the still-uncommitted entries.
+    expect(dispatchSpy).toHaveBeenCalledTimes(1)
+    expect(sentMessages).toHaveLength(0)
     expect(getAlertPrompt(alert.id, ACTIVITY_USER)!.lastActivityCursor).toBe(T2)
   })
 })
