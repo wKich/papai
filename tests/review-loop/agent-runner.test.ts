@@ -625,6 +625,70 @@ describe('runAgent backend integration', () => {
     expect(mock.calls[0]?.env).toBeUndefined()
   })
 
+  test('a set opencodeEnv rides the opencode route verbatim as the child env (afk-runner-agent-mcp D3)', async () => {
+    const dir = makeTempDir('agent-oc-env-')
+    const outputPath = path.join(dir, 'issues.json')
+    const mock = createMockSpawn([{ exitCode: 0, stdout: 'done', stderr: '' }])
+    writeScratch(dir, outputPath, { issues: [] })
+    const opencodeEnv = { OPENCODE_CONFIG_CONTENT: '{"mcp":{}}', PATH: '/usr/bin' }
+
+    await runAgent({
+      spawn: mock.spawn,
+      model: 'test-model',
+      cwd: dir,
+      prompt: 'review the code',
+      outputPath,
+      outputSchema: ReviewerIssuesSchema,
+      label: 'reviewer',
+      logPath: path.join(dir, 'log.txt'),
+      extraArgs: [],
+      opencodeEnv,
+    })
+
+    expect(mock.calls[0]?.env).toEqual(opencodeEnv)
+    expect(mock.calls[0]?.args).toEqual([
+      'run',
+      '--auto',
+      '--format',
+      'json',
+      '--model',
+      'test-model',
+      '--dir',
+      dir,
+      'review the code',
+    ])
+  })
+
+  test('the claude route surfaces the opencodeEnv refusal before anything spawns', async () => {
+    const dir = makeTempDir('agent-claude-oc-env-')
+    const outputPath = path.join(dir, 'issues.json')
+    const mock = createMockSpawn([{ exitCode: 0, stdout: '', stderr: '' }])
+    writeScratch(dir, outputPath, { issues: [] })
+
+    await expect(
+      runAgent({
+        spawn: mock.spawn,
+        model: 'test-model',
+        cwd: dir,
+        prompt: 'review the code',
+        outputPath,
+        outputSchema: ReviewerIssuesSchema,
+        label: 'reviewer',
+        logPath: path.join(dir, 'log.txt'),
+        extraArgs: [],
+        backend: 'claude',
+        claude: claudeContext(dir),
+        createClaudeSpawnDir: (context) =>
+          Promise.resolve({
+            configDir: path.join(context.configDirRoot, 'spawn-1'),
+            mcpConfigPath: null,
+          }),
+        opencodeEnv: { OPENCODE_CONFIG_CONTENT: '{}' },
+      }),
+    ).rejects.toThrow(/opencodeEnv/u)
+    expect(mock.calls).toHaveLength(0)
+  })
+
   test('the claude route spawns claude with the prompt on stdin and the composed env', async () => {
     const dir = makeTempDir('agent-claude-')
     const outputPath = path.join(dir, 'issues.json')

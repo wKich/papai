@@ -99,6 +99,11 @@ export interface RunAgentOptions<T> {
    * into it by the same seam. Injectable so tests need no filesystem.
    */
   createClaudeSpawnDir?: CreateClaudeSpawnDir
+  /**
+   * The opencode child's entire replacement env, caller-composed (afk-runner-agent-mcp D3);
+   * threaded verbatim to `buildAgentCommand` — child env on opencode, refused on claude.
+   */
+  opencodeEnv?: Record<string, string>
 }
 
 interface AttemptResult<T> {
@@ -144,6 +149,7 @@ function attemptRun<T>(
     claude,
     systemPrompt,
     continueSessionId,
+    opencodeEnv: options.opencodeEnv,
   })
   return options.spawn(
     command.command,
