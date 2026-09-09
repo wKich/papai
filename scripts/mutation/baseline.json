@@ -1524,7 +1524,12 @@
   "plugins/task-provider-github/graphql-client.ts": 0.7362637362637363,
   "plugins/task-provider-github/identity-resolver.ts": 0.6521739130434783,
   "plugins/task-provider-github/mappers.ts": 0.9787234042553191,
-  "plugins/task-provider-github/operations/activities.ts": 0.853448275862069,
+  "plugins/task-provider-github/operations/activities.ts": {
+    "score": 0.8604651162790697,
+    "killed": 111,
+    "timeout": 0,
+    "scored": 129
+  },
   "plugins/task-provider-github/operations/comments.ts": 0.5441176470588235,
   "plugins/task-provider-github/operations/count.ts": 0.6333333333333333,
   "plugins/task-provider-github/operations/labels.ts": 0.5232558139534884,
@@ -1870,16 +1875,42 @@
     "scored": 25
   },
   "src/deferred-prompts/activity-gating.ts": 1,
-  "src/deferred-prompts/alerts.ts": 0.5974842767295597,
+  "src/deferred-prompts/alert-state.ts": {
+    "score": 0.46153846153846156,
+    "killed": 12,
+    "timeout": 0,
+    "scored": 26
+  },
+  "src/deferred-prompts/alerts.ts": {
+    "score": 0.6028368794326241,
+    "killed": 85,
+    "timeout": 0,
+    "scored": 141
+  },
   "src/deferred-prompts/condition-eval.ts": 0.8547717842323651,
-  "src/deferred-prompts/condition-schema.ts": 0.746268656716418,
+  "src/deferred-prompts/condition-schema.ts": {
+    "score": 0.8045977011494253,
+    "killed": 70,
+    "timeout": 0,
+    "scored": 87
+  },
   "src/deferred-prompts/delivery-input.ts": 0.7446808510638298,
   "src/deferred-prompts/fetch-tasks.ts": 0.7314814814814815,
   "src/deferred-prompts/poller-alerts-activity.ts": 0.7665198237885462,
   "src/deferred-prompts/poller-alerts-grouping.ts": 0.7346938775510204,
   "src/deferred-prompts/poller-alerts-summary.ts": 0.7608695652173914,
-  "src/deferred-prompts/poller-alerts-watch.ts": 0.9859154929577465,
-  "src/deferred-prompts/poller-alerts.ts": 0.6948051948051948,
+  "src/deferred-prompts/poller-alerts-watch.ts": {
+    "score": 0.989247311827957,
+    "killed": 92,
+    "timeout": 0,
+    "scored": 93
+  },
+  "src/deferred-prompts/poller-alerts.ts": {
+    "score": 0.6967741935483871,
+    "killed": 108,
+    "timeout": 0,
+    "scored": 155
+  },
   "src/deferred-prompts/poller.ts": {
     "score": 0.5714285714285714,
     "killed": 44,
@@ -1930,8 +1961,18 @@
   },
   "src/deferred-prompts/schedule-update-helpers.ts": 0.6447368421052632,
   "src/deferred-prompts/snapshots.ts": 0.8125,
-  "src/deferred-prompts/tool-handlers.ts": 0.9675090252707581,
-  "src/deferred-prompts/types.ts": 0.8309859154929577,
+  "src/deferred-prompts/tool-handlers.ts": {
+    "score": 0.9709090909090909,
+    "killed": 267,
+    "timeout": 0,
+    "scored": 275
+  },
+  "src/deferred-prompts/types.ts": {
+    "score": 0.8309859154929577,
+    "killed": 118,
+    "timeout": 0,
+    "scored": 142
+  },
   "src/embeddings.ts": {
     "score": 0.65625,
     "killed": 63,
@@ -2137,7 +2178,12 @@
   "src/tools/core-capabilities.ts": 1,
   "src/tools/core-tools.ts": 1,
   "src/tools/count-tasks.ts": 0.6363636363636364,
-  "src/tools/create-alert.ts": 0.375,
+  "src/tools/create-alert.ts": {
+    "score": 0.375,
+    "killed": 9,
+    "timeout": 0,
+    "scored": 24
+  },
   "src/tools/create-label.ts": 0.6333333333333333,
   "src/tools/create-project.ts": 0.5333333333333333,
   "src/tools/create-recurring-task.ts": 0.8269230769230769,
@@ -2277,7 +2323,12 @@
   "src/tools/update-label.ts": 0.375,
   "src/tools/update-project.ts": 0.4,
   "src/tools/update-recurring-task.ts": 0.4639175257731959,
-  "src/tools/update-reminder.ts": 0.3333333333333333,
+  "src/tools/update-reminder.ts": {
+    "score": 0.3333333333333333,
+    "killed": 5,
+    "timeout": 0,
+    "scored": 15
+  },
   "src/tools/update-sprint.ts": 0.13043478260869565,
   "src/tools/update-status.ts": 0.5217391304347826,
   "src/tools/update-task-relation.ts": 0.3684210526315789,
