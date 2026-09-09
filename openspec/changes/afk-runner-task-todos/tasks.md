@@ -7,8 +7,8 @@
 
 ## 2. Implement work module: started detail + the mandate line
 
-- [ ] 2.1 Failing test: `task started` carries the item's text collapsed to one line and truncated at 200 chars (long-line and multiline cases); then implement the append-site detail in `work/implement.ts`. Verify: `bun test tests/afk-runner/implement.test.ts`
-- [ ] 2.2 Failing test (fake-pipeline prompt capture): fresh and fix prompts carry the todo-tool mandate line, continuation-shaped rebuilds of the base prompt keep it; then implement — the line joins `spawnPromptOf`'s shared guard array. Verify: `bun test tests/afk-runner/implement.test.ts`
+- [x] 2.1 Failing test: `task started` carries the item's text collapsed to one line and truncated at 200 chars (long-line and multiline cases); then implement the append-site detail in `work/implement.ts`. Verify: `bun test tests/afk-runner/implement.test.ts`
+- [x] 2.2 Failing test (fake-pipeline prompt capture): fresh and fix prompts carry the todo-tool mandate line, continuation-shaped rebuilds of the base prompt keep it; then implement — the line joins `spawnPromptOf`'s shared guard array. Verify: `bun test tests/afk-runner/implement.test.ts`
 
 ## 3. Reporter flag and the mark emission matrix
 
