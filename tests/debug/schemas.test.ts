@@ -380,5 +380,20 @@ describe('schemas', () => {
       expect(result.generatedText).toBe('I created a task for you.')
       expect(result.stepsDetail).toHaveLength(1)
     })
+
+    test('round-trips verifierOutcome through egress parse', () => {
+      const trace = {
+        timestamp: Date.now(),
+        model: 'gpt-4',
+        duration: 2500,
+        steps: 3,
+        totalTokens: { inputTokens: 150, outputTokens: 250 },
+        verifierOutcome: 'empty',
+      }
+      const result = safeParseLlmTrace(trace)
+      expect(result).not.toBeNull()
+      assert.ok(result !== null)
+      expect(result.verifierOutcome).toBe('empty')
+    })
   })
 })

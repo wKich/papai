@@ -25,7 +25,7 @@ import {
   sendReplacementButtonReply,
   sendReplacementTextReply,
 } from '../../../src/chat/telegram/reply-helpers.js'
-import { mockLogger } from '../../utils/test-helpers.js'
+import { createTrackedLoggerMock, mockLogger, type TrackedLoggerMock } from '../../utils/test-helpers.js'
 
 /** Create mock Context with message for tests */
 function createMockContext(message: {
@@ -286,5 +286,202 @@ describe('replacement reply helpers', () => {
     expect(replyMarkup).toBeDefined()
     assert(replyMarkup !== undefined)
     expect(replyMarkup.inline_keyboard).toEqual([])
+  })
+})
+
+describe('sendFormattedReply chunked delivery', () => {
+  beforeEach(() => {
+    mockLogger()
+  })
+
+  type CapturedSend = { text: string; opts: Record<string, unknown> | undefined }
+
+  const okSend = (index: number): Promise<SentButtonMessage> =>
+    Promise.resolve({ message_id: 100 + index, chat: { id: 7 } })
+
+  /** Reply ctx whose nth reply resolves/rejects with `behaviors[n]` (defaulting to a success). */
+  const makeChunkReplyCtx = (
+    chatId: number | undefined,
+    behaviors: ReadonlyArray<Promise<SentButtonMessage>>,
+  ): { ctx: ButtonReplyCapableContext; calls: CapturedSend[] } => {
+    const calls: CapturedSend[] = []
+    const ctx: ButtonReplyCapableContext = {
+      ...(chatId === undefined ? {} : { chat: { id: chatId } }),
+      reply: (text: string, opts?: Record<string, unknown>): Promise<SentButtonMessage> => {
+        const index = calls.length
+        calls.push({ text, opts })
+        return behaviors[index] ?? okSend(index)
+      },
+    }
+    return { ctx, calls }
+  }
+
+  test('over-limit markdown is delivered as ordered chunks within the limit, split on paragraph boundaries', async () => {
+    const paragraphs = ['para-0', 'para-1', 'para-2', 'para-3', 'para-4'].map((p) => `${p} ${'x'.repeat(1200)}`)
+    const markdown = paragraphs.join('\n\n')
+    const { ctx, calls } = makeChunkReplyCtx(7, [])
+
+    const sent = await sendFormattedReply(ctx, markdown, () => ({ message_id: 5 }), undefined)
+
+    expect(calls.length).toBe(2)
+    for (const call of calls) {
+      expect(call.text.length).toBeLessThanOrEqual(4096)
+      expect(Array.isArray(call.opts?.['entities'])).toBe(true)
+    }
+    expect(calls[0]?.text.startsWith('para-0')).toBe(true)
+    expect(calls[0]?.text.includes('para-2')).toBe(true)
+    expect(calls[0]?.text.includes('para-3')).toBe(false)
+    expect(calls[1]?.text.startsWith('para-3')).toBe(true)
+    expect(calls[1]?.text.includes('para-4')).toBe(true)
+    expect(calls.map((call) => call.opts?.['reply_parameters'])).toEqual([{ message_id: 5 }, { message_id: 5 }])
+    expect(sent).toEqual({ messageId: 100, chatId: 7 })
+  })
+
+  test('over-limit markdown without paragraph breaks is split on line boundaries', async () => {
+    const lines = ['line-0', 'line-1', 'line-2', 'line-3'].map((l) => `${l} ${'y'.repeat(1494)}`)
+    const markdown = lines.join('\n')
+    const { ctx, calls } = makeChunkReplyCtx(7, [])
+
+    await sendFormattedReply(ctx, markdown, () => ({ message_id: 5 }), undefined)
+
+    expect(calls.length).toBe(2)
+    for (const call of calls) {
+      expect(call.text.length).toBeLessThanOrEqual(4096)
+    }
+    expect(calls[0]?.text.startsWith('line-0')).toBe(true)
+    expect(calls[0]?.text.includes('line-1')).toBe(true)
+    expect(calls[0]?.text.includes('line-2')).toBe(false)
+    expect(calls[1]?.text.startsWith('line-2')).toBe(true)
+    expect(calls[1]?.text.includes('line-3')).toBe(true)
+  })
+
+  test('unbroken over-limit text is hard-cut at the limit', async () => {
+    const { ctx, calls } = makeChunkReplyCtx(7, [])
+
+    await sendFormattedReply(ctx, 'x'.repeat(8300), () => ({ message_id: 5 }), undefined)
+
+    expect(calls.map((call) => call.text.length)).toEqual([4096, 4096, 108])
+  })
+
+  test('markdown whose formatted text fits the limit is delivered as a single message', async () => {
+    const markdown = Array.from({ length: 900 }, () => '**b**').join('\n\n')
+    const { ctx, calls } = makeChunkReplyCtx(7, [])
+
+    await sendFormattedReply(ctx, markdown, () => ({ message_id: 5 }), undefined)
+
+    expect(calls.length).toBe(1)
+    expect(calls[0]?.text).toBe(Array.from({ length: 900 }, () => 'b').join('\n\n'))
+    const entities = calls[0]?.opts?.['entities']
+    expect(Array.isArray(entities)).toBe(true)
+    assert(Array.isArray(entities))
+    expect(entities.length).toBeGreaterThan(0)
+  })
+
+  // The chunked send loop lives in format-chunking.ts (reply-helpers.ts sits at the
+  // max-lines cap), and its logger child binds at module-eval time, so the static
+  // import above already captured the real logger. Rows that assert the per-chunk
+  // warn install the tracked logger and force a fresh evaluation of the sibling with
+  // a cache-busting query (mirrors tests/completion/verified-completion.test.ts);
+  // formatted-length inflation is forced through the formatter DI param, not a
+  // mock.module, so no module registry state leaks between rows.
+  type ChunkSendModule = typeof import('../../../src/chat/telegram/format-chunking.js')
+
+  const isChunkSendModule = (value: unknown): value is ChunkSendModule =>
+    typeof value === 'object' &&
+    value !== null &&
+    typeof Reflect.get(value, 'sendFormattedTelegramChunks') === 'function'
+
+  const loadChunkSend = async (tracked: TrackedLoggerMock): Promise<ChunkSendModule> => {
+    void mock.module('../../../src/logger.js', () => ({
+      getLogLevel: tracked.getLogLevel,
+      logger: tracked.logger,
+    }))
+    const loaded: unknown = await import(`../../../src/chat/telegram/format-chunking.js?t=${crypto.randomUUID()}`)
+    if (!isChunkSendModule(loaded)) {
+      throw new Error('format-chunking module did not export the expected shape')
+    }
+    return loaded
+  }
+
+  test('a chunk whose formatted text exceeds the limit is re-split from its markdown at a reduced budget', async () => {
+    const tracked = createTrackedLoggerMock()
+    const { sendFormattedTelegramChunks: send } = await loadChunkSend(tracked)
+    const doubling = (markdown: string): { text: string; entities: never[] } => ({
+      text: markdown + markdown,
+      entities: [],
+    })
+    const { ctx, calls } = makeChunkReplyCtx(7, [])
+
+    await send(ctx, 'x'.repeat(6000), { message_id: 5 }, undefined, doubling)
+
+    // 6000 md → [4096, 1904]; the 4096 piece doubles to 8192 > 4096 → re-split at
+    // floor(4096·4096/8192) = 2048 → two pieces doubling to exactly 4096; the 1904
+    // piece doubles to 3808 and fits.
+    expect(calls.map((call) => call.text.length)).toEqual([4096, 4096, 3808])
+  })
+
+  test('a failed middle chunk warns with chat id and chunk position, still sends later chunks, and rethrows', async () => {
+    const tracked = createTrackedLoggerMock()
+    const { sendFormattedTelegramChunks: send } = await loadChunkSend(tracked)
+    const paragraphs = ['fail-0', 'fail-1', 'fail-2', 'fail-3'].map((p) => `${p} ${'y'.repeat(2200)}`)
+    const markdown = paragraphs.join('\n\n')
+    const chunkError = new Error('telegram send failed')
+    const { ctx, calls } = makeChunkReplyCtx(7, [okSend(0), Promise.reject(chunkError), okSend(2), okSend(3)])
+
+    const rejection = await send(ctx, markdown, { message_id: 5 }, undefined).then(
+      () => undefined,
+      (err: unknown) => err,
+    )
+
+    expect(calls.length).toBe(4)
+    expect(rejection).toBe(chunkError)
+    const warn = tracked.getCallsByLevel('warn').find((call) => call.args[1] === 'Failed to send Telegram reply chunk')
+    expect(warn).toBeDefined()
+    assert(warn !== undefined)
+    expect(warn.args[0]).toMatchObject({ chatId: 7, chunkIndex: 1, chunkCount: 4 })
+  })
+
+  test('the first chunk error is the one rethrown when several chunks fail', async () => {
+    const tracked = createTrackedLoggerMock()
+    const { sendFormattedTelegramChunks: send } = await loadChunkSend(tracked)
+    const paragraphs = ['fail-0', 'fail-1', 'fail-2', 'fail-3'].map((p) => `${p} ${'y'.repeat(2200)}`)
+    const markdown = paragraphs.join('\n\n')
+    const firstError = new Error('first failure')
+    const laterError = new Error('later failure')
+    const { ctx, calls } = makeChunkReplyCtx(7, [
+      okSend(0),
+      Promise.reject(firstError),
+      Promise.reject(laterError),
+      okSend(3),
+    ])
+
+    const rejection = await send(ctx, markdown, { message_id: 5 }, undefined).then(
+      () => undefined,
+      (err: unknown) => err,
+    )
+
+    expect(calls.length).toBe(4)
+    expect(rejection).toBe(firstError)
+  })
+
+  test('a failed first chunk still attempts the remaining chunks and rethrows', async () => {
+    const tracked = createTrackedLoggerMock()
+    const { sendFormattedTelegramChunks: send } = await loadChunkSend(tracked)
+    const paragraphs = ['fail-0', 'fail-1', 'fail-2', 'fail-3'].map((p) => `${p} ${'y'.repeat(2200)}`)
+    const markdown = paragraphs.join('\n\n')
+    const chunkError = new Error('telegram send failed')
+    const { ctx, calls } = makeChunkReplyCtx(undefined, [Promise.reject(chunkError), okSend(1), okSend(2), okSend(3)])
+
+    const rejection = await send(ctx, markdown, { message_id: 5 }, undefined).then(
+      () => undefined,
+      (err: unknown) => err,
+    )
+
+    expect(calls.length).toBe(4)
+    expect(rejection).toBe(chunkError)
+    const warn = tracked.getCallsByLevel('warn').find((call) => call.args[1] === 'Failed to send Telegram reply chunk')
+    expect(warn).toBeDefined()
+    assert(warn !== undefined)
+    expect(warn.args[0]).toMatchObject({ chunkIndex: 0, chunkCount: 4, chatId: undefined })
   })
 })

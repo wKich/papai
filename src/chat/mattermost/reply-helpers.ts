@@ -14,6 +14,7 @@ import type {
 } from '../types.js'
 import type { MattermostActionContextInput, MattermostSignedActionContext } from './action-signing.js'
 import { buildMattermostMentionPrefix } from './file-helpers.js'
+import { sendMattermostDeferredChunks, sendMattermostFormattedChunks } from './format-chunking.js'
 import { ChannelSchema } from './schema.js'
 
 const ACTION_TTL_MS = 5 * 60 * 1000
@@ -199,7 +200,7 @@ export function createMattermostReplyFn(params: MattermostReplyHelpersParams): R
       await post(content, options)
     },
     formatted: async (markdown: string, options?: ReplyOptions): Promise<void> => {
-      const id = await post(markdown, options)
+      const id = await sendMattermostFormattedChunks(channelId, post, markdown, options)
       lastReplyTarget = id === undefined ? undefined : { platform: 'mattermost', ref: id }
     },
     file: async (file, options?: ReplyOptions): Promise<void> => {
@@ -239,16 +240,26 @@ export async function sendMattermostDeferredMessage(
     if (botUserId === null) throw new Error('Bot not started')
     const dmData = await apiFetch('POST', '/api/v4/channels/direct', [botUserId, target.contextId])
     const channelId = ChannelSchema.parse(dmData).id
-    await apiFetch('POST', '/api/v4/posts', { channel_id: channelId, message: markdown })
+    await sendMattermostDeferredChunks(
+      channelId,
+      (message) => apiFetch('POST', '/api/v4/posts', { channel_id: channelId, message }),
+      markdown,
+    )
     return
   }
   const mention =
     target.audience === 'personal'
       ? await buildMattermostMentionPrefix(target.mentionUserIds, target.createdByUsername, apiFetch)
       : ''
-  await apiFetch('POST', '/api/v4/posts', {
-    channel_id: target.contextId,
-    message: `${mention}${markdown}`,
-    ...(target.threadId === null ? {} : { root_id: target.threadId }),
-  })
+  await sendMattermostDeferredChunks(
+    target.contextId,
+    (message) =>
+      apiFetch('POST', '/api/v4/posts', {
+        channel_id: target.contextId,
+        message,
+        ...(target.threadId === null ? {} : { root_id: target.threadId }),
+      }),
+    markdown,
+    mention,
+  )
 }

@@ -8,9 +8,12 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test'
 import type { ModelMessage } from 'ai'
 
 import type { ReplyTarget } from '../src/chat/types.js'
-import type { VerifierPrompt } from '../src/completion/verified-completion.js'
+import type { VerifierDeps, VerifierPrompt } from '../src/completion/verified-completion.js'
 import { setConfigValue } from '../src/config.js'
+import { subscribe, unsubscribe, type DebugEvent } from '../src/debug/event-bus.js'
 import { runRegistry } from '../src/run-control/registry.js'
+import type { ToolFailureResult } from '../src/tool-failure.js'
+import { assertEach, type Row } from './utils/grouped-assertions.js'
 import { createTrackedLoggerMock } from './utils/logger-mock.js'
 import { createMockReply, mockLogger, setupTestDb } from './utils/test-helpers.js'
 
@@ -36,6 +39,39 @@ const baseResult = {
   finalStep: { response: { messages: [] as ModelMessage[] } },
 }
 
+const toolFailure: ToolFailureResult = {
+  success: false,
+  error: 'boom',
+  toolName: 'update_task',
+  toolCallId: 'c1',
+  timestamp: '2026-09-08T00:00:00.000Z',
+  errorType: 'tool-execution',
+  errorCode: 'unknown',
+  userMessage: 'That action failed.',
+  agentMessage: 'It failed.',
+  retryable: false,
+}
+
+/** A step whose tool message carries the failure above — makes the turn risky via hadToolFailure. */
+type FailedToolStep = { response: { messages: ModelMessage[] } }
+const failedToolStep: FailedToolStep = {
+  response: {
+    messages: [
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'c1',
+            toolName: 'update_task',
+            output: { type: 'json', value: toolFailure },
+          },
+        ],
+      },
+    ],
+  },
+}
+
 beforeEach(async () => {
   await setupTestDb()
 })
@@ -54,6 +90,8 @@ describe('sendLlmResponse verification wiring', () => {
           return Promise.resolve({ text: 'Created task TK-42.' })
         },
       },
+      turnId: 'turn-1',
+      chatUserId: 'user-1',
     })
     expect(invoked).toBe(1)
     expect(reply.textCalls).toContain('Created task TK-42.')
@@ -72,6 +110,8 @@ describe('sendLlmResponse verification wiring', () => {
           return Promise.resolve({ text: 'should not be used' })
         },
       },
+      turnId: 'turn-2',
+      chatUserId: 'user-1',
     })
     expect(invoked).toBe(0)
     expect(reply.textCalls).toContain('All set — moved to Done.')
@@ -91,6 +131,8 @@ describe('sendLlmResponse verification wiring', () => {
           return Promise.resolve({ text: undefined })
         },
       },
+      turnId: 'turn-3',
+      chatUserId: 'user-1',
     })
     expect(prompts[0]?.system).toContain('Отвечай на русском языке')
     expect(reply.textCalls).toContain(
@@ -133,6 +175,8 @@ describe('sendLlmResponse verification wiring', () => {
           readOnlyToolset: undefined,
           invokeVerifier: (): Promise<{ text: string | undefined }> => Promise.resolve({ text: undefined }),
         },
+        turnId: 'turn-4',
+        chatUserId: 'user-1',
       },
     )
     expect(reply.textCalls).toContain(
@@ -146,6 +190,117 @@ describe('sendLlmResponse verification wiring', () => {
     const reply = createMockReply()
     await sendLlmResponse(reply.reply, 'ctx-ru-done', { ...baseResult }, undefined)
     expect(reply.textCalls).toContain('Готово.')
+  })
+})
+
+describe('sendLlmResponse llm:verifier emission', () => {
+  let verifierEvents: DebugEvent[]
+
+  beforeEach(() => {
+    mockLogger()
+    verifierEvents = []
+  })
+
+  const captureVerifierEvents = (): (() => void) => {
+    const listener = (event: DebugEvent): void => {
+      if (event.type === 'llm:verifier') verifierEvents.push(event)
+    }
+    subscribe(listener)
+    return () => unsubscribe(listener)
+  }
+
+  const modelText = 'I moved TK-42 to Done, though one label failed to apply.'
+  const verifierText = 'Created task TK-42.'
+
+  const outcomeVerifier = (mode: 'empty' | 'throw' | 'ok'): VerifierDeps => ({
+    readOnlyToolset: undefined,
+    invokeVerifier: (): Promise<{ text: string | undefined }> => {
+      if (mode === 'throw') throw new Error('network')
+      return Promise.resolve({ text: mode === 'ok' ? verifierText : '' })
+    },
+  })
+
+  const outcomeResult = (mode: 'empty' | 'throw' | 'ok'): typeof baseResult & { steps?: FailedToolStep[] } =>
+    mode === 'ok' ? { ...baseResult } : { ...baseResult, text: modelText, steps: [failedToolStep] }
+
+  test('risky-turn outcome matrix: every verifier outcome emits llm:verifier carrying it', async () => {
+    const rows: readonly Row<{ mode: 'empty' | 'throw' | 'ok'; expectedOutcome: string; expectedText: string }>[] = [
+      {
+        label: 'tool-failure turn with a blanking verifier delivers the model text and emits empty',
+        mode: 'empty',
+        expectedOutcome: 'empty',
+        expectedText: modelText,
+      },
+      {
+        label: 'tool-failure turn with a throwing verifier delivers the model text and emits error',
+        mode: 'throw',
+        expectedOutcome: 'error',
+        expectedText: modelText,
+      },
+      {
+        label: 'empty-text turn with a confirming verifier delivers the verifier text and emits ok',
+        mode: 'ok',
+        expectedOutcome: 'ok',
+        expectedText: verifierText,
+      },
+    ]
+    await assertEach(rows, async (row) => {
+      const stop = captureVerifierEvents()
+      try {
+        const reply = createMockReply()
+        await sendLlmResponse(reply.reply, 'ctx-emit', outcomeResult(row.mode), undefined, {
+          history: [],
+          verifier: outcomeVerifier(row.mode),
+          turnId: 'turn-emit',
+          chatUserId: 'user-emit',
+        })
+        expect(reply.textCalls).toContain(row.expectedText)
+        expect(verifierEvents).toHaveLength(1)
+        expect(verifierEvents[0]!.turnId).toBe('turn-emit')
+        expect(verifierEvents[0]!.data).toEqual({ chatUserId: 'user-emit', outcome: row.expectedOutcome })
+        expect(verifierEvents[0]!.scope).toEqual({ kind: 'user', userId: 'ctx-emit' })
+        verifierEvents.length = 0
+      } finally {
+        stop()
+      }
+    })
+  })
+
+  test('non-risky turn with a verifier attached emits no llm:verifier and never invokes the verifier', async () => {
+    const stop = captureVerifierEvents()
+    try {
+      let invoked = 0
+      const reply = createMockReply()
+      await sendLlmResponse(reply.reply, 'ctx-emit', { ...baseResult, text: 'All set — moved to Done.' }, undefined, {
+        history: [],
+        verifier: {
+          readOnlyToolset: undefined,
+          invokeVerifier: (): Promise<{ text: string | undefined }> => {
+            invoked += 1
+            return Promise.resolve({ text: 'should not be used' })
+          },
+        },
+        turnId: 'turn-quiet',
+        chatUserId: 'user-emit',
+      })
+      expect(invoked).toBe(0)
+      expect(reply.textCalls).toContain('All set — moved to Done.')
+      expect(verifierEvents).toHaveLength(0)
+    } finally {
+      stop()
+    }
+  })
+
+  test('risky turn without a verifier emits no llm:verifier', async () => {
+    const stop = captureVerifierEvents()
+    try {
+      const reply = createMockReply()
+      await sendLlmResponse(reply.reply, 'ctx-emit', { ...baseResult }, undefined)
+      expect(reply.textCalls).toContain('Done.')
+      expect(verifierEvents).toHaveLength(0)
+    } finally {
+      stop()
+    }
   })
 })
 
@@ -191,6 +346,8 @@ describe('sendLlmResponse beforeFirstMessage (live-status placeholder dismissal)
             return Promise.resolve({ text: 'Created task TK-42.' })
           },
         },
+        turnId: 'turn-5',
+        chatUserId: 'user-1',
       },
       () => {
         order.push('dismiss')
@@ -282,6 +439,8 @@ describe('sendLlmResponse send logging', () => {
         readOnlyToolset: undefined,
         invokeVerifier: (): Promise<{ text: string | undefined }> => Promise.resolve({ text: verifierText }),
       },
+      turnId: 'turn-6',
+      chatUserId: 'user-1',
     })
     expect(reply.textCalls).toContain(verifierText)
 

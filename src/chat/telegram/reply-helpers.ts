@@ -8,6 +8,7 @@ import type { Context } from 'grammy'
 import { InlineKeyboard } from 'grammy'
 
 import type { ButtonReplyOptions, DeferredDeliveryTarget, ReplyOptions } from '../types.js'
+import { sendFormattedTelegramChunks } from './format-chunking.js'
 import { formatLlmOutput } from './format.js'
 
 type TelegramReplyParameters = { message_id: number } & Partial<{ message_thread_id: number }>
@@ -103,13 +104,6 @@ export function buildTelegramMentionPrefix(target: DeferredDeliveryTarget): Tele
   )
 
   return { text, entities: mentionData.entities }
-}
-
-export function shiftTelegramEntity(entity: TelegramEntity, offset: number): TelegramEntity {
-  return {
-    ...entity,
-    offset: entity.offset + offset,
-  }
 }
 
 const getTelegramMentionEntities = (entities: MessageEntity[] | undefined): MessageEntity[] => {
@@ -212,22 +206,16 @@ export type SentButtonMessage = { message_id: number; chat: { id: number } }
 /** Narrowed reply context that preserves the returned message — lets sendButtonReply/sendFormattedReply capture it. */
 export type ButtonReplyCapableContext = {
   reply: (text: string, other?: Record<string, unknown>) => Promise<SentButtonMessage>
-}
+} & Partial<{ chat: { id: number } }>
 
-export async function sendFormattedReply(
+export function sendFormattedReply(
   ctx: ButtonReplyCapableContext,
   markdown: string,
   buildReplyParams: ReplyParamsBuilder,
   options: ReplyOptions | undefined,
 ): Promise<{ messageId: number; chatId: number }> {
-  const formatted = formatLlmOutput(markdown)
   const replyParameters = options === undefined ? buildReplyParams() : buildReplyParams(options)
-  const sent = await ctx.reply(formatted.text, {
-    entities: formatted.entities,
-    reply_parameters: replyParameters,
-    ...(options?.disableLinkPreview === true ? { link_preview_options: { is_disabled: true } } : {}),
-  })
-  return { messageId: sent.message_id, chatId: sent.chat.id }
+  return sendFormattedTelegramChunks(ctx, markdown, replyParameters, options)
 }
 
 export async function sendFileReply(

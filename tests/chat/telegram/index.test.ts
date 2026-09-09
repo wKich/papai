@@ -393,6 +393,92 @@ describe('TelegramChatProvider', () => {
         },
       ])
     })
+
+    describe('chunked deferred delivery', () => {
+      const captureDeferredSends = (): { provider: TelegramChatProvider; calls: SendMessageCall[] } => {
+        const provider = createTelegramProvider()
+        const bot = getProviderBot(provider)
+        const calls: SendMessageCall[] = []
+        bot.api.sendMessage = (...args: SendMessageCall): Promise<unknown> => {
+          calls.push(args)
+          return Promise.resolve(undefined)
+        }
+        return { provider, calls }
+      }
+
+      const personalGroupTarget = (threadId: string | null): DeferredDeliveryTarget => ({
+        contextId: '99',
+        contextType: 'group',
+        threadId,
+        audience: 'personal',
+        mentionUserIds: ['42'],
+        createdByUserId: '42',
+        createdByUsername: 'alice',
+      })
+
+      test('delivers over-limit markdown as ordered chunks with the mention prefix on the first chunk only', async () => {
+        const { provider, calls } = captureDeferredSends()
+        const paragraphs = ['chunk-0', 'chunk-1', 'chunk-2', 'chunk-3'].map(
+          (label) => `**${label}** ${'x'.repeat(2200)}`,
+        )
+
+        await provider.sendMessage('telegram-default', personalGroupTarget('123'), paragraphs.join('\n\n'))
+
+        expect(calls.length).toBe(4)
+        for (const call of calls) {
+          expect(call[0]).toBe(99)
+          expect(call[1].length).toBeLessThanOrEqual(4096)
+          expect(call[2]?.message_thread_id).toBe(123)
+        }
+        expect(calls[0]?.[1].startsWith('@alice chunk-0')).toBe(true)
+        expect(calls[0]?.[1].includes('chunk-1')).toBe(false)
+        expect(calls[1]?.[1].startsWith('chunk-1')).toBe(true)
+        expect(calls[2]?.[1].startsWith('chunk-2')).toBe(true)
+        expect(calls[3]?.[1].startsWith('chunk-3')).toBe(true)
+        const firstEntities = calls[0]?.[2]?.entities
+        expect(firstEntities?.[0]).toEqual({
+          offset: 0,
+          length: 6,
+          type: 'text_mention',
+          user: { id: 42, is_bot: false, first_name: 'alice' },
+        })
+        expect(firstEntities?.[1]).toEqual({ offset: 7, length: 7, type: 'bold' })
+        expect(calls[1]?.[2]?.entities).toEqual([{ offset: 0, length: 7, type: 'bold' }])
+      })
+
+      test('counts the mention prefix length against the first chunk budget', async () => {
+        const { provider, calls } = captureDeferredSends()
+
+        await provider.sendMessage('telegram-default', personalGroupTarget('123'), 'x'.repeat(8300))
+
+        expect(calls.map((call) => call[1].length)).toEqual([4096, 4089, 122])
+        for (const call of calls) {
+          expect(call[2]?.message_thread_id).toBe(123)
+        }
+      })
+
+      test('delivers over-limit deferred dm markdown as unprefixed chunks without a thread id', async () => {
+        const { provider, calls } = captureDeferredSends()
+        const target: DeferredDeliveryTarget = {
+          contextId: '55',
+          contextType: 'dm',
+          threadId: null,
+          audience: 'personal',
+          mentionUserIds: [],
+          createdByUserId: '55',
+          createdByUsername: null,
+        }
+
+        await provider.sendMessage('telegram-default', target, 'x'.repeat(8300))
+
+        expect(calls.map((call) => call[1].length)).toEqual([4096, 4096, 108])
+        for (const call of calls) {
+          expect(call[0]).toBe(55)
+          expect(call[2]?.entities).toEqual([])
+          expect(call[2]?.message_thread_id).toBeUndefined()
+        }
+      })
+    })
   })
 
   describe('forum topic creation', () => {

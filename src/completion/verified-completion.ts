@@ -46,7 +46,11 @@ export const turnHasToolActivity = (messages: readonly ModelMessage[]): boolean 
 }
 
 export type CompletionVerdict = 'confirmed' | 'truncated' | 'partial' | 'unconfirmed' | 'no-op'
-export type VerifiedCompletion = { text: string; verdict: CompletionVerdict }
+export type VerifiedCompletion = {
+  text: string
+  verdict: CompletionVerdict
+  verifierOutcome: 'ok' | 'empty' | 'error'
+}
 export type VerifierPrompt = { system: string; messages: ModelMessage[] }
 
 export type VerifierDeps = {
@@ -95,8 +99,10 @@ export const deriveVerdict = (turn: CompletionTurn): CompletionVerdict => {
 
 /**
  * On a risky turn, run a verification LLM call and return a truthful user-facing message.
- * Never returns a bare "Done."; degrades to an honest last-resort message — actions-ran vs
- * nothing-executed, selected by the turn's tool activity — if verification fails.
+ * The verifier's non-empty text wins; an empty or thrown verifier means "skip verification" —
+ * the turn's own final model text is delivered unconfirmed (a `tool-calls`-finish preamble is
+ * never the answer, so the deliverable falls through to the stub there). The activity-selected
+ * last-resort stub fires only when the turn produced no deliverable model text.
  */
 export const buildVerifiedCompletion = async (
   turn: CompletionTurn,
@@ -106,20 +112,36 @@ export const buildVerifiedCompletion = async (
   const texts = getDictionary(turn.locale ?? 'en').completion
   const lastResortFallback = turn.hadToolActivity ? texts.neutralFallback : texts.noopFallback
   log.debug({ verdict, readBack: deps.readOnlyToolset !== undefined }, 'Building verified completion')
+  const skipVerification = (outcome: 'empty' | 'error'): VerifiedCompletion => {
+    // On a tool-calls finish the turn's text is a step-cap preamble, never the answer.
+    const modelText = turn.finishReason === 'tool-calls' ? undefined : turn.finalText
+    if (modelText !== undefined && modelText !== '') {
+      return {
+        text: modelText,
+        verdict: 'unconfirmed',
+        verifierOutcome: outcome,
+      }
+    }
+    return {
+      text: lastResortFallback,
+      verdict: 'unconfirmed',
+      verifierOutcome: outcome,
+    }
+  }
   const prompt = buildVerifierPrompt(turn)
   try {
     const res = await deps.invokeVerifier(prompt)
     if (res.text === undefined || res.text === '') {
-      log.warn({ verdict }, 'Verifier returned empty text; using last-resort fallback')
-      return { text: lastResortFallback, verdict: 'unconfirmed' }
+      log.warn({ verdict }, 'Verifier returned empty text; skipping verification')
+      return skipVerification('empty')
     }
     log.info({ verdict }, 'Verified completion built')
-    return { text: res.text, verdict }
+    return { text: res.text, verdict, verifierOutcome: 'ok' }
   } catch (error) {
     log.warn(
       { err: error instanceof Error ? error.message : String(error) },
-      'Verifier call failed; using last-resort fallback',
+      'Verifier call failed; skipping verification',
     )
-    return { text: lastResortFallback, verdict: 'unconfirmed' }
+    return skipVerification('error')
   }
 }

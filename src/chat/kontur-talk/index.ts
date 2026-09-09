@@ -23,7 +23,7 @@ import { resolveKonturTalkConfig, type KonturTalkConstructorConfig } from './con
 import { renderKonturTalkContext } from './context-renderer.js'
 import { resolveKonturTalkGroupLabel, resolveKonturTalkUserLabel } from './label-helpers.js'
 import { konturTalkCapabilities, konturTalkConfigRequirements, konturTalkTraits } from './metadata.js'
-import { createKonturTalkReplyFn } from './reply-helpers.js'
+import { chunkForKonturTalk, createKonturTalkReplyFn, sendKonturTalkChunks } from './reply-helpers.js'
 import type { KonturTalkUpdate } from './schema.js'
 import { KonturTalkGetUpdatesResponseSchema, KonturTalkSendMessageResponseSchema } from './schema.js'
 
@@ -228,15 +228,21 @@ export class KonturTalkChatProvider implements ChatProvider {
       log.warn('Kontur Talk does not support proactive DM delivery')
       return
     }
-    await this.apiFetch('POST', '/send_message', {
-      room_id: target.contextId,
-      message: markdown,
-      format: 'markdown',
-      thread_id: target.threadId ?? null,
-      mentions: [],
-    }).then((data) => {
+    const sendChunk = async (chunk: string): Promise<void> => {
+      const data = await this.apiFetch('POST', '/send_message', {
+        room_id: target.contextId,
+        message: chunk,
+        format: 'markdown',
+        thread_id: target.threadId ?? null,
+        mentions: [],
+      })
       KonturTalkSendMessageResponseSchema.parse(data)
-    })
+    }
+    await sendKonturTalkChunks(
+      target.contextId,
+      chunkForKonturTalk(markdown, konturTalkTraits.maxMessageLength!),
+      sendChunk,
+    )
   }
 
   resolveUserLabel(userId: string, _context: ResolveUserContext | undefined): Promise<string | null> {

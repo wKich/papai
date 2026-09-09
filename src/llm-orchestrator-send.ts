@@ -9,7 +9,8 @@ import type { AiProgressReporter } from './ai-progress-reporter.js'
 import { getConfigContextIdFromStorageContextId } from './chat/scoped-context.js'
 import type { ReplyFn } from './chat/types.js'
 import { buildVerifiedCompletion, detectToolFailure, turnHasToolActivity } from './completion/verified-completion.js'
-import type { VerifierDeps } from './completion/verified-completion.js'
+import type { VerifierDeps, VerifiedCompletion } from './completion/verified-completion.js'
+import { emitUser } from './debug/event-bus.js'
 import { t } from './i18n/index.js'
 import { collectTurnMessages, type TurnMessagesResult } from './llm-orchestrator-messages.js'
 import { logger } from './logger.js'
@@ -23,7 +24,12 @@ type SendResult = TurnMessagesResult & {
   finishReason?: string
   toolCalls: unknown[] | undefined
 }
-type Verification = { verifier: VerifierDeps; history: readonly ModelMessage[] }
+type Verification = {
+  verifier: VerifierDeps
+  history: readonly ModelMessage[]
+  turnId: string
+  chatUserId: string
+}
 
 /** Resolve the text to post: a verifier round-trip for risky turns, else the model text (or "Done."). */
 const resolveFinalText = async (
@@ -32,7 +38,7 @@ const resolveFinalText = async (
   hadToolActivity: boolean,
   verification: Verification | undefined,
   contextId: string,
-): Promise<string> => {
+): Promise<{ text: string; verifierOutcome?: VerifiedCompletion['verifierOutcome'] }> => {
   const isRisky =
     result.text === undefined || result.text === '' || result.finishReason === 'tool-calls' || hadToolFailure
   const locale = getContextLanguage(getConfigContextIdFromStorageContextId(contextId))
@@ -48,9 +54,11 @@ const resolveFinalText = async (
       },
       verification.verifier,
     )
-    return verified.text
+    return { text: verified.text, verifierOutcome: verified.verifierOutcome }
   }
-  return result.text !== undefined && result.text !== '' ? result.text : t('completion.doneFallback', locale)
+  return {
+    text: result.text !== undefined && result.text !== '' ? result.text : t('completion.doneFallback', locale),
+  }
 }
 
 const flushProgressDetails = async (
@@ -80,7 +88,17 @@ export const sendLlmResponse = async (
   const turnMessages = collectTurnMessages(result)
   const hadToolFailure = detectToolFailure(turnMessages)
   const hadToolActivity = turnHasToolActivity(turnMessages)
-  const textToFormat = await resolveFinalText(result, hadToolFailure, hadToolActivity, verification, contextId)
+  const resolved = await resolveFinalText(result, hadToolFailure, hadToolActivity, verification, contextId)
+  // llm:end fires before the verifier runs, so the outcome rides its own event, matched by turnId.
+  if (verification !== undefined && resolved.verifierOutcome !== undefined) {
+    emitUser(
+      'llm:verifier',
+      contextId,
+      { chatUserId: verification.chatUserId, outcome: resolved.verifierOutcome },
+      verification.turnId,
+    )
+  }
+  const textToFormat = resolved.text
 
   const modelTextLength = result.text === undefined ? 0 : result.text.length
   const toolCallCount = result.toolCalls === undefined ? 0 : result.toolCalls.length
