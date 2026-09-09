@@ -251,6 +251,12 @@
     "timeout": 0,
     "scored": 46
   },
+  "afk-runner/src/serve/agent-strips.ts": {
+    "score": 0.8783783783783784,
+    "killed": 65,
+    "timeout": 0,
+    "scored": 74
+  },
   "afk-runner/src/serve/args.ts": {
     "score": 0.9482758620689655,
     "killed": 53,
@@ -270,16 +276,28 @@
     "scored": 25
   },
   "afk-runner/src/serve/run-detail.ts": {
-    "score": 0.6666666666666666,
-    "killed": 75,
+    "score": 0.7467811158798283,
+    "killed": 173,
     "timeout": 1,
-    "scored": 114
+    "scored": 233
   },
   "afk-runner/src/serve/server.ts": {
-    "score": 0.632,
-    "killed": 79,
+    "score": 0.6686046511627907,
+    "killed": 115,
     "timeout": 0,
-    "scored": 125
+    "scored": 172
+  },
+  "afk-runner/src/serve/spend.ts": {
+    "score": 0.9056603773584906,
+    "killed": 48,
+    "timeout": 0,
+    "scored": 53
+  },
+  "afk-runner/src/serve/stage-accounts.ts": {
+    "score": 0.839622641509434,
+    "killed": 89,
+    "timeout": 0,
+    "scored": 106
   },
   "afk-runner/src/serve/sweep.ts": {
     "score": 0.8243243243243243,
