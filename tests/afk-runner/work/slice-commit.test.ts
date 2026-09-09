@@ -9,6 +9,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import type { ExecGitFn } from '../../../afk-runner/src/config.js'
+import { StageHaltError } from '../../../afk-runner/src/errors.js'
 import { commitTaskSlice } from '../../../afk-runner/src/work/slice-commit.js'
 import type { TaskItem } from '../../../afk-runner/src/work/tasks-md.js'
 
@@ -87,6 +88,46 @@ describe('commitTaskSlice — the runner-issued slice commit (U3 D4)', () => {
     await expect(
       commitTaskSlice({ execGit: h.execGit, cwd: h.cwd, changeDir: h.changeDir }, SECOND_ITEM),
     ).rejects.toThrow(/line 2/u)
+    expect(h.gitCalls).toEqual([])
+  })
+})
+
+describe('structural precondition halt — commit-time tasks.md read (walk-robustness F-W1)', () => {
+  it('a missing tasks.md at commit time rejects as StageHaltError{precondition} with the restoration resume hint, before any git call', async () => {
+    const h = harness()
+    fs.rmSync(h.tasksMdPath)
+    let caught: unknown
+    try {
+      await commitTaskSlice({ execGit: h.execGit, cwd: h.cwd, changeDir: h.changeDir }, SECOND_ITEM)
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(StageHaltError)
+    expect(caught).toMatchObject({
+      kind: 'precondition',
+      resumeHint: 'resume after the change folder is restored',
+    })
+    expect(String(caught)).toContain('cannot read')
+    expect(String(caught)).toContain(h.tasksMdPath)
+    expect(h.gitCalls).toEqual([])
+  })
+
+  it('an unreadable tasks.md at commit time (EISDIR) rejects with the same precondition shape, not a plain Error', async () => {
+    const h = harness()
+    fs.rmSync(h.tasksMdPath)
+    fs.mkdirSync(h.tasksMdPath)
+    let caught: unknown
+    try {
+      await commitTaskSlice({ execGit: h.execGit, cwd: h.cwd, changeDir: h.changeDir }, SECOND_ITEM)
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(StageHaltError)
+    expect(caught).toMatchObject({
+      kind: 'precondition',
+      resumeHint: 'resume after the change folder is restored',
+    })
+    expect(String(caught)).toContain('cannot read')
     expect(h.gitCalls).toEqual([])
   })
 })

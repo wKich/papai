@@ -24,8 +24,11 @@ export function buildAtomicityPrompt(tasksFile: string, cwd: string, lastError: 
   const report = agentWritePath(cwd, 'atomicity.json')
   const parts = [
     'You are the atomicity checker. Read tasks.md and split any task that bundles multiple atomic',
-    'changes; merge trivially coupled tasks that cannot be verified independently. Every task must',
-    'end with its verification command.',
+    'changes; merge trivially coupled tasks that cannot be verified independently.',
+    'Merge a test with the implementation it verifies — never leave a test in its own task.',
+    'Every task must be independently green, not merely independently described:',
+    'each task ends with its verification command passing, so no task is ever a test alone that',
+    'leaves the tree red.',
     '',
     `Rewrite tasks.md in place at: ${tasksFile}`,
     `Then write a JSON report to ${report}: {"split": <count>, "merged": <count>}`,

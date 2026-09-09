@@ -38,6 +38,9 @@ export function buildDecomposerPrompt(tasksFile: string, instr: string, cwd: str
   const report = agentWritePath(cwd, 'decompose-tasks.json')
   const parts = [
     'You are the decomposer. Break the change into atomic, independently verifiable tasks.',
+    'Every task must be one complete red→green cycle: the failing test and its implementation land in the same task.',
+    'Never split a test into its own task — the executor verifies each task by running the repo\u2019s affected-test check',
+    'on the working tree, so every task must leave the tree green.',
     '',
     'Instruction:',
     instr,

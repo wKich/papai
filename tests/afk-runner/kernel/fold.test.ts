@@ -885,6 +885,40 @@ describe('kernel fold — loop-memory additive concerns (D5)', () => {
   })
 })
 
+describe('kernel fold — agent_todos tolerance pin (agent-todos-capture D5)', () => {
+  const todosEvent = (seq: number): SddEvent =>
+    stamp(
+      {
+        altitude: 'L0',
+        type: 'agent_todos',
+        agent: 'implement-t2',
+        todos: [
+          { content: 'RED: add llm:verifier rows', status: 'in_progress' },
+          { content: 'GREEN: implementation', status: 'pending' },
+        ],
+      },
+      seq,
+    )
+
+  it('toKernelEvent returns null: the fold counts the event tolerated and the snapshot is unchanged', () => {
+    expect(toKernelEvent(todosEvent(1))).toBeNull()
+    const base = [
+      stamp({ altitude: 'L2', type: 'round_open', round: 1, cap: 3 }, 1),
+      stamp({ altitude: 'L2', type: 'stage_enter', stage: 'intake' }, 2),
+      todosEvent(3),
+      stamp({ altitude: 'L2', type: 'stage_exit', stage: 'intake' }, 4),
+      todosEvent(5),
+    ]
+    const without = foldEvents(
+      pipelineMachine,
+      base.filter((event) => event.type !== 'agent_todos'),
+    )
+    const withTodos = foldEvents(pipelineMachine, base)
+    expect(withTodos.accounting).toEqual({ total: 5, mapped: 3, tolerated: 2 })
+    expect(withTodos.snapshot).toEqual(without.snapshot)
+  })
+})
+
 describe('kernel fold — execution residues (U3 D1/D4)', () => {
   it('folds the armed fact into executionArmed; an unarmed log stays false', () => {
     const armed = foldEvents(pipelineMachine, [stamp({ altitude: 'L2', type: 'execution', action: 'armed' }, 1)])

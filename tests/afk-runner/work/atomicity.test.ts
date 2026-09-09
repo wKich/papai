@@ -44,6 +44,14 @@ describe('buildAtomicityPrompt (sdd-runner/src/decompose.ts copy)', () => {
     const retried = buildAtomicityPrompt('/repo/openspec/changes/c/tasks.md', '/repo', 'validate blew up')
     expect(retried).toContain('Previous attempt failed:')
   })
+
+  it('requires independently-green tasks and never licenses test-only items', () => {
+    const base = buildAtomicityPrompt('/repo/openspec/changes/c/tasks.md', '/repo', null)
+    expect(base).toContain('Merge a test with the implementation it verifies')
+    expect(base).toContain('Every task must be independently green, not merely independently described')
+    expect(base).toContain('each task ends with its verification command passing')
+    expect(base).not.toContain('Every task must end with its verification command.')
+  })
 })
 
 interface AtomicityFixture {

@@ -93,7 +93,7 @@ Every `Write`/`Edit`/`MultiEdit` on an implementation file in `src/` or `client/
 
 - `.oxlintrc.json` is protected from direct write-tool edits.
 - Inline suppressions (`eslint-disable`, `oxlint-disable`, `@ts-ignore`, `@ts-nocheck`) are blocked before writes complete.
-- Bash-hook policy blocks `git stash` and `git checkout --`.
+- Bash-hook policy blocks `git stash`, `git reset`, `git rm`, `git switch`, and `git checkout` in every form (the discard-only scope is subsumed), plus `git branch` creation forms — `git branch` with a leading flag (`--list`, `-a`, `-d`) stays allowed.
 
 Fix the underlying issue rather than bypassing linting or hook policy.
 

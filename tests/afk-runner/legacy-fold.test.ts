@@ -353,6 +353,36 @@ describe('loop-memory additive fold fields (D5)', () => {
   })
 })
 
+describe('legacy fold — agent_todos tolerance (agent-todos-capture D5)', () => {
+  it('replays todo snapshots as strict no-ops: the state matches the same log without them', () => {
+    const todosEvent = {
+      altitude: 'L0',
+      type: 'agent_todos',
+      agent: 'implement-t2',
+      todos: [{ content: 'RED: add llm:verifier rows', status: 'in_progress' }],
+    } as const
+    const seq: Array<Parameters<typeof appendEvent>[1]> = [
+      { altitude: 'L2', type: 'round_open', round: 1, cap: 3 },
+      { altitude: 'L2', type: 'stage_enter', stage: 'intake' },
+      todosEvent,
+      { altitude: 'L2', type: 'stage_exit', stage: 'intake' },
+      todosEvent,
+    ]
+    const log = makeLog()
+    const base = Date.parse('2026-08-10T10:00:00.000Z')
+    for (const [index, event] of seq.entries()) appendEvent(log, event, new Date(base + index * 1000))
+    const state = replayEvents(log)
+    const quietLog = makeLog()
+    const quiet: Array<Parameters<typeof appendEvent>[1]> = [
+      { altitude: 'L2', type: 'round_open', round: 1, cap: 3 },
+      { altitude: 'L2', type: 'stage_enter', stage: 'intake' },
+      { altitude: 'L2', type: 'stage_exit', stage: 'intake' },
+    ]
+    for (const [index, event] of quiet.entries()) appendEvent(quietLog, event, new Date(base + index * 1000))
+    expect(state).toEqual(replayEvents(quietLog))
+  })
+})
+
 describe('legacy fold — execution vocabulary tolerance (U3 D8)', () => {
   it('replays an armed execution log with the new events as strict no-ops', () => {
     const log = makeLog()

@@ -12,6 +12,7 @@ import {
   runCli,
   runResumeCommand,
   runRunsCommand,
+  runServeCommand,
   runStartCommand,
   runStatusCommand,
   runAnalyzeCommand,
@@ -19,7 +20,9 @@ import {
   fullStateSummary,
   parseStartArgs,
 } from '../../afk-runner/src/cli.js'
+import { resolveRunnerConfig } from '../../afk-runner/src/config.js'
 import { readEvents } from '../../afk-runner/src/events.js'
+import type { BoardHandle, BoardOptions } from '../../afk-runner/src/serve/server.js'
 import { BLOCKER_ROUND, TASK_TEXT, makeFakePipeline } from './fixtures/fake-pipeline.js'
 
 /** The run id from a start-command summary's first line. */
@@ -354,6 +357,68 @@ describe('afk-runner cli attach policy (start parks, resume attends)', () => {
   it('bare-arg miss error names the replacement verbs', () => {
     expect(() => runCli([import.meta.dir])).toThrow('start <taskFile>')
     expect(() => runCli([import.meta.dir])).toThrow('resume <runId>')
+  })
+})
+
+describe('afk-runner serve verb (the read-only web board)', () => {
+  /** A starter double that captures its options and never opens a socket. */
+  function fakeStarter(captured: BoardOptions[]): (options: BoardOptions) => Promise<BoardHandle> {
+    return (options) => {
+      captured.push(options)
+      return Promise.resolve({
+        url: 'http://127.0.0.1:4545/?token=t0k3n',
+        token: 't0k3n',
+        stop: () => Promise.resolve(),
+      })
+    }
+  }
+
+  it('starts the board over the ladder-resolved work dir and prints the ready URL once', async () => {
+    const pipeline = makeFakePipeline()
+    const captured: BoardOptions[] = []
+    const summary = await runServeCommand(pipeline.deps, ['--port', '8080', '--token', 's3cret'], fakeStarter(captured))
+    expect(summary).toBe('board ready: http://127.0.0.1:4545/?token=t0k3n')
+    expect(captured).toHaveLength(1)
+    expect(captured[0]?.workDir).toBe(pipeline.deps.config.workDir)
+    expect(captured[0]?.port).toBe(8080)
+    expect(captured[0]?.token).toBe('s3cret')
+  })
+
+  it('serve resolves its work dir through the same ladder — a file-declared workDir governs', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdd-cli-serve-'))
+    cliTmpDirs.push(root)
+    fs.mkdirSync(path.join(root, '.afk-runner'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'bookkeeping'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, '.afk-runner', 'config.json'),
+      JSON.stringify({ repoRoot: root, workDir: 'bookkeeping', model: 'file-model', budget: null }),
+    )
+    const config = await resolveRunnerConfig(root)
+    const captured: BoardOptions[] = []
+    await runServeCommand({ ...makeFakePipeline().deps, config }, [], fakeStarter(captured))
+    expect(captured[0]?.workDir).toBe(path.join(root, 'bookkeeping'))
+  })
+
+  it('a bad serve flag fails the verb with the serve usage line', async () => {
+    const pipeline = makeFakePipeline()
+    await expect(runServeCommand(pipeline.deps, ['--por', '1'], fakeStarter([]))).rejects.toThrow(
+      /usage: afk-runner serve/u,
+    )
+  })
+
+  it('the usage inventory names the serve verb with its flags', async () => {
+    const lines: string[] = []
+    const original = console.log
+    console.log = (line: string): void => {
+      lines.push(line)
+    }
+    try {
+      await cliMain(['help'])
+    } finally {
+      console.log = original
+    }
+    const usage = lines.join('\n')
+    expect(usage).toContain('serve [--host <addr>] [--port <port>] [--token <token>]')
   })
 })
 

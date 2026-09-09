@@ -94,6 +94,10 @@ function isReleaseEnter(event: SddEvent): boolean {
   return event.type === 'stage_enter' && event.stage === 'release'
 }
 
+function isGateStageExit(event: SddEvent): boolean {
+  return event.type === 'stage_exit' && event.stage === 'gate'
+}
+
 function isTaskFact(event: SddEvent): boolean {
   return event.type === 'task' && (event.action === 'started' || event.action === 'done')
 }
@@ -139,6 +143,7 @@ describe('live corpus lane marking', () => {
       'mutation-floor-hardening-live',
       'mutation-gate-widening-live',
       'runner-cli-config-live',
+      'walk-item-green-live',
     ])
   })
 })
@@ -314,6 +319,102 @@ describe('the armed live lanes fold, validate, and carry the C9 drill shapes', (
     expect(pendingDecisions.length).toBeGreaterThan(0)
     const rearmedVersions = rearmedGateVersions(events)
     expect(new Set(rearmedVersions).size).toBe(rearmedVersions.length)
+  })
+})
+
+/**
+ * The walk-item-green-decomposition drill oracle (task 6.1): the armed lane
+ * validates line-by-line, folds to its persisted memo with the full tasks
+ * projection, and carries the drill's shape — the armed final-approve
+ * mover-first ordering (D3), the release exit-then-answer settle with no
+ * implement mover (D7), and the zero-re-target assertion: every walked item
+ * done (no `task failed`), zero escalation gates, and the only honest
+ * incidents being the wall-cap exhaustion (absorbed by the under-budget re-run)
+ * and the induced-F-P3 holder crash recovered by exactly one
+ * stage-rebuild resume. The thrash drill's fold shape (round-3 convergence
+ * carrying the cluster ids) is pinned too.
+ */
+describe('walk-item-green-live — the F-P2 fix drill: green-per-item, zero re-targets', () => {
+  const lane = 'walk-item-green-live'
+  const laneLog = path.join(LIVE_ROOT, lane, 'events.ndjson')
+
+  function events(): LiveEvent[] {
+    return readEvents(laneLog)
+  }
+
+  function taskFacts(rows: readonly LiveEvent[], action: string): SddEvent[] {
+    return rows.filter((event) => event.type === 'task' && event.action === action)
+  }
+
+  function isStageFailedEvent(row: LiveEvent): row is Extract<LiveEvent, { readonly type: 'stage_failed' }> {
+    return row.type === 'stage_failed'
+  }
+
+  function escalationPresentations(rows: readonly LiveEvent[]): SddEvent[] {
+    return rows.filter((event) => event.type === 'gate' && event.action === 'presented' && event.mode === 'escalation')
+  }
+
+  function thrashConcerns(rows: readonly LiveEvent[]): readonly string[] {
+    const round3 = rows.find((event) => event.type === 'convergence' && event.round === 3)
+    return round3 !== undefined && round3.type === 'convergence' ? (round3.concerns ?? []) : []
+  }
+
+  it('schema-valid lines and fold ≡ memo at the completed terminal with the full tasks projection', () => {
+    const raw = readFileSync(laneLog, 'utf8')
+      .split('\n')
+      .filter((line) => line.length > 0)
+    expect(raw.length).toBeGreaterThan(0)
+    for (const line of raw) {
+      expect(() => SddEventSchema.parse(JSON.parse(line))).not.toThrow()
+    }
+    const folded = readEvents(laneLog)
+    const { snapshot } = foldEvents(pipelineMachine, folded)
+    const derived = memoFieldsOf(folded, snapshot.context, 'final', 'completed')
+    const persisted = PersistedRunStateSchema.parse(
+      JSON.parse(readFileSync(path.join(LIVE_ROOT, lane, 'state.json'), 'utf8')),
+    )
+    expect(derived.stage).toBe(persisted.stage)
+    expect(derived.status).toBe(persisted.status)
+    expect(derived.gate).toBe(persisted.gate)
+    expect(derived.tasks).toEqual(memoField(persisted.tasks, derived.tasks))
+  })
+
+  it('armed at birth, approved into the walk mover-first, released answer-last with no implement mover', () => {
+    const rows = events()
+    expect(rows.some(isExecutionArmed)).toBe(true)
+    const answeredApprove = rows.findIndex(isFinalApproveAnswer)
+    const implementEnter = rows.findIndex(isImplementEnter)
+    expect(answeredApprove).toBeGreaterThan(-1)
+    expect(implementEnter).toBeGreaterThan(-1)
+    expect(implementEnter).toBeLessThan(answeredApprove)
+    const releaseAnswer = rows.findIndex(isReleaseAnswer)
+    expect(releaseAnswer).toBeGreaterThan(-1)
+    const lastGateExit = rows.findLastIndex(isGateStageExit)
+    expect(lastGateExit).toBeGreaterThan(-1)
+    expect(lastGateExit).toBeLessThan(releaseAnswer)
+    expect(rows.slice(releaseAnswer).some(isImplementEnter)).toBe(false)
+  })
+
+  it('zero operator re-targets: every item done, no task failed, no escalation gates', () => {
+    const rows = events()
+    expect(taskFacts(rows, 'started')).toHaveLength(15)
+    expect(taskFacts(rows, 'done')).toHaveLength(13)
+    expect(taskFacts(rows, 'failed')).toHaveLength(0)
+    expect(escalationPresentations(rows)).toHaveLength(0)
+  })
+
+  it('the honest incidents: one wall-cap exhaustion and one induced-crash stage-rebuild resume', () => {
+    const rows = events()
+    const implementFailures = rows.filter(isStageFailedEvent).filter((event) => event.stage === 'implement')
+    expect(implementFailures).toHaveLength(1)
+    expect(implementFailures[0]?.reason).toContain('timed out after 1800000ms')
+    const rebuildResumes = rows.filter(isStageRebuildImplementResume)
+    expect(rebuildResumes).toHaveLength(1)
+    expect(rows.filter((event) => event.type === 'resume')).toHaveLength(3)
+  })
+
+  it('the thrash drill shape: round 3 carries the concern cluster ids', () => {
+    expect(thrashConcerns(events()).length).toBeGreaterThan(0)
   })
 })
 

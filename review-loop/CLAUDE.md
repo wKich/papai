@@ -224,6 +224,10 @@ Cached-token accounting: opencode's `step_finish` reports `tokens.input` as **un
 
 The `LiveRenderer` folds all agent progress into one live line per slot key; `commit(key, line?)` freezes a slot as a permanent scrolled line (line-handler commits on agent dispose unless `commitOnDispose: false`). Non-TTY output prints only `event()`/`commit()` lines — `slot()`/`live()` updates are suppressed.
 
+The line handler also forwards stage-agent todo snapshots through the optional `ProgressReporter.todos?` hook (`src/todo-capture.ts`): opencode `todowrite` and claude `TodoWrite` `tool_use` parts are normalized at the decoder boundary to `{content, status}` items — backend-internal fields (`priority`, `activeForm`) dropped, `todoread` and unknown tools silent — so consumers decide what becomes a run fact. afk-runner's agent reporter maps it to `agent_todos` L0 telemetry; the other optional-hook consumers (review-loop's own renderer, mutation-improve) ignore it and are unchanged.
+
+The line handler also forwards stage-agent todo snapshots through the optional `ProgressReporter.todos?` hook (`src/todo-capture.ts`): opencode `todowrite` and claude `TodoWrite` `tool_use` parts are normalized at the decoder boundary to `{content, status}` items — backend-internal fields (`priority`, `activeForm`) dropped, `todoread` and unknown tools silent — so consumers decide what becomes a run fact. afk-runner's agent reporter maps it to `agent_todos` L0 telemetry; the other optional-hook consumers (review-loop's own renderer, mutation-improve) ignore it and are unchanged.
+
 ## Scripts
 
 Run workspace commands from the repo root:

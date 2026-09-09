@@ -66,7 +66,10 @@ interface WalkHalt {
 /** Start an armed run, park at the final gate, approve through the operator file, let the walk run; the release gate settles ABORT (its arms are 6.3). */
 async function approvedIntoImplement(): Promise<WalkHalt> {
   const pipeline = makeArmedPipeline()
-  const started = await startRun(pipeline.deps, { taskText: TASK_TEXT, execute: true })
+  const started = await startRun(pipeline.deps, {
+    taskText: TASK_TEXT,
+    execute: true,
+  })
   expect(started.halted).toBe('gate-pending')
   const runDir = pipeline.runDirOf(started.runId)
   fs.writeFileSync(
@@ -79,7 +82,13 @@ async function approvedIntoImplement(): Promise<WalkHalt> {
     clock,
     runDir,
   )
-  return { pipeline, runId: started.runId, runDir, logPath: path.join(runDir, 'events.ndjson'), halted }
+  return {
+    pipeline,
+    runId: started.runId,
+    runDir,
+    logPath: path.join(runDir, 'events.ndjson'),
+    halted,
+  }
 }
 
 /** Tick until the resumed run halts; once the release presentation lands, settle it ABORT so the waiter exits. */
@@ -171,7 +180,10 @@ describe('implement work module — the sequential task walk (U3 D4)', () => {
 
   it('a red affected check once then green: the item fails, re-picks under the bound, commits on the pass', async () => {
     const pipeline = makeArmedPipeline({ checkExitCodes: [1] })
-    const started = await startRun(pipeline.deps, { taskText: TASK_TEXT, execute: true })
+    const started = await startRun(pipeline.deps, {
+      taskText: TASK_TEXT,
+      execute: true,
+    })
     expect(started.halted).toBe('gate-pending')
     const runDir = pipeline.runDirOf(started.runId)
     fs.writeFileSync(
@@ -202,7 +214,10 @@ describe('implement work module — the sequential task walk (U3 D4)', () => {
     const h = await approvedIntoImplement()
     const module = workForOf(h.pipeline.deps, { taskText: TASK_TEXT, changeName: 'add-thing' }, h.runDir)('implement')
     expect(module).not.toBeNull()
-    expect(module?.successors).toEqual({ outstanding: { enter: 'implement' }, done: { enter: 'verify' } })
+    expect(module?.successors).toEqual({
+      outstanding: { enter: 'implement' },
+      done: { enter: 'verify' },
+    })
     const events = readEvents(h.logPath)
     const allDone = foldEvents(pipelineMachine, events).snapshot.context
     expect(module?.outcomeOf(allDone)).toBe('done')
@@ -226,7 +241,13 @@ describe('firstOwedItem / implementOutcomeOf — the pick and outcome rules (D4)
 
   interface CaseFields {
     readonly tasks: Readonly<
-      Record<string, { readonly status: 'running' | 'done' | 'failed'; readonly attempts: number }>
+      Record<
+        string,
+        {
+          readonly status: 'running' | 'done' | 'failed'
+          readonly attempts: number
+        }
+      >
     >
     readonly picked: string | null
     readonly outcome: 'outstanding' | 'done'
@@ -256,7 +277,10 @@ describe('firstOwedItem / implementOutcomeOf — the pick and outcome rules (D4)
     },
     {
       label: 'every item recorded done maps onward to verify',
-      tasks: { '1': { status: 'done', attempts: 1 }, '3': { status: 'done', attempts: 1 } },
+      tasks: {
+        '1': { status: 'done', attempts: 1 },
+        '3': { status: 'done', attempts: 1 },
+      },
       picked: null,
       outcome: 'done',
     },
@@ -320,7 +344,12 @@ function unitHarness(options: {
   const checkExitCodes = [...(options.checkExitCodes ?? [])]
   const porcelainOutputs = [...(options.porcelain ?? [''])]
   let statusCalls = 0
-  const config: RunnerConfig = { repoRoot: dir, workDir: path.join(dir, '.sdd-runner'), model: 'm', budget: 5 }
+  const config: RunnerConfig = {
+    repoRoot: dir,
+    workDir: path.join(dir, '.sdd-runner'),
+    model: 'm',
+    budget: 5,
+  }
   const agent: AgentLayerDeps = {
     spawn: (_command, args, spawnOptions) => {
       const prompt = String(args[args.length - 1])
@@ -335,7 +364,11 @@ function unitHarness(options: {
     config,
     execGit: (_cwd, args) => {
       gitCalls.push([...args])
-      if (args.includes('log')) return Promise.resolve({ stdout: options.gitLogStdout ?? '', stderr: '' })
+      if (args.includes('log'))
+        return Promise.resolve({
+          stdout: options.gitLogStdout ?? '',
+          stderr: '',
+        })
       if (args[0] === 'status') {
         const stdout = porcelainOutputs[Math.min(statusCalls, porcelainOutputs.length - 1)] ?? ''
         statusCalls += 1
@@ -361,10 +394,23 @@ function unitHarness(options: {
     cwd: dir,
     runCheck: (_cwd, command) => {
       checkCalls.push([...command])
-      return Promise.resolve({ exitCode: checkExitCodes.shift() ?? 0, stdout: '', stderr: '' })
+      return Promise.resolve({
+        exitCode: checkExitCodes.shift() ?? 0,
+        stdout: '',
+        stderr: '',
+      })
     },
   }
-  return { deps, io, appended, spawnBasenames, prompts, gitCalls, checkCalls, tasksMdPath }
+  return {
+    deps,
+    io,
+    appended,
+    spawnBasenames,
+    prompts,
+    gitCalls,
+    checkCalls,
+    tasksMdPath,
+  }
 }
 
 const ALL_DONE: KernelContext['tasks'] = {
@@ -375,7 +421,9 @@ const ALL_DONE: KernelContext['tasks'] = {
 
 describe('attempt bound, resume skip-forward, and fix-mode re-target (D4)', () => {
   it('a third started for one id is refused as declared exhaustion before any spawn or event', async () => {
-    const h = unitHarness({ tasks: { '1': { status: 'running', attempts: 2 } } })
+    const h = unitHarness({
+      tasks: { '1': { status: 'running', attempts: 2 } },
+    })
     expect(h.io.context.tasks['1']).toMatchObject({ attempts: 2 })
     await expect(runImplementWork(h.deps, { changeName: 'add-thing' }, h.io)).rejects.toBeInstanceOf(StageHaltError)
     expect(h.spawnBasenames).toEqual([])
@@ -467,7 +515,9 @@ describe('attempt bound, resume skip-forward, and fix-mode re-target (D4)', () =
   it('fix mode re-targets the last-walked item from an unanswered release veto, answering the sidecar (D7)', async () => {
     const h = unitHarness({
       tasks: ALL_DONE,
-      runFiles: { 'release-veto.md': '<!-- release-veto.md -->\nVETO: tighten the error copy\n' },
+      runFiles: {
+        'release-veto.md': '<!-- release-veto.md -->\nVETO: tighten the error copy\n',
+      },
     })
     await runImplementWork(h.deps, { changeName: 'add-thing' }, h.io)
     expect(h.spawnBasenames).toEqual(['implement-t3.json'])
@@ -479,7 +529,9 @@ describe('attempt bound, resume skip-forward, and fix-mode re-target (D4)', () =
   it('an answered release veto no longer owes a fix (D7)', async () => {
     const h = unitHarness({
       tasks: ALL_DONE,
-      runFiles: { 'release-veto.md': '<!-- release-veto.md -->\nVETO: tighten\nfix answered: task 3\n' },
+      runFiles: {
+        'release-veto.md': '<!-- release-veto.md -->\nVETO: tighten\nfix answered: task 3\n',
+      },
     })
     await runImplementWork(h.deps, { changeName: 'add-thing' }, h.io)
     expect(h.spawnBasenames).toEqual([])
@@ -526,12 +578,55 @@ describe('write guard widening at the implementer seam (U3 D6)', () => {
   })
 
   it('sibling change-folder dirt fails the seam naming the path and the protection, committing nothing', async () => {
-    const h = unitHarness({ tasks: {}, porcelain: ['', '?? openspec/changes/other-change/x.md\n'] })
+    const h = unitHarness({
+      tasks: {},
+      porcelain: ['', '?? openspec/changes/other-change/x.md\n'],
+    })
     await expect(runImplementWork(h.deps, { changeName: 'add-thing' }, h.io)).rejects.toThrow(
       'agent edited files in a protected change folder (writes under openspec/changes/ must stay within openspec/changes/add-thing/): openspec/changes/other-change/x.md',
     )
     expect(taskTokens(h.appended)).toEqual(['started:1'])
     expect(commitCalls(h.gitCalls)).toEqual([])
+  })
+})
+
+describe('structural precondition halt — missing/unreadable tasks.md (walk-robustness F-P3)', () => {
+  it('a missing tasks.md rejects as StageHaltError{precondition} with the restoration resume hint, before any spawn', async () => {
+    const h = unitHarness({ tasks: {} })
+    fs.rmSync(h.tasksMdPath)
+    let caught: unknown
+    try {
+      await runImplementWork(h.deps, { changeName: 'add-thing' }, h.io)
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(StageHaltError)
+    expect(caught).toMatchObject({
+      kind: 'precondition',
+      resumeHint: 'resume after the change folder is restored',
+    })
+    expect(String(caught)).toContain('implement cannot read')
+    expect(String(caught)).toContain(h.tasksMdPath)
+    expect(h.spawnBasenames).toEqual([])
+    expect(h.appended).toEqual([])
+  })
+
+  it('an unreadable tasks.md (EISDIR) rejects with the same precondition shape, not a plain Error', async () => {
+    const h = unitHarness({ tasks: {} })
+    fs.rmSync(h.tasksMdPath)
+    fs.mkdirSync(h.tasksMdPath)
+    let caught: unknown
+    try {
+      await runImplementWork(h.deps, { changeName: 'add-thing' }, h.io)
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(StageHaltError)
+    expect(caught).toMatchObject({
+      kind: 'precondition',
+      resumeHint: 'resume after the change folder is restored',
+    })
+    expect(String(caught)).toContain('implement cannot read')
   })
 })
 
@@ -541,7 +636,10 @@ function commitCalls(gitCalls: readonly string[][]): string[][] {
 }
 
 /** Fake clock: each tick resolves only when the test releases it. */
-function fakeClock(): { readonly tick: () => Promise<void>; readonly release: () => void } {
+function fakeClock(): {
+  readonly tick: () => Promise<void>
+  readonly release: () => void
+} {
   const queue: Array<() => void> = []
   return {
     tick: () =>

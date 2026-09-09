@@ -31,6 +31,9 @@ import type { RunDeps, RunStatus } from './run.js'
 import { parseStartArgs } from './start-args.js'
 export { parseStartArgs } from './start-args.js'
 export type { StartArgs } from './start-args.js'
+import { parseServeArgs } from './serve/args.js'
+import { startBoardServer } from './serve/server.js'
+import type { BoardOptions } from './serve/server.js'
 import { oneSecondTick } from './work/gate-waiter.js'
 import { buildRunReport } from './work/report.js'
 
@@ -156,6 +159,31 @@ export async function runRunsCommand(deps: RunDeps): Promise<string> {
   return report
 }
 
+export type BoardStarter = (options: BoardOptions) => Promise<{ url: string; token: string; stop(): Promise<void> }>
+
+/**
+ * The serve verb (web-board D7/D8): a config-consuming, strictly read-only
+ * verb — it starts the token-gated board over the resolved work dir, prints
+ * the ready-to-open URL once, and never attends, presents, or settles a run.
+ */
+export async function runServeCommand(
+  deps: RunDeps,
+  args: readonly string[],
+  starter: BoardStarter = startBoardServer,
+): Promise<string> {
+  const parsed = parseServeArgs(args)
+  const options: BoardOptions = {
+    workDir: deps.config.workDir,
+    ...(parsed.host === undefined ? {} : { host: parsed.host }),
+    ...(parsed.port === undefined ? {} : { port: parsed.port }),
+    ...(parsed.token === undefined ? {} : { token: parsed.token }),
+  }
+  const handle = await starter(options)
+  const summary = `board ready: ${handle.url}`
+  console.log(summary)
+  return summary
+}
+
 /**
  * The corpus-analysis verb (run-analysis D8): `analyze [workdirs…] [--json]`
  * over the read-only seams — it never attends, presents, or settles any
@@ -226,6 +254,8 @@ function printUsage(): void {
       '  afk-runner report <runId> [--pr]              print the passive run report',
       '  afk-runner runs                               print the passive cross-run roster and totals',
       '  afk-runner analyze [workdirs…] [--json]       print the read-only corpus report',
+      '  afk-runner serve [--host <addr>] [--port <port>] [--token <token>]',
+      '                                                serve the read-only web board',
       '  afk-runner <runDir>                           print the fold summary of a run dir',
     ].join('\n'),
   )
@@ -240,13 +270,15 @@ export async function cliMain(argv: readonly string[]): Promise<string | undefin
     command === 'report' ||
     command === 'stop' ||
     command === 'runs' ||
-    command === 'analyze'
+    command === 'analyze' ||
+    command === 'serve'
   ) {
     const deps = defaultCliDeps(await resolveRunnerConfig(process.cwd()))
     if (command === 'start') return runStartCommand(deps, rest)
     if (command === 'report') return runReportCommand(deps, rest)
     if (command === 'runs') return runRunsCommand(deps)
     if (command === 'analyze') return runAnalyzeCommand(deps, rest)
+    if (command === 'serve') return runServeCommand(deps, rest)
     if (command === 'stop') {
       const runId = rest[0]
       if (runId === undefined || runId.length === 0) throw new Error('usage: afk-runner stop <runId>')

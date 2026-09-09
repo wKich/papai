@@ -7,6 +7,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import type { ExecGitFn } from '../config.js'
+import { StageHaltError } from './stage-halt.js'
 import type { TaskItem } from './tasks-md.js'
 
 export interface SliceCommitDeps {
@@ -29,11 +30,24 @@ export interface SliceCommitDeps {
  * so a hook rejection fails silently with the item already marked done
  * (the Run P live finding). An already-checked line (fix-mode re-work)
  * commits without a rewrite; a checkbox line that moved out from under the
- * item refuses loudly rather than checking the wrong box.
+ * item refuses loudly rather than checking the wrong box. A missing or
+ * unreadable tasks.md at commit time escalates as
+ * `StageHaltError{precondition}` with the restoration resume hint
+ * (walk-robustness F-W1) — mirroring `readTaskItems`' guard, so the
+ * commit-time read never crashes the holder crash-shaped.
  */
 export async function commitTaskSlice(deps: SliceCommitDeps, item: TaskItem): Promise<void> {
   const tasksPath = path.join(deps.changeDir, 'tasks.md')
-  const tasksMd = await readFile(tasksPath, 'utf8')
+  let tasksMd: string
+  try {
+    tasksMd = await readFile(tasksPath, 'utf8')
+  } catch (error) {
+    throw new StageHaltError(
+      `slice commit cannot read ${tasksPath}: ${error instanceof Error ? error.message : String(error)}`,
+      'resume after the change folder is restored',
+      'precondition',
+    )
+  }
   const lines = tasksMd.split('\n')
   const lineIndex = item.lineNo - 1
   const target = lines[lineIndex]

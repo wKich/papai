@@ -70,3 +70,16 @@ export const AgentDoneEvent = z.object({
   model: z.string().min(1).optional(),
   usage: AgentUsageSchema,
 })
+
+/**
+ * Stage-agent todo snapshots (agent-todos-capture D3): the agent's own
+ * plan/progress as tolerated L0 telemetry. Items are already normalized to
+ * `{content, status}` at the review-loop seam; bounds (20 items, 200-char
+ * content) are the reporter's emission contract (D4), not this schema's.
+ */
+export const AgentTodosEvent = z.object({
+  altitude: z.literal('L0'),
+  type: z.literal('agent_todos'),
+  agent: z.string().min(1),
+  todos: z.array(z.object({ content: z.string(), status: z.string() })),
+})
