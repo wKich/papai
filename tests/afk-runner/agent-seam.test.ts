@@ -72,6 +72,8 @@ describe('spawn seam — typed SpawnError for transport failures (C6 D1)', () =>
 
   it('the CLI wires the typed seam over realSpawn', () => {
     const seam = of((): Promise<SpawnResult> => Promise.resolve(result()))
-    expect(defaultCliDeps('/tmp').spawn.name).toBe(seam.name)
+    expect(
+      defaultCliDeps({ repoRoot: '/tmp', workDir: '/tmp/.afk-runner', model: 'opencode', budget: 5 }).spawn.name,
+    ).toBe(seam.name)
   })
 })

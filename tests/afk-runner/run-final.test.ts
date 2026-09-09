@@ -112,3 +112,22 @@ describe('finals end the run cleanly (C5 D6)', () => {
     expect(pipeline.stdoutLines.some((line: string) => line.includes('afk-runner report'))).toBe(true)
   })
 })
+
+describe('execution arming at start (U3 D1)', () => {
+  it('an armed start appends exactly one armed fact event before any stage work', async () => {
+    const pipeline = makeFakePipeline()
+    const result = await startRun(pipeline.deps, { taskText: TASK_TEXT, execute: true })
+    const events = readEvents(path.join(pipeline.runDirOf(result.runId), 'events.ndjson'))
+    const armed = events.filter((event) => event.type === 'execution')
+    expect(armed).toHaveLength(1)
+    expect(events[0]?.type).toBe('execution')
+    expect(events[1]?.type).toBe('stage_enter')
+  })
+
+  it('an unarmed start appends no execution events', async () => {
+    const pipeline = makeFakePipeline()
+    const result = await startRun(pipeline.deps, { taskText: TASK_TEXT })
+    const events = readEvents(path.join(pipeline.runDirOf(result.runId), 'events.ndjson'))
+    expect(events.filter((event) => event.type === 'execution')).toHaveLength(0)
+  })
+})

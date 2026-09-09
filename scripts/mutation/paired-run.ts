@@ -6,6 +6,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
+import type { PerFileScore } from './baseline.js'
 import { buildPairedConfig } from './config-builder.js'
 import type { StrykerConfig } from './config-builder.js'
 import { buildCoverageMap, createDefaultCoverageMapDeps } from './coverage-map.js'
@@ -15,6 +16,7 @@ import { defaultPairedRunDeps } from './paired-run-deps.js'
 import { appendProcessFailure } from './process-error.js'
 import { mergeReports } from './score-merger.js'
 import type { MergedScore, StrykerReport } from './score-merger.js'
+import { runUpdateBaseline } from './seed-from.js'
 import { runStrykerWithCapturedFailure } from './stryker-run.js'
 import { resolveTestFiles } from './test-overrides.js'
 import type { OverridesMap } from './test-overrides.js'
@@ -82,6 +84,7 @@ type BunLike = {
 }
 
 const DEFAULT_REPORT_DIR = 'reports/paired'
+const BASELINE_FILE = 'scripts/mutation/baseline.json'
 
 const toProjectRelativePath = (filePath: string, projectRoot: string): string =>
   path.isAbsolute(filePath) ? path.relative(projectRoot, filePath) : filePath
@@ -235,22 +238,36 @@ export const pairedRun = (input: PairedRunInput): Promise<PairedRunResult> => {
   return Promise.resolve({ merged, perFile, skipped, errored })
 }
 
-const main = async (bun: BunLike): Promise<number> => {
-  const parsed = parsePairedRunCliArgs(bun.argv.slice(2))
+export interface PairedRunMainDeps {
+  readonly runPaired: (input: PairedRunInput) => Promise<PairedRunResult>
+  readonly seedBaseline: (input: {
+    readonly baselinePath: string
+    readonly reportDir: string
+    readonly perFile: readonly PerFileScore[]
+  }) => number
+}
+
+const defaultMainDeps: PairedRunMainDeps = {
+  runPaired: pairedRun,
+  seedBaseline: runUpdateBaseline,
+}
+
+export const pairedRunMain = async (argv: readonly string[], deps: PairedRunMainDeps | undefined): Promise<number> => {
+  const cli = deps ?? defaultMainDeps
+  const parsed = parsePairedRunCliArgs(argv)
   const usageExitCode = resolvePairedRunCliUsageExitCode(parsed)
   if (parsed.kind === 'usageError') {
     console.error(parsed.reason)
-    if (usageExitCode === null) return 2
-    return usageExitCode
+    return usageExitCode ?? 2
   }
-  const { sourceFiles, threshold, verbose } = parsed
+  const { sourceFiles, threshold, verbose, updateBaseline } = parsed
   if (usageExitCode !== null) {
-    console.error('Usage: bun scripts/mutation/paired-run.ts <src...> [--threshold=N] [--verbose]')
+    console.error('Usage: bun scripts/mutation/paired-run.ts <src...> [--threshold=N] [--update-baseline] [--verbose]')
     return usageExitCode
   }
 
   const projectRoot = process.cwd()
-  const result = await pairedRun({
+  const result = await cli.runPaired({
     projectRoot,
     reportDir: path.join(projectRoot, DEFAULT_REPORT_DIR),
     sourceFiles,
@@ -258,12 +275,24 @@ const main = async (bun: BunLike): Promise<number> => {
     deps: undefined,
   })
 
+  if (updateBaseline) {
+    const count = cli.seedBaseline({
+      baselinePath: path.join(projectRoot, BASELINE_FILE),
+      reportDir: path.join(projectRoot, DEFAULT_REPORT_DIR),
+      perFile: result.perFile,
+    })
+    console.log(`Seeded baseline written to ${BASELINE_FILE} (${count} files)`)
+    return 0
+  }
+
   if (resolvePairedRunExitCode(result.merged, threshold) === 1) {
     console.error(`Mutation score ${result.merged.score} is below threshold ${threshold}`)
     return 1
   }
   return 0
 }
+
+const main = (bun: BunLike): Promise<number> => pairedRunMain(bun.argv.slice(2), undefined)
 
 const maybeBun = (globalThis as typeof globalThis & { readonly Bun: BunLike | undefined }).Bun
 if (maybeBun !== undefined && import.meta.path === maybeBun.main) {

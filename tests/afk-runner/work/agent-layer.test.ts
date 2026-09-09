@@ -403,6 +403,35 @@ describe('runStageAgent', () => {
     expect(fake.argsList[1]!.includes('--session')).toBe(false)
   })
 
+  it('threads a streamed todowrite snapshot through the reporter into an agent_todos event (agent-todos-capture)', async () => {
+    const dir = makeDir()
+    const todoLine = JSON.stringify({
+      type: 'tool_use',
+      part: {
+        tool: 'todowrite',
+        callID: 'c1',
+        state: {
+          status: 'completed',
+          input: { todos: [{ content: 'RED: add rows', status: 'in_progress', priority: 'high' }] },
+        },
+      },
+    })
+    const fake = makeFakeSpawn('findings-1.json', [{ write: VALID_FINDINGS, lines: [todoLine] }])
+    const { agent, emitted } = makeAgent(dir, fake)
+    await runStageAgent(agent, makeOptions(dir, 'findings-1.json'))
+    const todoEvents = emitted.filter(
+      (e): e is Extract<EventInput, { type: 'agent_todos' }> => e.type === 'agent_todos',
+    )
+    expect(todoEvents).toEqual([
+      {
+        altitude: 'L0',
+        type: 'agent_todos',
+        agent: 'reviewer-r1',
+        todos: [{ content: 'RED: add rows', status: 'in_progress' }],
+      },
+    ])
+  })
+
   it('halts after the second invalid sidecar instead of retrying forever', async () => {
     const dir = makeDir()
     const fake = makeFakeSpawn('findings-1.json', [
@@ -563,6 +592,78 @@ describe('runStageAgent', () => {
     await expect(run).rejects.toThrow(
       'agent edited files outside the change folder openspec/changes/add-thing/: openspec/changes/add-thing-extra/spec.md',
     )
+  })
+
+  describe('write guard modes (U3 D6)', () => {
+    function makeWidenedOptions(dir: string, basename: string): RunStageAgentOptions<{ findings: Finding[] }> {
+      return {
+        ...makeOptions(dir, basename),
+        guard: { allowedPrefix: 'openspec/changes/add-thing/', allowedExcept: ['openspec/changes/'] },
+      }
+    }
+
+    it('the widened guard passes source-tree dirt an implementer owes', async () => {
+      const dir = makeDir()
+      const fake = makeFakeSpawn('findings-1.json', [{ write: VALID_FINDINGS }])
+      const execGit = sequencedExecGit(['', ' M src/chat/router.ts\n?? task.md\n'])
+      const agent: AgentLayerDeps = {
+        spawn: fake.spawn,
+        config: makeConfig(dir),
+        execGit,
+        emit: () => undefined,
+      }
+      const info = await runStageAgent(agent, makeWidenedOptions(dir, 'findings-1.json'))
+      expect(info.attempts).toBe(1)
+    })
+
+    it('the widened guard keeps the change folder itself allowed', async () => {
+      const dir = makeDir()
+      const fake = makeFakeSpawn('findings-1.json', [{ write: VALID_FINDINGS }])
+      const execGit = sequencedExecGit(['', ' M openspec/changes/add-thing/specs/x/spec.md\n'])
+      const agent: AgentLayerDeps = {
+        spawn: fake.spawn,
+        config: makeConfig(dir),
+        execGit,
+        emit: () => undefined,
+      }
+      const info = await runStageAgent(agent, makeWidenedOptions(dir, 'findings-1.json'))
+      expect(info.attempts).toBe(1)
+    })
+
+    it('the widened guard fails sibling change-folder dirt, naming the offending paths and the protection', async () => {
+      const dir = makeDir()
+      const fake = makeFakeSpawn('findings-1.json', [{ write: VALID_FINDINGS }])
+      const execGit = sequencedExecGit([
+        '',
+        '?? openspec/changes/other-change/x.md\n M openspec/changes/second-sib/y.md\n',
+      ])
+      const agent: AgentLayerDeps = {
+        spawn: fake.spawn,
+        config: makeConfig(dir),
+        execGit,
+        emit: () => undefined,
+      }
+      const run = runStageAgent(agent, makeWidenedOptions(dir, 'findings-1.json'))
+      await expect(run).rejects.toThrow(
+        'agent edited files in a protected change folder (writes under openspec/changes/ must stay within openspec/changes/add-thing/): openspec/changes/other-change/x.md, openspec/changes/second-sib/y.md',
+      )
+    })
+
+    it('the widened guard fails a prefix-sharing sibling — the shared prefix does not widen the allowed folder', async () => {
+      const dir = makeDir()
+      const fake = makeFakeSpawn('findings-1.json', [{ write: VALID_FINDINGS }])
+      const execGit = sequencedExecGit(['', '?? openspec/changes/add-thing-extra/spec.md\n'])
+      const agent: AgentLayerDeps = {
+        spawn: fake.spawn,
+        config: makeConfig(dir),
+        execGit,
+        emit: () => undefined,
+      }
+      const run = runStageAgent(agent, makeWidenedOptions(dir, 'findings-1.json'))
+      await expect(run).rejects.toThrow(
+        'agent edited files in a protected change folder (writes under openspec/changes/ must stay within openspec/changes/add-thing/): openspec/changes/add-thing-extra/spec.md',
+      )
+    })
   })
 
   it('falls back to a fresh prompt-rebuild spawn when the continuation fails', async () => {

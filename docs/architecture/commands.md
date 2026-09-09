@@ -78,7 +78,7 @@ The compatibility proof is a **behavioral and seam-API proof**, not purely behav
 
 Every `Write`/`Edit`/`MultiEdit` on an implementation file in `src/` or `client/` triggers an automated hook pipeline that **steers** toward Red → Green → Refactor. Local hooks are advisory — the hard gate is CI (`test:mutate:changed` + coverage ratchet).
 
-**Scope** — only implementation files: path starts with `src/`/`client/`/`plugins/`/`review-loop/src/`/`afk-runner/src/`, extension `.ts`/`.js`/`.tsx`/`.jsx`, not a test (`*.test.*`/`*.spec.*`). Everything else passes through, including the internal workspaces `scripts/`, `opencode-agent/` and `mutation-improve/` — they keep their own suites under `tests/` but are gated by neither these hooks nor the mutation gate, which shares this same predicate (`isGateableImplFile`). Note that not being gateable does not stop a path from being *mapped*: `findTestFile`/`suggestTestPath`/`resolveImplPath` still resolve those workspaces, because `test:affected` and the mutation score fingerprint rely on it. The `client/` tree mirrors `src/` for test resolution (`client/debug/foo.ts` → `tests/client/debug/foo.test.ts`).
+**Scope** — only implementation files: path starts with `src/`/`client/`/`plugins/`/`review-loop/src/`/`afk-runner/src/`/`opencode-agent/src/` (barrel `index.ts` there excluded), extension `.ts`/`.js`/`.tsx`/`.jsx`, not a test (`*.test.*`/`*.spec.*`). Everything else passes through, including the internal workspaces `scripts/` and `mutation-improve/` — they keep their own suites under `tests/` but are gated by neither these hooks nor the mutation gate, which shares this same predicate (`isGateableImplFile`). Note that not being gateable does not stop a path from being *mapped*: `findTestFile`/`suggestTestPath`/`resolveImplPath` still resolve those workspaces, because `test:affected` and the mutation score fingerprint rely on it. The `client/` tree mirrors `src/` for test resolution (`client/debug/foo.ts` → `tests/client/debug/foo.test.ts`).
 
 **Pipeline** — before write: (1) write-policy gate. After write: (2) test-first nudge (advisory, once per file per session), (3) test tracker for new tests, (4) import gate for tests under `tests/`.
 
@@ -93,7 +93,7 @@ Every `Write`/`Edit`/`MultiEdit` on an implementation file in `src/` or `client/
 
 - `.oxlintrc.json` is protected from direct write-tool edits.
 - Inline suppressions (`eslint-disable`, `oxlint-disable`, `@ts-ignore`, `@ts-nocheck`) are blocked before writes complete.
-- Bash-hook policy blocks `git stash` and `git checkout --`.
+- Bash-hook policy blocks `git stash`, `git reset`, `git rm`, `git switch`, and `git checkout` in every form (the discard-only scope is subsumed), plus `git branch` creation forms — `git branch` with a leading flag (`--list`, `-a`, `-d`) stays allowed.
 
 Fix the underlying issue rather than bypassing linting or hook policy.
 

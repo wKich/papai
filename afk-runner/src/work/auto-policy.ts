@@ -224,3 +224,16 @@ export function evaluateEscalationGate(signals: EscalationSignals): PolicyDecisi
     evidenceDigest: digestOf(['escalation-human', signals.spentUsd]),
   }
 }
+
+/**
+ * Release gate ladder (U3 D7): every rung is suppressed — the release
+ * decision is the operator's alone, so the ladder only ever logs (rule
+ * none, never settles).
+ */
+export function evaluateReleaseGate(): PolicyDecision {
+  return {
+    rule: 'none',
+    action: 'gate',
+    evidenceDigest: digestOf(['release-human']),
+  }
+}

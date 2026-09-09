@@ -17,7 +17,7 @@ import { readOnlyGit } from './analyze-io.js'
 import { renderCorpusJson, renderCorpusReport } from './analyze-report.js'
 import { groundTruthJoin } from './analyze-truth.js'
 import type { ExecGitFn, RunnerConfig } from './config.js'
-import type { DepthProfile } from './events.js'
+import { resolveRunnerConfig } from './config.js'
 import { pipelineMachine } from './graph/pipeline.js'
 import { foldLog } from './kernel/fold.js'
 import { foldRun, logPathOf } from './memo-project.js'
@@ -28,6 +28,12 @@ import { stopRunOperator } from './run-stop.js'
 import type { OperatorStop } from './run-stop.js'
 import { startRun, statusRun } from './run.js'
 import type { RunDeps, RunStatus } from './run.js'
+import { parseStartArgs } from './start-args.js'
+export { parseStartArgs } from './start-args.js'
+export type { StartArgs } from './start-args.js'
+import { parseServeArgs } from './serve/args.js'
+import { startBoardServer } from './serve/server.js'
+import type { BoardOptions } from './serve/server.js'
 import { oneSecondTick } from './work/gate-waiter.js'
 import { buildRunReport } from './work/report.js'
 
@@ -98,14 +104,8 @@ export interface CliDeps extends RunDeps {
   readonly spawn: SpawnFn
 }
 
-/** Prototype CLI config: repo root is the cwd, the work dir sits beside it, model from the environment. */
-export function defaultCliDeps(cwd: string = process.cwd()): CliDeps {
-  const config: RunnerConfig = {
-    repoRoot: cwd,
-    workDir: path.join(cwd, '.afk-runner'),
-    model: process.env['AFK_RUNNER_MODEL'] ?? 'opencode',
-    budget: 5,
-  }
+/** Pure sync deps assembler over a resolved config (D7): the verbs own resolution, never the seam. */
+export function defaultCliDeps(config: RunnerConfig): CliDeps {
   return {
     config,
     spawn: typedSpawn(realSpawn),
@@ -117,33 +117,11 @@ export function defaultCliDeps(cwd: string = process.cwd()): CliDeps {
   }
 }
 
-function parseDepth(raw: string | undefined): DepthProfile | undefined {
-  if (raw === undefined) return undefined
-  if (raw === 'S' || raw === 'M' || raw === 'L') return raw
-  throw new Error(`invalid --depth '${raw}' (expected S, M, or L)`)
-}
-
-export interface StartArgs {
-  readonly taskFile: string
-  readonly depthOverride?: DepthProfile
-}
-
-/** Pure start-verb argument parsing — the seam the command-doc flag pin runs against. */
-export function parseStartArgs(args: readonly string[]): StartArgs {
-  const taskFile = args[0]
-  if (taskFile === undefined || taskFile.length === 0) {
-    throw new Error('usage: afk-runner start <taskFile> [--depth S|M|L]')
-  }
-  const depthFlag = args.indexOf('--depth')
-  const depthOverride = parseDepth(depthFlag === -1 ? undefined : args[depthFlag + 1])
-  return depthOverride === undefined ? { taskFile } : { taskFile, depthOverride }
-}
-
 export async function runStartCommand(deps: RunDeps, args: readonly string[]): Promise<string> {
-  const { taskFile, depthOverride } = parseStartArgs(args)
+  const { taskFile, depthOverride, execute } = parseStartArgs(args)
   // Never-on-start (R4 D2): start drives to park and exits — the foreground
   // waiter belongs to resume, so a machine-invoked start never blocks a shell.
-  const result = await startRun({ ...deps, gateWait: undefined }, { taskFile, depthOverride })
+  const result = await startRun({ ...deps, gateWait: undefined }, { taskFile, depthOverride, execute })
   const lines = [`run: ${result.runId}`, `halted: ${result.halted}`, `position: ${result.position}`]
   if (result.halted === 'gate-pending') {
     const runDir = path.join(deps.config.workDir, 'runs', result.runId)
@@ -179,6 +157,31 @@ export async function runRunsCommand(deps: RunDeps): Promise<string> {
   const report = renderRunsReport(await summarizeWorkDir(deps.config.workDir))
   console.log(report)
   return report
+}
+
+export type BoardStarter = (options: BoardOptions) => Promise<{ url: string; token: string; stop(): Promise<void> }>
+
+/**
+ * The serve verb (web-board D7/D8): a config-consuming, strictly read-only
+ * verb — it starts the token-gated board over the resolved work dir, prints
+ * the ready-to-open URL once, and never attends, presents, or settles a run.
+ */
+export async function runServeCommand(
+  deps: RunDeps,
+  args: readonly string[],
+  starter: BoardStarter = startBoardServer,
+): Promise<string> {
+  const parsed = parseServeArgs(args)
+  const options: BoardOptions = {
+    workDir: deps.config.workDir,
+    ...(parsed.host === undefined ? {} : { host: parsed.host }),
+    ...(parsed.port === undefined ? {} : { port: parsed.port }),
+    ...(parsed.token === undefined ? {} : { token: parsed.token }),
+  }
+  const handle = await starter(options)
+  const summary = `board ready: ${handle.url}`
+  console.log(summary)
+  return summary
 }
 
 /**
@@ -244,19 +247,21 @@ function printUsage(): void {
   console.log(
     [
       'usage:',
-      '  afk-runner start <taskFile> [--depth S|M|L]   drive a fresh think-half run to park',
+      '  afk-runner start <taskFile> [--depth S|M|L] [--execute]   drive a fresh run to park (armed: plan + execute)',
       '  afk-runner status <runId>                     print the folded full-state summary',
       '  afk-runner resume <runId>                     re-enter an interrupted or parked run',
       '  afk-runner stop <runId>                       calm-stop a live run; abort a dead one',
       '  afk-runner report <runId> [--pr]              print the passive run report',
       '  afk-runner runs                               print the passive cross-run roster and totals',
       '  afk-runner analyze [workdirs…] [--json]       print the read-only corpus report',
+      '  afk-runner serve [--host <addr>] [--port <port>] [--token <token>]',
+      '                                                serve the read-only web board',
       '  afk-runner <runDir>                           print the fold summary of a run dir',
     ].join('\n'),
   )
 }
 
-export function cliMain(argv: readonly string[]): Promise<string | undefined> {
+export async function cliMain(argv: readonly string[]): Promise<string | undefined> {
   const [command, ...rest] = argv
   if (
     command === 'start' ||
@@ -265,13 +270,15 @@ export function cliMain(argv: readonly string[]): Promise<string | undefined> {
     command === 'report' ||
     command === 'stop' ||
     command === 'runs' ||
-    command === 'analyze'
+    command === 'analyze' ||
+    command === 'serve'
   ) {
-    const deps = defaultCliDeps()
+    const deps = defaultCliDeps(await resolveRunnerConfig(process.cwd()))
     if (command === 'start') return runStartCommand(deps, rest)
     if (command === 'report') return runReportCommand(deps, rest)
     if (command === 'runs') return runRunsCommand(deps)
     if (command === 'analyze') return runAnalyzeCommand(deps, rest)
+    if (command === 'serve') return runServeCommand(deps, rest)
     if (command === 'stop') {
       const runId = rest[0]
       if (runId === undefined || runId.length === 0) throw new Error('usage: afk-runner stop <runId>')

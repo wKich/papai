@@ -7,8 +7,10 @@ import { describe, expect, it } from 'bun:test'
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { resumeEventOf } from '../../afk-runner/src/drive/resume.js'
 import { readEvents } from '../../afk-runner/src/events.js'
 import type { SddEvent } from '../../afk-runner/src/events.js'
+import { initialKernelContext } from '../../afk-runner/src/kernel/machine.js'
 import { resumeRun } from '../../afk-runner/src/run-resume.js'
 import { startRun } from '../../afk-runner/src/run.js'
 import { BLOCKER_ROUND, M_MULTI_ROUND, TASK_TEXT, makeFakePipeline } from './fixtures/fake-pipeline.js'
@@ -62,6 +64,86 @@ function handleOf(pipeline: ReturnType<typeof makeFakePipeline>, runId: string):
 function truncateLog(logPath: string, keep: readonly SddEvent[]): void {
   fs.writeFileSync(logPath, `${keep.map((event) => JSON.stringify(event)).join('\n')}\n`)
 }
+
+/** The newest prompt and argv one spawn basename recorded — empties when it never spawned. */
+function lastSpawnOf(
+  pipeline: ReturnType<typeof makeFakePipeline>,
+  basename: string,
+): { readonly prompt: string; readonly args: string } {
+  const prompts = pipeline.spawnPrompts[basename] ?? []
+  const argVectors = pipeline.spawnArgs[basename] ?? []
+  return { prompt: prompts.at(-1) ?? '', args: (argVectors.at(-1) ?? []).join(' ') }
+}
+
+describe('resume classification of the execution stages (U3 D9)', () => {
+  it('implement, verify, and release each classify stage-rebuild through the default arm', () => {
+    const context = initialKernelContext({})
+    expect(resumeEventOf(context, 'implement', [])).toMatchObject({
+      type: 'resume',
+      path: 'stage-rebuild',
+      stage: 'implement',
+    })
+    expect(resumeEventOf(context, 'verify', [])).toMatchObject({
+      type: 'resume',
+      path: 'stage-rebuild',
+      stage: 'verify',
+    })
+    expect(resumeEventOf(context, 'release', [])).toMatchObject({
+      type: 'resume',
+      path: 'stage-rebuild',
+      stage: 'release',
+    })
+  })
+})
+
+const WALK_TASKS_MD = [
+  '## 1. Walk',
+  '',
+  '- [ ] 1.1 first item',
+  '- [ ] 1.2 second item',
+  '- [ ] 1.3 third item',
+  '',
+].join('\n')
+
+describe('mid-implement resume continues the killed implementer session (U3 D9)', () => {
+  it('a resume after a mid-walk kill re-picks the interrupted task and continues its ledger session', async () => {
+    const pipeline = makeFakePipeline({
+      artifactOverrides: { 'decompose-tasks.json': WALK_TASKS_MD },
+      sidecarOverrides: {
+        'implement-t1.json': JSON.stringify({ files_written: ['src/one.ts'] }),
+        'implement-t2.json': JSON.stringify({ files_written: ['src/two.ts'] }),
+        'implement-t3.json': JSON.stringify({ files_written: ['src/three.ts'] }),
+      },
+      crashOn: killOnceOn('implement-t2.json'),
+      sessionIdOf: sessionOnlyFor('implement-t2.json', 'ses-t2-impl'),
+    })
+    const started = await startRun(pipeline.deps, { taskText: TASK_TEXT, execute: true })
+    expect(started.halted).toBe('gate-pending')
+    const runDir = pipeline.runDirOf(started.runId)
+    fs.writeFileSync(
+      path.join(runDir, 'gate-1.md'),
+      '<!-- gate-1.md -->\n\n## Final gate\n\n## Gate response\n\nAPPROVE\n',
+    )
+    await expect(resumeRun(pipeline.deps, started.runId)).rejects.toThrow('simulated kill')
+
+    const resumed = await resumeRun(pipeline.deps, started.runId)
+    expect(resumed.halted).toBe('gate-pending')
+
+    const logPath = path.join(runDir, 'events.ndjson')
+    const resumes = resumeEvents(readEvents(logPath))
+    expect(resumes).toHaveLength(2)
+    expect(resumes[0]).toMatchObject({ type: 'resume', path: 'stage-rebuild', stage: 'implement' })
+    expect(resumes[1]).toMatchObject({ type: 'resume', path: 'stage-rebuild', stage: 'implement' })
+    const continuation = lastSpawnOf(pipeline, 'implement-t2.json')
+    expect(continuation.prompt).toContain('Continue the interrupted task in this session.')
+    expect(continuation.args).toContain('--session ses-t2-impl')
+    const events = readEvents(logPath)
+    const taskTokens = events
+      .filter((event): event is Extract<SddEvent, { type: 'task' }> => event.type === 'task')
+      .map((event) => `${event.action}:${event.id}`)
+    expect(taskTokens).toEqual(['started:1', 'done:1', 'started:2', 'started:2', 'done:2', 'started:3', 'done:3'])
+  })
+})
 
 describe('resume event producer — one log-visible resume per invocation (log-fidelity D3/D4/D5)', () => {
   it('session continuation: a resume of an open round with an in-flight ledger session reports the session id, before any drive event', async () => {

@@ -40,9 +40,10 @@ See LICENSE in the project root for details.
 > _between_ two of them and costs the run nothing at all. It also subsumes what was
 > left of S5-5 — its job-deadline half is the answer to that residue, and the run
 > behind it is the first evidence that a real implement phase does exceed the wall
-> clock this pipeline allows it. **S6** is where the rest is: S6-5 (the mutation
-> ratchet has never seen this workspace) and S6-7 (`check.sh`'s full list omits
-> it). Both, with what they cost and what fixing them costs, are evaluated in
+> clock this pipeline allows it. **S6**'s last two open items are closed by the
+> mutation-gate widening: S6-5 (the ratchet now measures this workspace) and
+> S6-7 (`check.sh` and the gate are pinned to agree on what product code is).
+> Both, with what they cost and what fixing them cost, are evaluated in
 > [`docs/remaining-findings-evaluation.md`](docs/remaining-findings-evaluation.md).
 >
 > That paragraph replaces "**S4** onwards is untouched", which was false when it
@@ -2286,9 +2287,9 @@ Specific gaps worth closing, beyond the raw percentages:
 - **S6-2** No test drives `handleDeliver` against a git fake that behaves like a _fresh runner_ (branch absent locally). That fake permissiveness is why S1-2 is invisible.
 - **S6-3 [FIXED]** Both are now covered: a spec with `---` round-trips through the block channel, and a forged envelope terminator is asserted inert.
 - **S6-4 [FIXED]** `live-sdk.integration.ts` drives the real SDK; the unit fixtures are recorded from it.
-- **S6-5** **Stryker does not cover this workspace.** `stryker.config.json`'s `mutate` globs list `src/**` and `plugins/**` only, so the repo's strongest quality gate — the per-file mutation ratchet — never sees `opencode-agent/`. Ironic for a pipeline that runs a mutation loop. New files get a "first measurement, seeded" pass rather than an enforced floor, so this will not _block_ the PR; it just leaves the code unmeasured.
+- **S6-5 [FIXED]** The mutation gate covers this workspace. `opencode-agent/src/` is a sixth gateable root in `isGateableImplFile`, so `test:mutate:changed` and the plan/shard/gate CI dispatch select workspace sources; `stryker.config.json`'s `mutate` globs enumerate the tree for all-files runs, excluding the `index.ts` barrel like every other gated tree; and the resolver mappers learned the workspace's **flat** layout — `opencode-agent/src/**/x.ts` ↔ `tests/opencode-agent/x.test.ts`, the whole `src/` subtree stripping away, because that is where the 70 test files actually sit. Floors shipped in the same commit as the widening (`scripts/mutation/baseline.json`), so the scope never existed without them; modules added after the seed carry no floor and are judged by the no-floor rules — measured, never a free pass — which today is `config-shape.ts`, `phase-context.ts`, `run-result.ts` and `state-version.ts`.
 - **S6-6** **Coverage-floor risk on CI.** `scripts/coverage/floor.json` enforces an aggregate 90% lines / 90% functions. Eight of the spike's files sit below that. papai is large enough (~289k lines) that ~1,200 new lines at roughly 75% should not push the aggregate under the floor, but this has not been measured against a full coverage run and should be checked before merge.
-- **S6-7** `opencode-agent:lint` / `:typecheck` / `:format:check` / `:test` are not in `scripts/check.sh`'s full check list (`:296`), unlike `review-loop:*`. They are covered transitively by the root `lint`, `typecheck` and `test`, so this is consistency rather than a hole — but the asymmetry will confuse the next person.
+- **S6-7 [FIXED]** Closed by pin rather than by proxy entries: full mode is root-checks-only, and `tests/scripts/check.test.ts` derives both sides live — the gateable roots from the widened `isGateableImplFile`, the path-prefix arms from `check.sh`'s staged license/oxlint enumerations — and asserts every root is routed by both or recorded as a keyed exception. The shell check and the mutation gate can no longer silently disagree about what product code is.
 - **S6-8 [PARTLY FIXED]** `workflow.test.ts` now parses the workflow and asserts its trigger surface, condition, concurrency key, step wiring and permissions. That is a property check, not a linter: it cannot catch a shell-quoting or expression _syntax_ error the way `actionlint` would. Adding actionlint to CI is still worth doing.
 - **S6-9 [PARTLY CLOSED]** `bun security` (Semgrep) could not run in the authoring environment — no Semgrep binary and no Docker — so the spike had not been through the repo's security scan. CI has now run it, and it found one blocking issue in `agent-pipeline.yml`. See below.
 

@@ -18,7 +18,11 @@ function linearMachine(): ReturnType<typeof createKernelMachine> {
   return createKernelMachine({
     id: 'linear',
     initial: 'start',
-    context: initialKernelContext({ intake: 'pending', draft: 'pending', review: 'pending' }),
+    context: initialKernelContext({
+      intake: 'pending',
+      draft: 'pending',
+      review: 'pending',
+    }),
     on: { 'stage.exit': { actions: ['markStageDone'] } },
     states: {
       start: {
@@ -67,10 +71,32 @@ describe('kernel fold', () => {
       stage: 'review',
     })
     expect(
-      toKernelEvent(stamp({ altitude: 'L2', type: 'gate', action: 'presented', mode: 'final', version: 1 }, 3)),
+      toKernelEvent(
+        stamp(
+          {
+            altitude: 'L2',
+            type: 'gate',
+            action: 'presented',
+            mode: 'final',
+            version: 1,
+          },
+          3,
+        ),
+      ),
     ).toEqual({ type: 'gate.presented', mode: 'final', version: 1 })
     expect(
-      toKernelEvent(stamp({ altitude: 'L2', type: 'gate', action: 'answered', mode: 'final', version: 1 }, 4)),
+      toKernelEvent(
+        stamp(
+          {
+            altitude: 'L2',
+            type: 'gate',
+            action: 'answered',
+            mode: 'final',
+            version: 1,
+          },
+          4,
+        ),
+      ),
     ).toEqual({ type: 'gate.answered' })
     expect(toKernelEvent(stamp({ altitude: 'L0', type: 'tool_use', agent: 'a', tool: 't' }, 5))).toBeNull()
     expect(
@@ -80,7 +106,13 @@ describe('kernel fold', () => {
             altitude: 'L1',
             type: 'done',
             agent: 'a',
-            usage: { inputTokens: 1, outputTokens: 1, reasoningTokens: 1, costUsd: 0.1, wallMs: 1 },
+            usage: {
+              inputTokens: 1,
+              outputTokens: 1,
+              reasoningTokens: 1,
+              costUsd: 0.1,
+              wallMs: 1,
+            },
           },
           6,
         ),
@@ -90,7 +122,18 @@ describe('kernel fold', () => {
 
   it('maps every derived-state log event to its dot-notation kernel event', () => {
     expect(
-      toKernelEvent(stamp({ altitude: 'L2', type: 'depth', profile: 'S', rationale: 'r', source: 'override' }, 1)),
+      toKernelEvent(
+        stamp(
+          {
+            altitude: 'L2',
+            type: 'depth',
+            profile: 'S',
+            rationale: 'r',
+            source: 'override',
+          },
+          1,
+        ),
+      ),
     ).toEqual({
       type: 'depth',
       profile: 'S',
@@ -106,13 +149,37 @@ describe('kernel fold', () => {
       cap: 3,
     })
     expect(
-      toKernelEvent(stamp({ altitude: 'L2', type: 'finding', action: 'resolved', id: 'f1', round: 1 }, 4)),
+      toKernelEvent(
+        stamp(
+          {
+            altitude: 'L2',
+            type: 'finding',
+            action: 'resolved',
+            id: 'f1',
+            round: 1,
+          },
+          4,
+        ),
+      ),
     ).toEqual({
       type: 'finding',
       action: 'resolved',
       round: 1,
     })
-    expect(toKernelEvent(stamp({ altitude: 'L2', type: 'finding', action: 'filed', id: 'f2', round: 1 }, 5))).toEqual({
+    expect(
+      toKernelEvent(
+        stamp(
+          {
+            altitude: 'L2',
+            type: 'finding',
+            action: 'filed',
+            id: 'f2',
+            round: 1,
+          },
+          5,
+        ),
+      ),
+    ).toEqual({
       type: 'finding',
       action: 'filed',
       round: 1,
@@ -130,7 +197,12 @@ describe('kernel fold', () => {
           6,
         ),
       ),
-    ).toEqual({ type: 'convergence', round: 1, verdict: 'converged', counts: { blocker: 0, material: 0, nitpick: 0 } })
+    ).toEqual({
+      type: 'convergence',
+      round: 1,
+      verdict: 'converged',
+      counts: { blocker: 0, material: 0, nitpick: 0 },
+    })
     expect(
       toKernelEvent(
         stamp(
@@ -161,7 +233,19 @@ describe('kernel fold', () => {
       type: 'child.spawned',
       child: 'c1',
     })
-    expect(toKernelEvent(stamp({ altitude: 'L2', type: 'child_done', child: 'c1', outcome: 'failed' }, 10))).toEqual({
+    expect(
+      toKernelEvent(
+        stamp(
+          {
+            altitude: 'L2',
+            type: 'child_done',
+            child: 'c1',
+            outcome: 'failed',
+          },
+          10,
+        ),
+      ),
+    ).toEqual({
       type: 'child.done',
       child: 'c1',
       outcome: 'failed',
@@ -171,11 +255,32 @@ describe('kernel fold', () => {
   it('maps gate answered/presented optional outcome/deadlineAt when present, absent on historical logs', () => {
     expect(
       toKernelEvent(
-        stamp({ altitude: 'L2', type: 'gate', action: 'answered', mode: 'early', version: 1, outcome: 'extend' }, 1),
+        stamp(
+          {
+            altitude: 'L2',
+            type: 'gate',
+            action: 'answered',
+            mode: 'early',
+            version: 1,
+            outcome: 'extend',
+          },
+          1,
+        ),
       ),
     ).toEqual({ type: 'gate.answered', outcome: 'extend' })
     expect(
-      toKernelEvent(stamp({ altitude: 'L2', type: 'gate', action: 'answered', mode: 'early', version: 1 }, 2)),
+      toKernelEvent(
+        stamp(
+          {
+            altitude: 'L2',
+            type: 'gate',
+            action: 'answered',
+            mode: 'early',
+            version: 1,
+          },
+          2,
+        ),
+      ),
     ).toEqual({ type: 'gate.answered' })
     expect(
       toKernelEvent(
@@ -191,9 +296,25 @@ describe('kernel fold', () => {
           3,
         ),
       ),
-    ).toEqual({ type: 'gate.presented', mode: 'final', version: 2, deadlineAt: '2026-09-01T00:00:00.000Z' })
+    ).toEqual({
+      type: 'gate.presented',
+      mode: 'final',
+      version: 2,
+      deadlineAt: '2026-09-01T00:00:00.000Z',
+    })
     expect(
-      toKernelEvent(stamp({ altitude: 'L2', type: 'gate', action: 'presented', mode: 'final', version: 2 }, 4)),
+      toKernelEvent(
+        stamp(
+          {
+            altitude: 'L2',
+            type: 'gate',
+            action: 'presented',
+            mode: 'final',
+            version: 2,
+          },
+          4,
+        ),
+      ),
     ).toEqual({ type: 'gate.presented', mode: 'final', version: 2 })
   })
 
@@ -210,23 +331,83 @@ describe('kernel fold', () => {
         },
         1,
       ),
-      stamp({ altitude: 'L2', type: 'gate', action: 'answered', mode: 'early', version: 1, outcome: 'extend' }, 2),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'gate',
+          action: 'answered',
+          mode: 'early',
+          version: 1,
+          outcome: 'extend',
+        },
+        2,
+      ),
     ])
     expect(kernel.snapshot.context.gateOutcome).toBe('extend')
     expect(kernel.snapshot.context.gateDeadlineAt).toBe('2026-09-01T00:00:00.000Z')
-    expect(kernel.snapshot.context.gate).toEqual({ mode: 'early', version: 1, answered: true })
+    expect(kernel.snapshot.context.gate).toEqual({
+      mode: 'early',
+      version: 1,
+      answered: true,
+    })
 
     const historical = foldEvents(pipelineMachine, [
-      stamp({ altitude: 'L2', type: 'gate', action: 'presented', mode: 'early', version: 1 }, 1),
-      stamp({ altitude: 'L2', type: 'gate', action: 'answered', mode: 'early', version: 1 }, 2),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'gate',
+          action: 'presented',
+          mode: 'early',
+          version: 1,
+        },
+        1,
+      ),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'gate',
+          action: 'answered',
+          mode: 'early',
+          version: 1,
+        },
+        2,
+      ),
     ])
     expect(historical.snapshot.context.gateOutcome).toBeNull()
     expect(historical.snapshot.context.gateDeadlineAt).toBeNull()
 
     const rePresented = foldEvents(pipelineMachine, [
-      stamp({ altitude: 'L2', type: 'gate', action: 'presented', mode: 'early', version: 1 }, 1),
-      stamp({ altitude: 'L2', type: 'gate', action: 'answered', mode: 'early', version: 1, outcome: 'extend' }, 2),
-      stamp({ altitude: 'L2', type: 'gate', action: 'presented', mode: 'early', version: 2 }, 3),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'gate',
+          action: 'presented',
+          mode: 'early',
+          version: 1,
+        },
+        1,
+      ),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'gate',
+          action: 'answered',
+          mode: 'early',
+          version: 1,
+          outcome: 'extend',
+        },
+        2,
+      ),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'gate',
+          action: 'presented',
+          mode: 'early',
+          version: 2,
+        },
+        3,
+      ),
     ])
     expect(rePresented.snapshot.context.gateOutcome).toBeNull()
     expect(rePresented.snapshot.context.gateDeadlineAt).toBeNull()
@@ -235,14 +416,27 @@ describe('kernel fold', () => {
   it('folds a mapped event list into machine state with exact accounting', () => {
     const machine = linearMachine()
     const events = [
-      stamp({ altitude: 'L2', type: 'depth', profile: 'M', rationale: 'r', source: 'estimator' }, 1),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'depth',
+          profile: 'M',
+          rationale: 'r',
+          source: 'estimator',
+        },
+        1,
+      ),
       stamp({ altitude: 'L2', type: 'stage_enter', stage: 'intake' }, 2),
       stamp({ altitude: 'L2', type: 'stage_exit', stage: 'intake' }, 3),
       stamp({ altitude: 'L2', type: 'stage_enter', stage: 'draft' }, 4),
     ]
     const result = foldEvents(machine, events)
     expect(result.snapshot.value).toBe('draft')
-    expect(result.snapshot.context.stages).toEqual({ intake: 'done', draft: 'active', review: 'pending' })
+    expect(result.snapshot.context.stages).toEqual({
+      intake: 'done',
+      draft: 'active',
+      review: 'pending',
+    })
     expect(result.accounting).toEqual({ total: 4, mapped: 4, tolerated: 0 })
   })
 
@@ -265,12 +459,57 @@ describe('kernel fold', () => {
 
   it('folding a full derived-state log twice deep-equals the whole context, scratch tally residue included', () => {
     const events = [
-      stamp({ altitude: 'L2', type: 'depth', profile: 'S', rationale: 'r', source: 'estimator' }, 1),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'depth',
+          profile: 'S',
+          rationale: 'r',
+          source: 'estimator',
+        },
+        1,
+      ),
       stamp({ altitude: 'L2', type: 'round_open', round: 1, cap: 3 }, 2),
-      stamp({ altitude: 'L2', type: 'finding', action: 'resolved', id: 'f1', round: 1 }, 3),
-      stamp({ altitude: 'L2', type: 'finding', action: 'dismissed', id: 'f2', round: 1 }, 4),
-      stamp({ altitude: 'L2', type: 'finding', action: 'filed', id: 'f3', round: 2 }, 5),
-      stamp({ altitude: 'L2', type: 'finding', action: 'resolved', id: 'f4', round: 2 }, 6),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'finding',
+          action: 'resolved',
+          id: 'f1',
+          round: 1,
+        },
+        3,
+      ),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'finding',
+          action: 'dismissed',
+          id: 'f2',
+          round: 1,
+        },
+        4,
+      ),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'finding',
+          action: 'filed',
+          id: 'f3',
+          round: 2,
+        },
+        5,
+      ),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'finding',
+          action: 'resolved',
+          id: 'f4',
+          round: 2,
+        },
+        6,
+      ),
       stamp(
         {
           altitude: 'L2',
@@ -304,9 +543,14 @@ describe('kernel fold', () => {
         decompose: 'pending',
         atomicity: 'pending',
         gate: 'pending',
+        implement: 'pending',
+        verify: 'pending',
+        release: 'pending',
       },
       depth: 'S',
       round: { current: 1, cap: 3 },
+      executionArmed: false,
+      tasks: {},
       perRound: [
         {
           round: 1,
@@ -351,11 +595,47 @@ describe('kernel fold', () => {
   it('scratch tally residue matches legacy Map semantics: converged rounds clear, unconverged rounds stay', () => {
     const events = [
       stamp({ altitude: 'L2', type: 'round_open', round: 1, cap: 3 }, 1),
-      stamp({ altitude: 'L2', type: 'finding', action: 'resolved', id: 'f1', round: 1 }, 2),
-      stamp({ altitude: 'L2', type: 'finding', action: 'dismissed', id: 'f2', round: 1 }, 3),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'finding',
+          action: 'resolved',
+          id: 'f1',
+          round: 1,
+        },
+        2,
+      ),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'finding',
+          action: 'dismissed',
+          id: 'f2',
+          round: 1,
+        },
+        3,
+      ),
       stamp({ altitude: 'L2', type: 'round_open', round: 2, cap: 3 }, 4),
-      stamp({ altitude: 'L2', type: 'finding', action: 'resolved', id: 'f3', round: 2 }, 5),
-      stamp({ altitude: 'L2', type: 'finding', action: 'resolved', id: 'f4', round: 2 }, 6),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'finding',
+          action: 'resolved',
+          id: 'f3',
+          round: 2,
+        },
+        5,
+      ),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'finding',
+          action: 'resolved',
+          id: 'f4',
+          round: 2,
+        },
+        6,
+      ),
       stamp(
         {
           altitude: 'L2',
@@ -382,7 +662,9 @@ describe('kernel fold', () => {
       },
     ])
     expect(legacy.state.perRound).toEqual(kernel.snapshot.context.perRound)
-    expect(kernel.snapshot.context.tally).toEqual({ 1: { resolved: 1, dismissed: 1 } })
+    expect(kernel.snapshot.context.tally).toEqual({
+      1: { resolved: 1, dismissed: 1 },
+    })
   })
 
   it('tolerates unmapped noise and mapped-but-edge-less events without error or state change', () => {
@@ -394,17 +676,36 @@ describe('kernel fold', () => {
           altitude: 'L1',
           type: 'done',
           agent: 'a',
-          usage: { inputTokens: 1, outputTokens: 1, reasoningTokens: 1, costUsd: 0.1, wallMs: 1 },
+          usage: {
+            inputTokens: 1,
+            outputTokens: 1,
+            reasoningTokens: 1,
+            costUsd: 0.1,
+            wallMs: 1,
+          },
         },
         2,
       ),
-      stamp({ altitude: 'L2', type: 'finding', action: 'filed', id: 'f1', round: 1 }, 3),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'finding',
+          action: 'filed',
+          id: 'f1',
+          round: 1,
+        },
+        3,
+      ),
       stamp({ altitude: 'L2', type: 'round_close', round: 1, cap: 3 }, 4),
     ]
     const result = foldEvents(machine, noise)
     expect(result.accounting).toEqual({ total: 4, mapped: 2, tolerated: 2 })
     expect(result.snapshot.value).toBe('start')
-    expect(result.snapshot.context.stages).toEqual({ intake: 'pending', draft: 'pending', review: 'pending' })
+    expect(result.snapshot.context.stages).toEqual({
+      intake: 'pending',
+      draft: 'pending',
+      review: 'pending',
+    })
   })
 
   it('a mapped event with no valid edge is a no-op, not an error', () => {
@@ -463,24 +764,66 @@ describe('convergence carries both count sets through the kernel fold', () => {
   it('translates the open set onto the kernel event', () => {
     expect(
       toKernelEvent(
-        stamp({ altitude: 'L2', type: 'convergence', round: 1, verdict: 'needs-review', counts: raised, open }, 1),
+        stamp(
+          {
+            altitude: 'L2',
+            type: 'convergence',
+            round: 1,
+            verdict: 'needs-review',
+            counts: raised,
+            open,
+          },
+          1,
+        ),
       ),
-    ).toEqual({ type: 'convergence', round: 1, verdict: 'needs-review', counts: raised, open })
+    ).toEqual({
+      type: 'convergence',
+      round: 1,
+      verdict: 'needs-review',
+      counts: raised,
+      open,
+    })
   })
 
   it('omits the open set for a pre-change line, folding it as equal to counts', () => {
     const { snapshot } = foldEvents(pipelineMachine, [
-      stamp({ altitude: 'L2', type: 'convergence', round: 1, verdict: 'open', counts: raised }, 1),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'convergence',
+          round: 1,
+          verdict: 'open',
+          counts: raised,
+        },
+        1,
+      ),
     ])
-    expect(snapshot.context.lastVerdict).toMatchObject({ counts: raised, open: raised })
+    expect(snapshot.context.lastVerdict).toMatchObject({
+      counts: raised,
+      open: raised,
+    })
   })
 
   it('stamps the open set on perRound records and lastVerdict', () => {
     const { snapshot } = foldEvents(pipelineMachine, [
       stamp({ altitude: 'L2', type: 'round_open', round: 1, cap: 3 }, 1),
-      stamp({ altitude: 'L2', type: 'convergence', round: 1, verdict: 'needs-review', counts: raised, open }, 2),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'convergence',
+          round: 1,
+          verdict: 'needs-review',
+          counts: raised,
+          open,
+        },
+        2,
+      ),
     ])
-    expect(snapshot.context.perRound[0]).toMatchObject({ verdict: 'needs-review', counts: raised, open })
+    expect(snapshot.context.perRound[0]).toMatchObject({
+      verdict: 'needs-review',
+      counts: raised,
+      open,
+    })
     expect(snapshot.context.lastVerdict).toMatchObject({ open })
   })
 })
@@ -523,10 +866,138 @@ describe('kernel fold — loop-memory additive concerns (D5)', () => {
         2,
       ),
       stamp({ altitude: 'L2', type: 'round_open', round: 4, cap: 4 }, 3),
-      stamp({ altitude: 'L2', type: 'convergence', round: 4, verdict: 'converged', counts: concernsCounts }, 4),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'convergence',
+          round: 4,
+          verdict: 'converged',
+          counts: concernsCounts,
+        },
+        4,
+      ),
     ])
-    expect(snapshot.context.perRound[0]).toMatchObject({ concerns: ['fingerprint a'] })
+    expect(snapshot.context.perRound[0]).toMatchObject({
+      concerns: ['fingerprint a'],
+    })
     expect(snapshot.context.perRound[1]).toMatchObject({ concerns: [] })
     expect(snapshot.context.lastVerdict).toMatchObject({ concerns: [] })
+  })
+})
+
+describe('kernel fold — agent_todos tolerance pin (agent-todos-capture D5)', () => {
+  const todosEvent = (seq: number): SddEvent =>
+    stamp(
+      {
+        altitude: 'L0',
+        type: 'agent_todos',
+        agent: 'implement-t2',
+        todos: [
+          { content: 'RED: add llm:verifier rows', status: 'in_progress' },
+          { content: 'GREEN: implementation', status: 'pending' },
+        ],
+      },
+      seq,
+    )
+
+  it('toKernelEvent returns null: the fold counts the event tolerated and the snapshot is unchanged', () => {
+    expect(toKernelEvent(todosEvent(1))).toBeNull()
+    const base = [
+      stamp({ altitude: 'L2', type: 'round_open', round: 1, cap: 3 }, 1),
+      stamp({ altitude: 'L2', type: 'stage_enter', stage: 'intake' }, 2),
+      todosEvent(3),
+      stamp({ altitude: 'L2', type: 'stage_exit', stage: 'intake' }, 4),
+      todosEvent(5),
+    ]
+    const without = foldEvents(
+      pipelineMachine,
+      base.filter((event) => event.type !== 'agent_todos'),
+    )
+    const withTodos = foldEvents(pipelineMachine, base)
+    expect(withTodos.accounting).toEqual({ total: 5, mapped: 3, tolerated: 2 })
+    expect(withTodos.snapshot).toEqual(without.snapshot)
+  })
+})
+
+describe('kernel fold — execution residues (U3 D1/D4)', () => {
+  it('folds the armed fact into executionArmed; an unarmed log stays false', () => {
+    const armed = foldEvents(pipelineMachine, [stamp({ altitude: 'L2', type: 'execution', action: 'armed' }, 1)])
+    expect(armed.snapshot.context.executionArmed).toBe(true)
+    const unarmed = foldEvents(pipelineMachine, [
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'depth',
+          profile: 'S',
+          rationale: 'r',
+          source: 'estimator',
+        },
+        1,
+      ),
+    ])
+    expect(unarmed.snapshot.context.executionArmed).toBe(false)
+  })
+
+  it('maps the execution and task events through toKernelEvent', () => {
+    expect(toKernelEvent(stamp({ altitude: 'L2', type: 'execution', action: 'armed' }, 1))).toEqual({
+      type: 'execution.armed',
+    })
+    expect(toKernelEvent(stamp({ altitude: 'L2', type: 'task', action: 'started', id: '1' }, 2))).toEqual({
+      type: 'task.started',
+      id: '1',
+    })
+    expect(
+      toKernelEvent(
+        stamp(
+          {
+            altitude: 'L2',
+            type: 'task',
+            action: 'failed',
+            id: '2',
+            detail: 'red',
+          },
+          3,
+        ),
+      ),
+    ).toEqual({
+      type: 'task.failed',
+      id: '2',
+    })
+  })
+
+  it('folds task events into the tasks record: last status wins, started counts attempts', () => {
+    const { snapshot } = foldEvents(pipelineMachine, [
+      stamp({ altitude: 'L2', type: 'task', action: 'started', id: '1' }, 1),
+      stamp({ altitude: 'L2', type: 'task', action: 'done', id: '1' }, 2),
+      stamp({ altitude: 'L2', type: 'task', action: 'started', id: '2' }, 3),
+      stamp(
+        {
+          altitude: 'L2',
+          type: 'task',
+          action: 'failed',
+          id: '2',
+          detail: 'verify red',
+        },
+        4,
+      ),
+      stamp({ altitude: 'L2', type: 'task', action: 'started', id: '2' }, 5),
+    ])
+    expect(snapshot.context.tasks).toEqual({
+      '1': { status: 'done', attempts: 1 },
+      '2': { status: 'running', attempts: 2 },
+    })
+  })
+
+  it('a task started twice then done keeps both attempts in the record', () => {
+    const { snapshot } = foldEvents(pipelineMachine, [
+      stamp({ altitude: 'L2', type: 'task', action: 'started', id: '3' }, 1),
+      stamp({ altitude: 'L2', type: 'task', action: 'failed', id: '3' }, 2),
+      stamp({ altitude: 'L2', type: 'task', action: 'started', id: '3' }, 3),
+      stamp({ altitude: 'L2', type: 'task', action: 'done', id: '3' }, 4),
+    ])
+    expect(snapshot.context.tasks['3']).toEqual({
+      status: 'done',
+      attempts: 2,
+    })
   })
 })

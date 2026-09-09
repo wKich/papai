@@ -1,15 +1,15 @@
 {
   "afk-runner/src/accounting.ts": {
-    "score": 0.7529411764705882,
-    "killed": 128,
+    "score": 0.7832512315270936,
+    "killed": 159,
     "timeout": 0,
-    "scored": 170
+    "scored": 203
   },
   "afk-runner/src/agent-layer.ts": {
-    "score": 0.8503937007874016,
-    "killed": 106,
+    "score": 0.9347826086956522,
+    "killed": 84,
     "timeout": 2,
-    "scored": 127
+    "scored": 92
   },
   "afk-runner/src/agent-reporter.ts": {
     "score": 0.6712328767123288,
@@ -42,8 +42,8 @@
     "scored": 283
   },
   "afk-runner/src/analyze-gates.ts": {
-    "score": 0.6583333333333333,
-    "killed": 237,
+    "score": 0.6777777777777778,
+    "killed": 244,
     "timeout": 0,
     "scored": 360
   },
@@ -78,16 +78,16 @@
     "scored": 45
   },
   "afk-runner/src/cli.ts": {
-    "score": 0.49696969696969695,
-    "killed": 164,
+    "score": 0.5052631578947369,
+    "killed": 144,
     "timeout": 0,
-    "scored": 330
+    "scored": 285
   },
   "afk-runner/src/config.ts": {
-    "score": 0.7288135593220338,
-    "killed": 86,
+    "score": 0.7461538461538462,
+    "killed": 97,
     "timeout": 0,
-    "scored": 118
+    "scored": 130
   },
   "afk-runner/src/drive/boundary.ts": {
     "score": 0.7916666666666666,
@@ -120,10 +120,10 @@
     "scored": 2
   },
   "afk-runner/src/event-schemas.ts": {
-    "score": 0.7151898734177216,
-    "killed": 113,
+    "score": 0.7482014388489209,
+    "killed": 104,
     "timeout": 0,
-    "scored": 158
+    "scored": 139
   },
   "afk-runner/src/events.ts": {
     "score": 0.9565217391304348,
@@ -131,11 +131,29 @@
     "timeout": 0,
     "scored": 46
   },
+  "afk-runner/src/execution-schemas.ts": {
+    "score": 0.3157894736842105,
+    "killed": 12,
+    "timeout": 0,
+    "scored": 38
+  },
+  "afk-runner/src/graph/pipeline-agent.ts": {
+    "score": 0.8333333333333334,
+    "killed": 10,
+    "timeout": 0,
+    "scored": 12
+  },
+  "afk-runner/src/graph/pipeline-execution.ts": {
+    "score": 0.5178571428571429,
+    "killed": 29,
+    "timeout": 0,
+    "scored": 56
+  },
   "afk-runner/src/graph/pipeline-work.ts": {
-    "score": 0.42731277533039647,
-    "killed": 95,
-    "timeout": 2,
-    "scored": 227
+    "score": 0.673469387755102,
+    "killed": 131,
+    "timeout": 1,
+    "scored": 196
   },
   "afk-runner/src/graph/pipeline.ts": {
     "score": 1,
@@ -144,10 +162,10 @@
     "scored": 4
   },
   "afk-runner/src/kernel/fold.ts": {
-    "score": 0.9271523178807947,
-    "killed": 140,
+    "score": 0.9575757575757575,
+    "killed": 158,
     "timeout": 0,
-    "scored": 151
+    "scored": 165
   },
   "afk-runner/src/kernel/interpreter.ts": {
     "score": 0.6075949367088608,
@@ -156,22 +174,28 @@
     "scored": 79
   },
   "afk-runner/src/kernel/machine.ts": {
-    "score": 0.8410041841004184,
-    "killed": 201,
+    "score": 0.8581560283687943,
+    "killed": 242,
     "timeout": 0,
-    "scored": 239
+    "scored": 282
+  },
+  "afk-runner/src/kernel/types.ts": {
+    "score": 1,
+    "killed": 6,
+    "timeout": 0,
+    "scored": 6
   },
   "afk-runner/src/legacy-fold.ts": {
-    "score": 0.9607843137254902,
-    "killed": 147,
+    "score": 0.9634146341463414,
+    "killed": 158,
     "timeout": 0,
-    "scored": 153
+    "scored": 164
   },
   "afk-runner/src/memo-project.ts": {
-    "score": 0.7086614173228346,
-    "killed": 89,
+    "score": 0.7153846153846154,
+    "killed": 92,
     "timeout": 1,
-    "scored": 127
+    "scored": 130
   },
   "afk-runner/src/openspec-driver.ts": {
     "score": 0.7567567567567568,
@@ -192,28 +216,28 @@
     "scored": 52
   },
   "afk-runner/src/run-recovery.ts": {
-    "score": 0.49079754601226994,
-    "killed": 80,
+    "score": 0.5263157894736842,
+    "killed": 100,
     "timeout": 0,
-    "scored": 163
+    "scored": 190
   },
   "afk-runner/src/run-resume.ts": {
-    "score": 0.6126126126126126,
-    "killed": 68,
+    "score": 0.6216216216216216,
+    "killed": 69,
     "timeout": 0,
     "scored": 111
   },
   "afk-runner/src/run-state.ts": {
-    "score": 0.9159663865546218,
-    "killed": 109,
+    "score": 0.92,
+    "killed": 115,
     "timeout": 0,
-    "scored": 119
+    "scored": 125
   },
   "afk-runner/src/run.ts": {
-    "score": 0.7297297297297297,
-    "killed": 27,
+    "score": 0.782608695652174,
+    "killed": 36,
     "timeout": 0,
-    "scored": 37
+    "scored": 46
   },
   "afk-runner/src/session-id.ts": {
     "score": 0.7647058823529411,
@@ -226,6 +250,12 @@
     "killed": 119,
     "timeout": 0,
     "scored": 130
+  },
+  "afk-runner/src/start-args.ts": {
+    "score": 0.9473684210526315,
+    "killed": 50,
+    "timeout": 4,
+    "scored": 57
   },
   "afk-runner/src/stop-controller.ts": {
     "score": 0.925,
@@ -281,6 +311,12 @@
     "timeout": 0,
     "scored": 35
   },
+  "afk-runner/src/work/fix-target.ts": {
+    "score": 0.7032967032967034,
+    "killed": 128,
+    "timeout": 0,
+    "scored": 182
+  },
   "afk-runner/src/work/gate-answers.ts": {
     "score": 0.8313253012048193,
     "killed": 138,
@@ -293,11 +329,17 @@
     "timeout": 0,
     "scored": 74
   },
+  "afk-runner/src/work/gate-decisions.ts": {
+    "score": 0.49333333333333335,
+    "killed": 37,
+    "timeout": 0,
+    "scored": 75
+  },
   "afk-runner/src/work/gate-digest-extract.ts": {
-    "score": 0.6,
+    "score": 0.6617647058823529,
     "killed": 90,
     "timeout": 0,
-    "scored": 150
+    "scored": 136
   },
   "afk-runner/src/work/gate-expected.ts": {
     "score": 0.5735294117647058,
@@ -324,10 +366,10 @@
     "scored": 68
   },
   "afk-runner/src/work/gate-model.ts": {
-    "score": 0.8571428571428571,
-    "killed": 126,
+    "score": 0.8627450980392157,
+    "killed": 132,
     "timeout": 0,
-    "scored": 147
+    "scored": 153
   },
   "afk-runner/src/work/gate-parse-lines.ts": {
     "score": 0.20297029702970298,
@@ -348,10 +390,10 @@
     "scored": 284
   },
   "afk-runner/src/work/gate-settle.ts": {
-    "score": 0.7245762711864406,
-    "killed": 171,
+    "score": 0.7569444444444444,
+    "killed": 218,
     "timeout": 0,
-    "scored": 236
+    "scored": 288
   },
   "afk-runner/src/work/gate-signals.ts": {
     "score": 0.7433628318584071,
@@ -364,6 +406,12 @@
     "killed": 85,
     "timeout": 0,
     "scored": 135
+  },
+  "afk-runner/src/work/implement.ts": {
+    "score": 0.676923076923077,
+    "killed": 87,
+    "timeout": 1,
+    "scored": 130
   },
   "afk-runner/src/work/intake.ts": {
     "score": 0.7755102040816326,
@@ -389,11 +437,23 @@
     "timeout": 0,
     "scored": 57
   },
-  "afk-runner/src/work/report.ts": {
-    "score": 0.6032786885245902,
-    "killed": 184,
+  "afk-runner/src/work/present-release.ts": {
+    "score": 0.6984126984126984,
+    "killed": 44,
     "timeout": 0,
-    "scored": 305
+    "scored": 63
+  },
+  "afk-runner/src/work/report-execution.ts": {
+    "score": 0.7948717948717948,
+    "killed": 62,
+    "timeout": 0,
+    "scored": 78
+  },
+  "afk-runner/src/work/report.ts": {
+    "score": 0.6050955414012739,
+    "killed": 190,
+    "timeout": 0,
+    "scored": 314
   },
   "afk-runner/src/work/response-error.ts": {
     "score": 0.8421052631578947,
@@ -431,11 +491,41 @@
     "timeout": 0,
     "scored": 123
   },
+  "afk-runner/src/work/run-check.ts": {
+    "score": 1,
+    "killed": 11,
+    "timeout": 0,
+    "scored": 11
+  },
+  "afk-runner/src/work/slice-commit.ts": {
+    "score": 0.7391304347826086,
+    "killed": 34,
+    "timeout": 0,
+    "scored": 46
+  },
   "afk-runner/src/work/steer.ts": {
     "score": 0.2230769230769231,
     "killed": 29,
     "timeout": 0,
     "scored": 130
+  },
+  "afk-runner/src/work/tasks-md.ts": {
+    "score": 0.868421052631579,
+    "killed": 32,
+    "timeout": 1,
+    "scored": 38
+  },
+  "afk-runner/src/work/verify.ts": {
+    "score": 0.8051948051948052,
+    "killed": 124,
+    "timeout": 0,
+    "scored": 154
+  },
+  "afk-runner/src/work/veto-revision.ts": {
+    "score": 0.6129032258064516,
+    "killed": 19,
+    "timeout": 0,
+    "scored": 31
   },
   "afk-runner/src/work/veto-updater.ts": {
     "score": 0.43781094527363185,
@@ -450,10 +540,16 @@
     "scored": 40
   },
   "afk-runner/src/work/waiter-steer.ts": {
-    "score": 0.3615819209039548,
-    "killed": 64,
+    "score": 0.36813186813186816,
+    "killed": 67,
     "timeout": 0,
-    "scored": 177
+    "scored": 182
+  },
+  "afk-runner/src/write-guard.ts": {
+    "score": 0.7692307692307693,
+    "killed": 50,
+    "timeout": 0,
+    "scored": 65
   },
   "client/settings/byok-provider-fetchers.ts": {
     "score": 0.75,
@@ -490,6 +586,888 @@
     "killed": 9,
     "timeout": 0,
     "scored": 26
+  },
+  "opencode-agent/src/activity-detail.ts": {
+    "score": 0.9358974358974359,
+    "killed": 73,
+    "timeout": 0,
+    "scored": 78
+  },
+  "opencode-agent/src/activity.ts": {
+    "score": 0.8383838383838383,
+    "killed": 83,
+    "timeout": 0,
+    "scored": 99
+  },
+  "opencode-agent/src/agent-handle.ts": {
+    "score": 1,
+    "killed": 20,
+    "timeout": 0,
+    "scored": 20
+  },
+  "opencode-agent/src/agent-session.ts": {
+    "score": 1,
+    "killed": 6,
+    "timeout": 0,
+    "scored": 6
+  },
+  "opencode-agent/src/agent-state.ts": {
+    "score": 1,
+    "killed": 13,
+    "timeout": 0,
+    "scored": 13
+  },
+  "opencode-agent/src/artifacts.ts": {
+    "score": 0.7666666666666667,
+    "killed": 23,
+    "timeout": 0,
+    "scored": 30
+  },
+  "opencode-agent/src/ask-json.ts": {
+    "score": 0.6666666666666666,
+    "killed": 12,
+    "timeout": 0,
+    "scored": 18
+  },
+  "opencode-agent/src/blocks.ts": {
+    "score": 0.7912087912087912,
+    "killed": 71,
+    "timeout": 1,
+    "scored": 91
+  },
+  "opencode-agent/src/budget-notices.ts": {
+    "score": 0.4050632911392405,
+    "killed": 32,
+    "timeout": 0,
+    "scored": 79
+  },
+  "opencode-agent/src/cascade.ts": {
+    "score": 0.8923076923076924,
+    "killed": 58,
+    "timeout": 0,
+    "scored": 65
+  },
+  "opencode-agent/src/check-loop.ts": {
+    "score": 0.9682539682539683,
+    "killed": 57,
+    "timeout": 4,
+    "scored": 63
+  },
+  "opencode-agent/src/ci-diagnosis.ts": {
+    "score": 0.5517241379310345,
+    "killed": 32,
+    "timeout": 0,
+    "scored": 58
+  },
+  "opencode-agent/src/ci-groups.ts": {
+    "score": 1,
+    "killed": 8,
+    "timeout": 0,
+    "scored": 8
+  },
+  "opencode-agent/src/ci-trigger.ts": {
+    "score": 0.7538461538461538,
+    "killed": 49,
+    "timeout": 0,
+    "scored": 65
+  },
+  "opencode-agent/src/claude-adapter.ts": {
+    "score": 0.7480916030534351,
+    "killed": 98,
+    "timeout": 0,
+    "scored": 131
+  },
+  "opencode-agent/src/claude-argv.ts": {
+    "score": 0.9,
+    "killed": 90,
+    "timeout": 0,
+    "scored": 100
+  },
+  "opencode-agent/src/claude-config-dir.ts": {
+    "score": 0.8571428571428571,
+    "killed": 6,
+    "timeout": 0,
+    "scored": 7
+  },
+  "opencode-agent/src/claude-connect.ts": {
+    "score": 0.5285714285714286,
+    "killed": 37,
+    "timeout": 0,
+    "scored": 70
+  },
+  "opencode-agent/src/claude-contract.ts": {
+    "score": 0.8513513513513513,
+    "killed": 126,
+    "timeout": 0,
+    "scored": 148
+  },
+  "opencode-agent/src/claude-env-knob.ts": {
+    "score": 0.8541666666666666,
+    "killed": 41,
+    "timeout": 0,
+    "scored": 48
+  },
+  "opencode-agent/src/claude-kill.ts": {
+    "score": 0.6896551724137931,
+    "killed": 20,
+    "timeout": 0,
+    "scored": 29
+  },
+  "opencode-agent/src/claude-progress.ts": {
+    "score": 0.6153846153846154,
+    "killed": 40,
+    "timeout": 0,
+    "scored": 65
+  },
+  "opencode-agent/src/claude-spend.ts": {
+    "score": 0.9523809523809523,
+    "killed": 40,
+    "timeout": 0,
+    "scored": 42
+  },
+  "opencode-agent/src/claude-turn-classify.ts": {
+    "score": 0.7380952380952381,
+    "killed": 31,
+    "timeout": 0,
+    "scored": 42
+  },
+  "opencode-agent/src/claude-usage.ts": {
+    "score": 0.9130434782608695,
+    "killed": 42,
+    "timeout": 0,
+    "scored": 46
+  },
+  "opencode-agent/src/cli-args.ts": {
+    "score": 0.8028169014084507,
+    "killed": 55,
+    "timeout": 2,
+    "scored": 71
+  },
+  "opencode-agent/src/command-refusals.ts": {
+    "score": 0.5294117647058824,
+    "killed": 18,
+    "timeout": 0,
+    "scored": 34
+  },
+  "opencode-agent/src/commands.ts": {
+    "score": 0.9523809523809523,
+    "killed": 100,
+    "timeout": 0,
+    "scored": 105
+  },
+  "opencode-agent/src/comment-intent.ts": {
+    "score": 0.7610619469026548,
+    "killed": 86,
+    "timeout": 0,
+    "scored": 113
+  },
+  "opencode-agent/src/commit-identity.ts": {
+    "score": 0.7564102564102564,
+    "killed": 59,
+    "timeout": 0,
+    "scored": 78
+  },
+  "opencode-agent/src/commit-repair.ts": {
+    "score": 0.6666666666666666,
+    "killed": 17,
+    "timeout": 3,
+    "scored": 30
+  },
+  "opencode-agent/src/config-backend-values.ts": {
+    "score": 0.8846153846153846,
+    "killed": 46,
+    "timeout": 0,
+    "scored": 52
+  },
+  "opencode-agent/src/config-clock-values.ts": {
+    "score": 1,
+    "killed": 6,
+    "timeout": 0,
+    "scored": 6
+  },
+  "opencode-agent/src/config-discovery.ts": {
+    "score": 0.8571428571428571,
+    "killed": 60,
+    "timeout": 0,
+    "scored": 70
+  },
+  "opencode-agent/src/config-model-values.ts": {
+    "score": 0.9636363636363636,
+    "killed": 53,
+    "timeout": 0,
+    "scored": 55
+  },
+  "opencode-agent/src/config-values.ts": {
+    "score": 0.905982905982906,
+    "killed": 106,
+    "timeout": 0,
+    "scored": 117
+  },
+  "opencode-agent/src/config.ts": {
+    "score": 0.9,
+    "killed": 99,
+    "timeout": 0,
+    "scored": 110
+  },
+  "opencode-agent/src/contain.ts": {
+    "score": 0.8269230769230769,
+    "killed": 43,
+    "timeout": 0,
+    "scored": 52
+  },
+  "opencode-agent/src/deadline.ts": {
+    "score": 1,
+    "killed": 12,
+    "timeout": 0,
+    "scored": 12
+  },
+  "opencode-agent/src/debug-transcript.ts": {
+    "score": 0.8,
+    "killed": 40,
+    "timeout": 0,
+    "scored": 50
+  },
+  "opencode-agent/src/deps.ts": {
+    "score": 0.3333333333333333,
+    "killed": 15,
+    "timeout": 0,
+    "scored": 45
+  },
+  "opencode-agent/src/diff-guard.ts": {
+    "score": 0.8,
+    "killed": 112,
+    "timeout": 0,
+    "scored": 140
+  },
+  "opencode-agent/src/errors.ts": {
+    "score": 0.5353535353535354,
+    "killed": 53,
+    "timeout": 0,
+    "scored": 99
+  },
+  "opencode-agent/src/event-follower.ts": {
+    "score": 1,
+    "killed": 14,
+    "timeout": 0,
+    "scored": 14
+  },
+  "opencode-agent/src/feedback-target.ts": {
+    "score": 1,
+    "killed": 13,
+    "timeout": 0,
+    "scored": 13
+  },
+  "opencode-agent/src/feedback.ts": {
+    "score": 0.7446808510638298,
+    "killed": 35,
+    "timeout": 0,
+    "scored": 47
+  },
+  "opencode-agent/src/git-commit.ts": {
+    "score": 0.8888888888888888,
+    "killed": 136,
+    "timeout": 0,
+    "scored": 153
+  },
+  "opencode-agent/src/git-drift.ts": {
+    "score": 0.8701298701298701,
+    "killed": 67,
+    "timeout": 0,
+    "scored": 77
+  },
+  "opencode-agent/src/git-merge.ts": {
+    "score": 0.8372093023255814,
+    "killed": 36,
+    "timeout": 0,
+    "scored": 43
+  },
+  "opencode-agent/src/git-reconcile.ts": {
+    "score": 0.9555555555555556,
+    "killed": 43,
+    "timeout": 0,
+    "scored": 45
+  },
+  "opencode-agent/src/git-revert.ts": {
+    "score": 0,
+    "killed": 0,
+    "timeout": 0,
+    "scored": 35
+  },
+  "opencode-agent/src/git-types.ts": {
+    "score": 0.5,
+    "killed": 2,
+    "timeout": 0,
+    "scored": 4
+  },
+  "opencode-agent/src/git.ts": {
+    "score": 0.7283950617283951,
+    "killed": 118,
+    "timeout": 0,
+    "scored": 162
+  },
+  "opencode-agent/src/github-actions.ts": {
+    "score": 0.8666666666666667,
+    "killed": 39,
+    "timeout": 0,
+    "scored": 45
+  },
+  "opencode-agent/src/github-labels.ts": {
+    "score": 0.7428571428571429,
+    "killed": 26,
+    "timeout": 0,
+    "scored": 35
+  },
+  "opencode-agent/src/github-pulls.ts": {
+    "score": 0.9743589743589743,
+    "killed": 38,
+    "timeout": 0,
+    "scored": 39
+  },
+  "opencode-agent/src/github-reactions.ts": {
+    "score": 0.9545454545454546,
+    "killed": 21,
+    "timeout": 0,
+    "scored": 22
+  },
+  "opencode-agent/src/github.ts": {
+    "score": 0.6,
+    "killed": 21,
+    "timeout": 0,
+    "scored": 35
+  },
+  "opencode-agent/src/glob-output.ts": {
+    "score": 0.78125,
+    "killed": 50,
+    "timeout": 0,
+    "scored": 64
+  },
+  "opencode-agent/src/guardrails.ts": {
+    "score": 0.912621359223301,
+    "killed": 94,
+    "timeout": 0,
+    "scored": 103
+  },
+  "opencode-agent/src/heartbeat.ts": {
+    "score": 1,
+    "killed": 18,
+    "timeout": 0,
+    "scored": 18
+  },
+  "opencode-agent/src/identity.ts": {
+    "score": 0.8,
+    "killed": 28,
+    "timeout": 0,
+    "scored": 35
+  },
+  "opencode-agent/src/implement-prompts.ts": {
+    "score": 0.5824175824175825,
+    "killed": 53,
+    "timeout": 0,
+    "scored": 91
+  },
+  "opencode-agent/src/intent.ts": {
+    "score": 0.6666666666666666,
+    "killed": 8,
+    "timeout": 0,
+    "scored": 12
+  },
+  "opencode-agent/src/labels.ts": {
+    "score": 0.8939393939393939,
+    "killed": 59,
+    "timeout": 0,
+    "scored": 66
+  },
+  "opencode-agent/src/logger.ts": {
+    "score": 0.675,
+    "killed": 27,
+    "timeout": 0,
+    "scored": 40
+  },
+  "opencode-agent/src/markdown.ts": {
+    "score": 1,
+    "killed": 9,
+    "timeout": 0,
+    "scored": 9
+  },
+  "opencode-agent/src/mcp-servers.ts": {
+    "score": 0.8518518518518519,
+    "killed": 69,
+    "timeout": 0,
+    "scored": 81
+  },
+  "opencode-agent/src/model-json.ts": {
+    "score": 0.7627118644067796,
+    "killed": 45,
+    "timeout": 0,
+    "scored": 59
+  },
+  "opencode-agent/src/model-metadata.ts": {
+    "score": 0.8615384615384616,
+    "killed": 56,
+    "timeout": 0,
+    "scored": 65
+  },
+  "opencode-agent/src/obra-skills.ts": {
+    "score": 0.7741935483870968,
+    "killed": 96,
+    "timeout": 0,
+    "scored": 124
+  },
+  "opencode-agent/src/openai-config.ts": {
+    "score": 0.9298245614035088,
+    "killed": 53,
+    "timeout": 0,
+    "scored": 57
+  },
+  "opencode-agent/src/opencode-adapter.ts": {
+    "score": 0.575,
+    "killed": 46,
+    "timeout": 0,
+    "scored": 80
+  },
+  "opencode-agent/src/opencode-connect.ts": {
+    "score": 0.4426229508196721,
+    "killed": 54,
+    "timeout": 0,
+    "scored": 122
+  },
+  "opencode-agent/src/openspec-driver.ts": {
+    "score": 0.819672131147541,
+    "killed": 100,
+    "timeout": 0,
+    "scored": 122
+  },
+  "opencode-agent/src/orchestrator.ts": {
+    "score": 0.8426966292134831,
+    "killed": 75,
+    "timeout": 0,
+    "scored": 89
+  },
+  "opencode-agent/src/outcomes.ts": {
+    "score": 1,
+    "killed": 15,
+    "timeout": 0,
+    "scored": 15
+  },
+  "opencode-agent/src/permissions.ts": {
+    "score": 0.9444444444444444,
+    "killed": 17,
+    "timeout": 0,
+    "scored": 18
+  },
+  "opencode-agent/src/phase-failure.ts": {
+    "score": 0.625,
+    "killed": 10,
+    "timeout": 0,
+    "scored": 16
+  },
+  "opencode-agent/src/phase-names.ts": {
+    "score": 0.8333333333333334,
+    "killed": 10,
+    "timeout": 0,
+    "scored": 12
+  },
+  "opencode-agent/src/phases/answer.ts": {
+    "score": 0.43859649122807015,
+    "killed": 25,
+    "timeout": 0,
+    "scored": 57
+  },
+  "opencode-agent/src/phases/archive.ts": {
+    "score": 0,
+    "killed": 0,
+    "timeout": 0,
+    "scored": 23
+  },
+  "opencode-agent/src/phases/ci-commit.ts": {
+    "score": 0.8666666666666667,
+    "killed": 13,
+    "timeout": 0,
+    "scored": 15
+  },
+  "opencode-agent/src/phases/ci-fix.ts": {
+    "score": 0.6771653543307087,
+    "killed": 86,
+    "timeout": 0,
+    "scored": 127
+  },
+  "opencode-agent/src/phases/ci-report.ts": {
+    "score": 0.5944444444444444,
+    "killed": 107,
+    "timeout": 0,
+    "scored": 180
+  },
+  "opencode-agent/src/phases/deliver.ts": {
+    "score": 0.6938775510204082,
+    "killed": 68,
+    "timeout": 0,
+    "scored": 98
+  },
+  "opencode-agent/src/phases/envelope.ts": {
+    "score": 1,
+    "killed": 1,
+    "timeout": 0,
+    "scored": 1
+  },
+  "opencode-agent/src/phases/implement-commit.ts": {
+    "score": 0.8235294117647058,
+    "killed": 28,
+    "timeout": 0,
+    "scored": 34
+  },
+  "opencode-agent/src/phases/implement-steps.ts": {
+    "score": 0.8831168831168831,
+    "killed": 67,
+    "timeout": 1,
+    "scored": 77
+  },
+  "opencode-agent/src/phases/implement.ts": {
+    "score": 0.703125,
+    "killed": 45,
+    "timeout": 0,
+    "scored": 64
+  },
+  "opencode-agent/src/phases/plan-draft.ts": {
+    "score": 0.6422764227642277,
+    "killed": 79,
+    "timeout": 0,
+    "scored": 123
+  },
+  "opencode-agent/src/phases/plan.ts": {
+    "score": 0.5943396226415094,
+    "killed": 63,
+    "timeout": 0,
+    "scored": 106
+  },
+  "opencode-agent/src/phases/review-blocked-patch.ts": {
+    "score": 0.4827586206896552,
+    "killed": 14,
+    "timeout": 0,
+    "scored": 29
+  },
+  "opencode-agent/src/phases/review-push.ts": {
+    "score": 0.711864406779661,
+    "killed": 42,
+    "timeout": 0,
+    "scored": 59
+  },
+  "opencode-agent/src/phases/review.ts": {
+    "score": 0.5094339622641509,
+    "killed": 54,
+    "timeout": 0,
+    "scored": 106
+  },
+  "opencode-agent/src/phases/sync.ts": {
+    "score": 0.65,
+    "killed": 76,
+    "timeout": 2,
+    "scored": 120
+  },
+  "opencode-agent/src/phases/triage-comments.ts": {
+    "score": 0.484375,
+    "killed": 31,
+    "timeout": 0,
+    "scored": 64
+  },
+  "opencode-agent/src/phases/triage.ts": {
+    "score": 0.816,
+    "killed": 102,
+    "timeout": 0,
+    "scored": 125
+  },
+  "opencode-agent/src/plan-steps.ts": {
+    "score": 0.5606060606060606,
+    "killed": 36,
+    "timeout": 1,
+    "scored": 66
+  },
+  "opencode-agent/src/pr-merged-event.ts": {
+    "score": 0.47368421052631576,
+    "killed": 18,
+    "timeout": 0,
+    "scored": 38
+  },
+  "opencode-agent/src/pr-trigger.ts": {
+    "score": 0.6046511627906976,
+    "killed": 26,
+    "timeout": 0,
+    "scored": 43
+  },
+  "opencode-agent/src/presentation.ts": {
+    "score": 0.9572649572649573,
+    "killed": 112,
+    "timeout": 0,
+    "scored": 117
+  },
+  "opencode-agent/src/pricing.ts": {
+    "score": 0.6762589928057554,
+    "killed": 94,
+    "timeout": 0,
+    "scored": 139
+  },
+  "opencode-agent/src/progress-lines.ts": {
+    "score": 1,
+    "killed": 31,
+    "timeout": 0,
+    "scored": 31
+  },
+  "opencode-agent/src/progress.ts": {
+    "score": 0.9158878504672897,
+    "killed": 98,
+    "timeout": 0,
+    "scored": 107
+  },
+  "opencode-agent/src/prompt-budget.ts": {
+    "score": 0.8877551020408163,
+    "killed": 79,
+    "timeout": 8,
+    "scored": 98
+  },
+  "opencode-agent/src/prompts.ts": {
+    "score": 0.4117647058823529,
+    "killed": 63,
+    "timeout": 0,
+    "scored": 153
+  },
+  "opencode-agent/src/protected-paths.ts": {
+    "score": 0.7058823529411765,
+    "killed": 12,
+    "timeout": 0,
+    "scored": 17
+  },
+  "opencode-agent/src/provider-proxy.ts": {
+    "score": 0.8545454545454545,
+    "killed": 91,
+    "timeout": 3,
+    "scored": 110
+  },
+  "opencode-agent/src/pull-request-body.ts": {
+    "score": 0.5454545454545454,
+    "killed": 6,
+    "timeout": 0,
+    "scored": 11
+  },
+  "opencode-agent/src/rate-limit-windows.ts": {
+    "score": 0.84,
+    "killed": 21,
+    "timeout": 0,
+    "scored": 25
+  },
+  "opencode-agent/src/red-run.ts": {
+    "score": 0.9459459459459459,
+    "killed": 35,
+    "timeout": 0,
+    "scored": 37
+  },
+  "opencode-agent/src/reply-buffer.ts": {
+    "score": 0.7073170731707317,
+    "killed": 29,
+    "timeout": 0,
+    "scored": 41
+  },
+  "opencode-agent/src/reply-comment.ts": {
+    "score": 0.6629213483146067,
+    "killed": 59,
+    "timeout": 0,
+    "scored": 89
+  },
+  "opencode-agent/src/repository.ts": {
+    "score": 0.9761904761904762,
+    "killed": 41,
+    "timeout": 0,
+    "scored": 42
+  },
+  "opencode-agent/src/review-outcome.ts": {
+    "score": 0.6986301369863014,
+    "killed": 51,
+    "timeout": 0,
+    "scored": 73
+  },
+  "opencode-agent/src/review-runner.ts": {
+    "score": 0.5652173913043478,
+    "killed": 39,
+    "timeout": 0,
+    "scored": 69
+  },
+  "opencode-agent/src/review-transcript.ts": {
+    "score": 0.6792452830188679,
+    "killed": 36,
+    "timeout": 0,
+    "scored": 53
+  },
+  "opencode-agent/src/run-cost-lines.ts": {
+    "score": 0.717948717948718,
+    "killed": 56,
+    "timeout": 0,
+    "scored": 78
+  },
+  "opencode-agent/src/run-detail.ts": {
+    "score": 0.9038461538461539,
+    "killed": 94,
+    "timeout": 0,
+    "scored": 104
+  },
+  "opencode-agent/src/run-post.ts": {
+    "score": 0.68,
+    "killed": 17,
+    "timeout": 0,
+    "scored": 25
+  },
+  "opencode-agent/src/run-report.ts": {
+    "score": 0.5444444444444444,
+    "killed": 49,
+    "timeout": 0,
+    "scored": 90
+  },
+  "opencode-agent/src/run-spend.ts": {
+    "score": 0.65,
+    "killed": 39,
+    "timeout": 0,
+    "scored": 60
+  },
+  "opencode-agent/src/salvage.ts": {
+    "score": 0.7317073170731707,
+    "killed": 30,
+    "timeout": 0,
+    "scored": 41
+  },
+  "opencode-agent/src/sdk-contract.ts": {
+    "score": 0.8623188405797102,
+    "killed": 119,
+    "timeout": 0,
+    "scored": 138
+  },
+  "opencode-agent/src/sdk-usage.ts": {
+    "score": 0.9615384615384616,
+    "killed": 50,
+    "timeout": 0,
+    "scored": 52
+  },
+  "opencode-agent/src/secrets.ts": {
+    "score": 0.8533333333333334,
+    "killed": 64,
+    "timeout": 0,
+    "scored": 75
+  },
+  "opencode-agent/src/sequence.ts": {
+    "score": 1,
+    "killed": 12,
+    "timeout": 0,
+    "scored": 12
+  },
+  "opencode-agent/src/shell.ts": {
+    "score": 0.6746987951807228,
+    "killed": 56,
+    "timeout": 0,
+    "scored": 83
+  },
+  "opencode-agent/src/state-manager.ts": {
+    "score": 0.90625,
+    "killed": 29,
+    "timeout": 0,
+    "scored": 32
+  },
+  "opencode-agent/src/state-persist.ts": {
+    "score": 0.47368421052631576,
+    "killed": 9,
+    "timeout": 0,
+    "scored": 19
+  },
+  "opencode-agent/src/step-output.ts": {
+    "score": 0.6428571428571429,
+    "killed": 18,
+    "timeout": 0,
+    "scored": 28
+  },
+  "opencode-agent/src/stray-paths.ts": {
+    "score": 0.896551724137931,
+    "killed": 26,
+    "timeout": 0,
+    "scored": 29
+  },
+  "opencode-agent/src/sync-notices.ts": {
+    "score": 0.29069767441860467,
+    "killed": 25,
+    "timeout": 0,
+    "scored": 86
+  },
+  "opencode-agent/src/time-budget.ts": {
+    "score": 0.9038461538461539,
+    "killed": 47,
+    "timeout": 0,
+    "scored": 52
+  },
+  "opencode-agent/src/time-notices.ts": {
+    "score": 0.6548672566371682,
+    "killed": 74,
+    "timeout": 0,
+    "scored": 113
+  },
+  "opencode-agent/src/token-budget.ts": {
+    "score": 0.9166666666666666,
+    "killed": 33,
+    "timeout": 0,
+    "scored": 36
+  },
+  "opencode-agent/src/transitions.ts": {
+    "score": 0.9738562091503268,
+    "killed": 149,
+    "timeout": 0,
+    "scored": 153
+  },
+  "opencode-agent/src/trigger-events.ts": {
+    "score": 0.8529411764705882,
+    "killed": 116,
+    "timeout": 0,
+    "scored": 136
+  },
+  "opencode-agent/src/trigger-outcome.ts": {
+    "score": 0.7142857142857143,
+    "killed": 10,
+    "timeout": 0,
+    "scored": 14
+  },
+  "opencode-agent/src/triggers.ts": {
+    "score": 0.8187919463087249,
+    "killed": 122,
+    "timeout": 0,
+    "scored": 149
+  },
+  "opencode-agent/src/turn-answer.ts": {
+    "score": 0.625,
+    "killed": 10,
+    "timeout": 0,
+    "scored": 16
+  },
+  "opencode-agent/src/turn-errors.ts": {
+    "score": 0.8383838383838383,
+    "killed": 82,
+    "timeout": 1,
+    "scored": 99
+  },
+  "opencode-agent/src/turn-run.ts": {
+    "score": 0.8846153846153846,
+    "killed": 45,
+    "timeout": 1,
+    "scored": 52
+  },
+  "opencode-agent/src/turn-stall.ts": {
+    "score": 0.9523809523809523,
+    "killed": 40,
+    "timeout": 0,
+    "scored": 42
+  },
+  "opencode-agent/src/turn-stop.ts": {
+    "score": 0.5818181818181818,
+    "killed": 32,
+    "timeout": 0,
+    "scored": 55
+  },
+  "opencode-agent/src/types.ts": {
+    "score": 0.5,
+    "killed": 2,
+    "timeout": 0,
+    "scored": 4
   },
   "plugins/task-provider-github/classify-error.ts": 0.744,
   "plugins/task-provider-github/constants.ts": 1,

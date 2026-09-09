@@ -51,6 +51,15 @@ describe('decompose helpers (sdd-runner/src/decompose.ts copy)', () => {
     expect(countTaskSections('no sections')).toBe(0)
   })
 
+  it('buildDecomposerPrompt states the red→green granularity contract for the executor walk', () => {
+    const prompt = buildDecomposerPrompt('/repo/openspec/changes/c/tasks.md', 'write tasks', '/repo', null)
+    expect(prompt).toContain('Every task must be one complete red→green cycle')
+    expect(prompt).toContain('the failing test and its implementation land in the same task')
+    expect(prompt).toContain('Never split a test into its own task')
+    expect(prompt).toContain('the executor verifies each task by running the repo\u2019s affected-test check')
+    expect(prompt).toContain('every task must leave the tree green')
+  })
+
   it('buildDecomposerPrompt names the tasks file and the report, and appends the last error', () => {
     const base = buildDecomposerPrompt('/repo/openspec/changes/c/tasks.md', 'write tasks', '/repo', null)
     expect(base).toContain('You are the decomposer.')

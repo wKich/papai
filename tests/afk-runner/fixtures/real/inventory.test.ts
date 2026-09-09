@@ -7,7 +7,7 @@ import { describe, expect, it } from 'bun:test'
 import { readdirSync } from 'node:fs'
 import path from 'node:path'
 
-import { readEvents, STAGE_ORDER } from '../../../../afk-runner/src/events.js'
+import { readEvents } from '../../../../afk-runner/src/events.js'
 import type { StageId } from '../../../../afk-runner/src/events.js'
 import { replayEvents } from '../../../../afk-runner/src/legacy-fold.js'
 
@@ -27,14 +27,24 @@ interface ExpectedRun {
 }
 
 const INVENTORY: Readonly<Record<string, ExpectedRun>> = {
-  '2026-08-19T11-58-01-530Z-6d279752': { events: 22, depth: null, activeStages: ['intake'], gate: null },
+  '2026-08-19T11-58-01-530Z-6d279752': {
+    events: 22,
+    depth: null,
+    activeStages: ['intake'],
+    gate: null,
+  },
   '2026-08-19T12-04-49-341Z-7d97443e': {
     events: 2805,
     depth: 'L',
     activeStages: [],
     gate: { mode: 'final', version: 8, answered: false },
   },
-  '2026-08-21T15-15-43-701Z-80409492': { events: 1, depth: null, activeStages: ['intake'], gate: null },
+  '2026-08-21T15-15-43-701Z-80409492': {
+    events: 1,
+    depth: null,
+    activeStages: ['intake'],
+    gate: null,
+  },
   '2026-08-21T15-16-08-514Z-039e8174': {
     events: 576,
     depth: 'M',
@@ -65,7 +75,12 @@ const INVENTORY: Readonly<Record<string, ExpectedRun>> = {
     activeStages: [],
     gate: { mode: 'final', version: 4, answered: true },
   },
-  'sdd-runner-decomposition-2nd': { events: 35, depth: null, activeStages: ['intake'], gate: null },
+  'sdd-runner-decomposition-2nd': {
+    events: 35,
+    depth: null,
+    activeStages: ['intake'],
+    gate: null,
+  },
   'tests-consolidation': {
     events: 1182,
     depth: 'M',
@@ -108,7 +123,11 @@ describe('real-run corpus inventory', () => {
       expect(readEvents(logPath)).toHaveLength(expected.events)
       const state = replayEvents(logPath)
       expect(state.depth).toBe(expected.depth)
-      expect(STAGE_ORDER.filter((id) => state.stages[id] === 'active')).toEqual(expected.activeStages)
+      expect(
+        Object.entries(state.stages)
+          .filter(([, status]) => status === 'active')
+          .map(([id]) => id),
+      ).toEqual(expected.activeStages)
       expect(state.gate).toEqual(expected.gate)
     })
   }

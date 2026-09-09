@@ -13,12 +13,15 @@ import {
   decompose,
   draft,
   gate,
+  implement,
   intake,
+  release,
   review,
   start,
+  verify,
 } from './states/pipeline-states.js'
 
-export { aborted, atomicity, completed, decompose, draft, gate, intake, review, start }
+export { aborted, atomicity, completed, decompose, draft, gate, implement, intake, release, review, start, verify }
 
 export const pipelineStates = {
   start,
@@ -28,6 +31,9 @@ export const pipelineStates = {
   decompose,
   atomicity,
   gate,
+  implement,
+  verify,
+  release,
   completed,
   aborted,
 }

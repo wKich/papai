@@ -49,7 +49,7 @@ export interface ExpiryPorts {
 export async function processExpiry(
   ports: ExpiryPorts,
   version: number,
-  gateMode: 'early' | 'final' | 'escalation',
+  gateMode: 'early' | 'final' | 'escalation' | 'release',
   round: { readonly current: number; readonly cap: number } | null,
   deadlineAt: string | null,
   reArmed: boolean,
@@ -97,7 +97,7 @@ export async function processExpiry(
 async function evaluateExpiryLadder(
   ports: ExpiryPorts,
   version: number,
-  gateMode: 'early' | 'final' | 'escalation',
+  gateMode: 'early' | 'final' | 'escalation' | 'release',
   currentRound: number,
   repoRoot: string,
   autonomy: AutonomyConfig,
@@ -132,12 +132,16 @@ async function evaluateExpiryLadder(
 function reArmOrPark(
   ports: ExpiryPorts,
   version: number,
-  gateMode: 'early' | 'final' | 'escalation',
+  gateMode: 'early' | 'final' | 'escalation' | 'release',
   reArmed: boolean,
 ): null {
   if (reArmed) {
+    // The pending record is per-gate-once: it landed at the re-arm tick (or at
+    // this waiter's first claiming tick); re-emitting it per waiter poll
+    // floods the log (the Run U live finding — one `auto_decision{none,
+    // pending}` per second for as long as the gate sits unattended).
     ports.stdout?.('auto-deadline: no safe policy branch — gate stays pending')
-    emitPendingExpiryDecision(ports, version)
+    if (!pendingRecordedFor(ports, version)) emitPendingExpiryDecision(ports, version)
     return null
   }
   const reArmMinutes = ports.autonomy?.deadlineMinutes ?? 10
@@ -156,6 +160,13 @@ function reArmOrPark(
   return null
 }
 
+/** Has this gate version already recorded a waiter pending record? (Per-gate-once emission.) */
+function pendingRecordedFor(ports: ExpiryPorts, version: number): boolean {
+  return readEvents(ports.logPath).some(
+    (event) => event.type === 'auto_decision' && event.decision === 'pending' && event.gateVersion === version,
+  )
+}
+
 /** The waiter's pending record: rule none, decision pending, version-keyed digest. */
 function emitPendingExpiryDecision(ports: ExpiryPorts, version: number): void {
   ports.emit({
@@ -172,7 +183,7 @@ function emitPendingExpiryDecision(ports: ExpiryPorts, version: number): void {
 async function settleExpiryDecision(
   ports: ExpiryPorts,
   version: number,
-  gateMode: 'early' | 'final' | 'escalation',
+  gateMode: 'early' | 'final' | 'escalation' | 'release',
   round: { readonly current: number; readonly cap: number } | null,
   failedStage: StageId | null,
   currentRound: number,

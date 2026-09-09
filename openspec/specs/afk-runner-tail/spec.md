@@ -41,12 +41,17 @@ The final gate SHALL be presented by the tail's last work module (atomicity, or 
 
 ### Requirement: Outcome-ordered settlement at final gates
 
-The settle seam SHALL order its appends by outcome at a final gate: approve appends the gate stage exit before the answered event (so the completed edge fires on the answer); extend and veto append the answered event first (keeping the gate stage active so the completed edge cannot fire), then the gate stage exit, then the mover event; abort appends the answered event alone. At an early gate the seam SHALL append no gate stage exit.
+The settle seam SHALL order its appends by outcome at a final gate: on an unarmed run, approve appends the gate stage exit before the answered event (so the completed edge fires on the answer); on an execution-armed run, approve appends the gate stage exit, then the implement mover (`stage_enter(implement)`, which activates implement so the completed edge cannot fire), then the answered event. Extend and veto append the answered event first (keeping the gate stage active so the completed edge cannot fire), then the gate stage exit, then the mover event; abort appends the answered event alone. At an early gate the seam SHALL append no gate stage exit.
 
 #### Scenario: Approve completes on the answered event
 
-- **WHEN** a final gate settles approve
+- **WHEN** an unarmed run's final gate settles approve
 - **THEN** the log shows `stage_exit(gate)` then the answered event, and the machine reaches the completed final
+
+#### Scenario: Armed approve enters execution on the answer
+
+- **WHEN** an execution-armed run's final gate settles approve
+- **THEN** the log shows `stage_exit(gate)`, the implement mover, then the answered event; implement is active when the answer lands so completion stays blocked, and the machine sits in implement
 
 #### Scenario: Extend does not complete the run
 
@@ -154,3 +159,24 @@ The kernel SHALL fold every historical fixture and every tail scenario fixture i
 
 - **WHEN** the parity harness folds the extend-at-final, veto-at-final, abort-at-final, S-tail, and tail-crash-resume fixtures
 - **THEN** kernel and legacy folds agree on every replay-state field at every event
+
+### Requirement: Walk-safe task granularity
+
+The decomposer and atomicity prompts SHALL state the executor's granularity contract: every task is one complete red→green cycle — the failing test and its implementation land in the same task — and no task may leave the working tree red when the executor's per-task affected check runs. Neither prompt SHALL license test-only tasks; atomicity's verification wording SHALL read as "every task must be independently green", not as "tasks may consist of a test alone". The per-task affected check itself SHALL remain green-per-item with no tolerance for declared-red tasks.
+
+Rationale anchor: C9 finding F-P2 and the U13 audit decision (Option A) — red-first test/impl splits structurally fail the walk's check and poison later items; the measured correct granularity is the pair-merge.
+
+#### Scenario: Decomposer prompt carries the granularity contract
+
+- **WHEN** the decomposer prompt is built
+- **THEN** it states that a failing test and its implementation land in the same task, that a test is never split into its own task, and that every task must leave the tree green for the executor's per-task affected check
+
+#### Scenario: Atomicity prompt cannot license test-only tasks
+
+- **WHEN** the atomicity prompt is built
+- **THEN** its verification wording requires every task to be independently green, pairs a test with the implementation it verifies rather than splitting them, and contains no sentence readable as "a task may end at its own red test"
+
+#### Scenario: Red-first pairs are not tolerated at the check
+
+- **WHEN** an execution-armed walk runs an item whose work leaves the working tree red
+- **THEN** the per-task affected check records the failure exactly as today — the check's green-per-item semantics are unchanged by the guidance

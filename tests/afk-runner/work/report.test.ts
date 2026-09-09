@@ -100,6 +100,7 @@ function makeInput(events: readonly SddEvent[], overrides: Partial<ReportInput> 
   return {
     readEvents: () => events,
     readChangeDir: () => Promise.resolve(CHANGE),
+    readVerifyOutcomes: () => [],
     execGit: () => Promise.resolve({ stdout: 'abc1234 feat: the change\nabc1235 test: the change\n', stderr: '' }),
     runId: 'add-thing',
     changeName: 'add-thing',
@@ -183,6 +184,93 @@ describe('buildReport (sdd-runner/src/report.ts work copy)', () => {
     expect(report.startsWith('## Summary')).toBe(true)
     expect(report).toContain('Change `add-thing` — see below for the scrutiny envelope.')
     expect(report).toContain('Archive: post-merge follow-up on master (human-triggered).')
+  })
+})
+
+/** A completed armed run: approved final gate, three tasks walked, verify passed, release approved (U3 D9). */
+const ARMED_COMPLETED_INPUTS: readonly EventInput[] = [
+  { altitude: 'L2', type: 'execution', action: 'armed' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'intake' },
+  { altitude: 'L2', type: 'depth', profile: 'S', rationale: 'one module', source: 'estimator' },
+  { altitude: 'L2', type: 'stage_exit', stage: 'intake' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'draft' },
+  { altitude: 'L2', type: 'stage_exit', stage: 'draft' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'review' },
+  { altitude: 'L2', type: 'round_open', round: 1, cap: 3 },
+  {
+    altitude: 'L2',
+    type: 'convergence',
+    round: 1,
+    verdict: 'converged',
+    counts: { blocker: 0, material: 0, nitpick: 0 },
+  },
+  { altitude: 'L2', type: 'round_close', round: 1, cap: 3 },
+  { altitude: 'L2', type: 'stage_exit', stage: 'review' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'decompose' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'gate' },
+  { altitude: 'L2', type: 'gate', action: 'presented', mode: 'final', version: 1 },
+  { altitude: 'L2', type: 'auto_decision', rule: 'none', decision: 'gate', evidenceDigest: 'x', gateVersion: 1 },
+  { altitude: 'L2', type: 'stage_exit', stage: 'decompose' },
+  { altitude: 'L2', type: 'stage_exit', stage: 'gate' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'implement' },
+  { altitude: 'L2', type: 'gate', action: 'answered', mode: 'final', version: 1, outcome: 'approve' },
+  { altitude: 'L2', type: 'task', action: 'started', id: '1' },
+  { altitude: 'L2', type: 'task', action: 'done', id: '1' },
+  { altitude: 'L2', type: 'task', action: 'started', id: '2' },
+  { altitude: 'L2', type: 'task', action: 'done', id: '2' },
+  { altitude: 'L2', type: 'task', action: 'started', id: '3' },
+  { altitude: 'L2', type: 'task', action: 'done', id: '3' },
+  { altitude: 'L2', type: 'stage_exit', stage: 'implement' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'verify' },
+  { altitude: 'L2', type: 'stage_exit', stage: 'verify' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'release' },
+  { altitude: 'L2', type: 'stage_enter', stage: 'gate' },
+  { altitude: 'L2', type: 'gate', action: 'presented', mode: 'release', version: 2 },
+  { altitude: 'L2', type: 'auto_decision', rule: 'none', decision: 'gate', evidenceDigest: 'x', gateVersion: 2 },
+  { altitude: 'L2', type: 'stage_exit', stage: 'release' },
+  { altitude: 'L2', type: 'gate', action: 'answered', mode: 'release', version: 2, outcome: 'approve' },
+]
+
+const VERIFY_OUTCOMES = [
+  { log: 'verify-1', verdict: 'red' as const },
+  { log: 'verify-2', verdict: 'green' as const },
+]
+
+/** The armed run up to (not including) the first gate answer: nothing has walked yet. */
+function armedParkedBeforeWalk(): readonly EventInput[] {
+  const cut = ARMED_COMPLETED_INPUTS.findIndex((event) => event.type === 'gate' && event.action === 'answered')
+  return ARMED_COMPLETED_INPUTS.slice(0, cut)
+}
+
+describe('execution facts block (U3 D9)', () => {
+  it('renders task progress, verify outcomes, and the release version with its outcome', async () => {
+    const report = await buildReport(
+      makeInput(stamped(ARMED_COMPLETED_INPUTS), { readVerifyOutcomes: () => VERIFY_OUTCOMES }),
+    )
+    expect(report).toContain('### Execution')
+    expect(report).toContain('tasks: 3/3 done')
+    expect(report).toContain('verify: verify-1 red, verify-2 green')
+    expect(report).toContain('release: v2 approve')
+  })
+
+  it('renders identical bytes for the same run on every invocation', async () => {
+    const first = await buildReport(
+      makeInput(stamped(ARMED_COMPLETED_INPUTS), { readVerifyOutcomes: () => VERIFY_OUTCOMES }),
+    )
+    const second = await buildReport(
+      makeInput(stamped(ARMED_COMPLETED_INPUTS), { readVerifyOutcomes: () => VERIFY_OUTCOMES }),
+    )
+    expect(second).toBe(first)
+  })
+
+  it('an unarmed run renders no execution block', async () => {
+    const report = await buildReport(makeInput(stamped(COMPLETED_INPUTS)))
+    expect(report.includes('### Execution')).toBe(false)
+  })
+
+  it('an armed run with nothing walked renders no execution block', async () => {
+    const report = await buildReport(makeInput(stamped(armedParkedBeforeWalk())))
+    expect(report.includes('### Execution')).toBe(false)
   })
 })
 
