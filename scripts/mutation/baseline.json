@@ -1747,12 +1747,42 @@
     "timeout": 0,
     "scored": 72
   },
+  "src/chat/telegram/chunking.ts": {
+    "score": 0.86,
+    "killed": 38,
+    "timeout": 5,
+    "scored": 50
+  },
+  "src/chat/telegram/index.ts": {
+    "score": 0.5478723404255319,
+    "killed": 103,
+    "timeout": 0,
+    "scored": 188
+  },
+  "src/chat/telegram/mention-prefix.ts": {
+    "score": 0.8933333333333333,
+    "killed": 67,
+    "timeout": 0,
+    "scored": 75
+  },
+  "src/chat/telegram/reply-helpers.ts": {
+    "score": 0.5083798882681564,
+    "killed": 89,
+    "timeout": 2,
+    "scored": 179
+  },
+  "src/chat/telegram/send-message.ts": {
+    "score": 0.7948717948717948,
+    "killed": 31,
+    "timeout": 0,
+    "scored": 39
+  },
   "src/coding-sessions/configure.ts": 0.6666666666666666,
   "src/completion/verified-completion.ts": {
-    "score": 0.788135593220339,
-    "killed": 93,
+    "score": 0.7985074626865671,
+    "killed": 107,
     "timeout": 0,
-    "scored": 118
+    "scored": 134
   },
   "src/config.ts": 0.6535433070866141,
   "src/context-vault/summarizer.ts": {
@@ -1788,11 +1818,23 @@
     "timeout": 0,
     "scored": 28
   },
-  "src/debug/llm-trace-collector.ts": {
-    "score": 0.8461538461538461,
-    "killed": 143,
+  "src/debug/llm-trace-builders.ts": {
+    "score": 1,
+    "killed": 48,
     "timeout": 0,
-    "scored": 169
+    "scored": 48
+  },
+  "src/debug/llm-trace-collector.ts": {
+    "score": 0.8554913294797688,
+    "killed": 146,
+    "timeout": 2,
+    "scored": 173
+  },
+  "src/debug/schemas.ts": {
+    "score": 0.40476190476190477,
+    "killed": 17,
+    "timeout": 0,
+    "scored": 42
   },
   "src/debug/settings-api-router.ts": {
     "score": 0.5170940170940171,
@@ -1851,16 +1893,16 @@
     "scored": 32
   },
   "src/deferred-prompts/proactive-llm-helpers.ts": {
-    "score": 0.6952380952380952,
-    "killed": 73,
+    "score": 0.734375,
+    "killed": 94,
     "timeout": 0,
-    "scored": 105
+    "scored": 128
   },
   "src/deferred-prompts/proactive-llm.ts": {
-    "score": 0.7619047619047619,
-    "killed": 32,
+    "score": 1,
+    "killed": 36,
     "timeout": 0,
-    "scored": 42
+    "scored": 36
   },
   "src/deferred-prompts/proof-checks-observe.ts": {
     "score": 0.668918918918919,
@@ -1923,10 +1965,10 @@
     "scored": 100
   },
   "src/llm-orchestrator-send.ts": {
-    "score": 0.75,
-    "killed": 51,
+    "score": 0.7764705882352941,
+    "killed": 66,
     "timeout": 0,
-    "scored": 68
+    "scored": 85
   },
   "src/llm-orchestrator-support.ts": {
     "score": 0.5714285714285714,
@@ -1989,6 +2031,12 @@
     "scored": 109
   },
   "src/memory.ts": 0.6538461538461539,
+  "src/message-embedding-sweep.ts": {
+    "score": 0.6942148760330579,
+    "killed": 82,
+    "timeout": 2,
+    "scored": 121
+  },
   "src/model-context.ts": {
     "score": 0.6310679611650486,
     "killed": 65,
