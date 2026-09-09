@@ -8,7 +8,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { runStopCommand } from '../../afk-runner/src/cli.js'
+import { cliMain, runStopCommand } from '../../afk-runner/src/cli.js'
 import { drive } from '../../afk-runner/src/drive/loop.js'
 import type { StateModule, WorkIO } from '../../afk-runner/src/drive/loop.js'
 import { readEvents } from '../../afk-runner/src/events.js'
@@ -171,5 +171,25 @@ describe('afk-runner stop — parked-gate and final runs (C6 D7)', () => {
     expect(result.halted).toBe('final')
     const summary = await runStopCommand(pipeline.deps, result.runId)
     expect(summary).toContain('nothing to stop')
+  })
+})
+
+describe('afk-runner stop — ungated by the verb-time MCP surface (afk-runner-agent-mcp D1)', () => {
+  it('an invalid AGENT_MCP_SERVERS does not gate stop: a live run still gets its calm-stop marker', async () => {
+    const pipeline = crashedPipeline()
+    await expect(startRun(pipeline.deps, { taskText: TASK_TEXT })).rejects.toThrow('simulated kill')
+    const runId = firstRunOf(pipeline.deps)
+    const runDir = pipeline.runDirOf(runId)
+
+    // a live process owns the run — this test process itself
+    writeHolder(runDir, process.pid)
+
+    const summary = await cliMain(['stop', runId], {
+      env: { AGENT_MCP_SERVERS: '{"notes":{"command":["uvx","mcp-notes"]}}' },
+      deps: pipeline.deps,
+    })
+
+    expect(summary).toContain('calm stop requested')
+    expect(fs.existsSync(stopMarkerPath(runDir))).toBe(true)
   })
 })

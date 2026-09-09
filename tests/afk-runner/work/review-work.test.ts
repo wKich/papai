@@ -4,12 +4,17 @@
 // See LICENSE in the project root for details.
 
 import { describe, expect, it } from 'bun:test'
+import assert from 'node:assert'
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { composeConfigContent } from '../../../afk-runner/src/agent-config.js'
 import { readEvents } from '../../../afk-runner/src/events.js'
 import type { SddEvent } from '../../../afk-runner/src/events.js'
+import { mcpFor } from '../../../afk-runner/src/mcp-servers.js'
+import type { AgentMcpSurface } from '../../../afk-runner/src/mcp-servers.js'
 import { startRun } from '../../../afk-runner/src/run.js'
+import type { SpawnFn } from '../../../review-loop/src/agent-runner.js'
 import { BLOCKER_ROUND, makeFakePipeline, TASK_TEXT } from '../fixtures/fake-pipeline.js'
 
 function gateEvents(runDir: string): Extract<SddEvent, { type: 'gate' }>[] {
@@ -371,5 +376,72 @@ describe('concern-history routing (loop-memory D6)', () => {
     const presented = presentedEvents(runDir)
     expect(presented).toHaveLength(1)
     expect(presented[0]).toMatchObject({ mode: 'final' })
+  })
+})
+
+describe('agent-MCP surface threading at the review assembly sites (afk-runner-agent-mcp 4.3)', () => {
+  const SURFACE: AgentMcpSurface = {
+    servers: {
+      notes: { type: 'local', command: ['uvx', 'mcp-notes'] },
+      search: { type: 'remote', url: 'https://mcp.example.test/search' },
+    },
+    narrowing: { reviewer: ['notes'] },
+    credentials: undefined,
+    warnings: [],
+  }
+  /**
+   * The fake pipeline wrapped with a spawn that records each spawn's child
+   * env by output basename — no entry means the spawn ran env-inheriting.
+   */
+  function captureEnvPipeline(): {
+    readonly pipeline: ReturnType<typeof makeFakePipeline>
+    readonly envs: ReadonlyMap<string, Record<string, string>>
+    readonly spawn: SpawnFn
+  } {
+    const pipeline = makeFakePipeline()
+    const envs = new Map<string, Record<string, string>>()
+    const spawn: SpawnFn = (command, args, options, onLine) => {
+      const basename = String(args[args.length - 1]).match(/\.review-loop\/([\w-]+\.json)/u)?.[1] ?? 'unknown.json'
+      if (options.env !== undefined) envs.set(basename, options.env)
+      return pipeline.deps.spawn(command, args, options, onLine)
+    }
+    return { pipeline, envs, spawn }
+  }
+
+  it('a review-stage spawn composes content through both review sites — reviewer narrowed, resolver full base', async () => {
+    const { pipeline, envs, spawn } = captureEnvPipeline()
+    const taskFile = path.join(pipeline.repoRoot, 'task.md')
+    fs.writeFileSync(taskFile, TASK_TEXT)
+    const halted = await startRun({ ...pipeline.deps, spawn, mcpSurface: SURFACE }, { taskFile })
+    expect(halted.halted).toBe('final')
+    expect(pipeline.spawnOrder).toContain('findings-1.json')
+
+    // The pin the compile step cannot provide: both review assembly sites
+    // (reviewModule's subset literal and buildReviewScope's rebuild) enumerate
+    // fields, so a dropped optional field would leave this spawn env-less.
+    const reviewerEnv = envs.get('findings-1.json')
+    assert(reviewerEnv !== undefined)
+    expect(reviewerEnv['OPENCODE_CONFIG_CONTENT']).toBe(
+      composeConfigContent('test-model', SURFACE, mcpFor(SURFACE, 'reviewer')),
+    )
+    expect(reviewerEnv['OPENCODE_CONFIG_CONTENT']).not.toContain('mcp-notes')
+
+    const resolverEnv = envs.get('resolutions-1.json')
+    assert(resolverEnv !== undefined)
+    expect(resolverEnv['OPENCODE_CONFIG_CONTENT']).toBe(
+      composeConfigContent('test-model', SURFACE, mcpFor(SURFACE, 'resolver')),
+    )
+    for (const carrier of ['AGENT_MCP_SERVERS', 'AGENT_MCP_ROLE_NARROWING', 'LLM_API_KEY', 'LLM_BASE_URL']) {
+      expect(Object.hasOwn(reviewerEnv, carrier)).toBe(false)
+    }
+  })
+
+  it('an absent surface leaves the review spawn env-inheriting — no composed content (D5 inertness)', async () => {
+    const { pipeline, envs, spawn } = captureEnvPipeline()
+    const taskFile = path.join(pipeline.repoRoot, 'task.md')
+    fs.writeFileSync(taskFile, TASK_TEXT)
+    await startRun({ ...pipeline.deps, spawn }, { taskFile })
+    expect(pipeline.spawnOrder).toContain('findings-1.json')
+    expect(envs.has('findings-1.json')).toBe(false)
   })
 })

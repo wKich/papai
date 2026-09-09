@@ -9,6 +9,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { composeConfigContent } from '../../../afk-runner/src/agent-config.js'
 import {
   AgentValidationError,
   AssumptionRecordSchema,
@@ -23,6 +24,8 @@ import { INACTIVITY_TIMEOUT_MS } from '../../../afk-runner/src/config.js'
 import type { RunnerConfig } from '../../../afk-runner/src/config.js'
 import { EventInputSchema } from '../../../afk-runner/src/events.js'
 import type { EventInput } from '../../../afk-runner/src/events.js'
+import { mcpFor, resolveAgentMcp } from '../../../afk-runner/src/mcp-servers.js'
+import type { AgentMcpSurface } from '../../../afk-runner/src/mcp-servers.js'
 import { readSessionLedger, recordSessionId, updateSessionStatus } from '../../../afk-runner/src/session-ledger.js'
 import { ResolverOutputSchema } from '../../../afk-runner/src/work/review-loop.js'
 import type { ResolverOutput } from '../../../afk-runner/src/work/review-loop.js'
@@ -71,6 +74,7 @@ interface FakeSpawn {
   readonly models: string[]
   readonly argsList: string[][]
   readonly inactivity: Array<number | undefined>
+  readonly envs: Array<Record<string, string> | undefined>
   readonly calls: { count: number }
 }
 
@@ -86,6 +90,7 @@ function makeFakeSpawn(
   const models: string[] = []
   const argsList: string[][] = []
   const inactivity: Array<number | undefined> = []
+  const envs: Array<Record<string, string> | undefined> = []
   const calls = { count: 0 }
   const spawn: SpawnFn = (_command, args, options, onLine) => {
     const outcome = outcomes[Math.min(calls.count, outcomes.length - 1)] ?? {}
@@ -95,6 +100,7 @@ function makeFakeSpawn(
     const modelIndex = args.indexOf('--model')
     models.push(String(args[modelIndex + 1]))
     inactivity.push(options.inactivityTimeoutMs)
+    envs.push(options.env)
     const write = outcome.write
     if (write !== undefined) {
       const target = agentWritePath(options.cwd, basename)
@@ -112,7 +118,7 @@ function makeFakeSpawn(
       ...outcome.result,
     })
   }
-  return { spawn, prompts, models, argsList, inactivity, calls }
+  return { spawn, prompts, models, argsList, inactivity, envs, calls }
 }
 
 function makeGitExec(
@@ -137,17 +143,22 @@ interface AgentHandle {
   readonly emitted: EventInput[]
 }
 
-function makeAgent(dir: string, fake: FakeSpawn, porcelain = ''): AgentHandle {
+function makeAgent(dir: string, fake: FakeSpawn, porcelain = '', mcpSurface?: AgentMcpSurface): AgentHandle {
   const emitted: EventInput[] = []
   const agent: AgentLayerDeps = {
     spawn: fake.spawn,
     config: makeConfig(dir),
     execGit: makeGitExec(porcelain),
+    mcpSurface,
     emit: (event) => {
       emitted.push(EventInputSchema.parse(event))
     },
   }
   return { agent, emitted }
+}
+
+function spawneds(emitted: readonly EventInput[]): Array<Extract<EventInput, { type: 'spawned' }>> {
+  return emitted.filter((e): e is Extract<EventInput, { type: 'spawned' }> => e.type === 'spawned')
 }
 
 function retryings(emitted: readonly EventInput[]): Array<{ reason: 'stall' | 'validation'; attempt: number }> {
@@ -463,6 +474,183 @@ describe('runStageAgent', () => {
     expect(doneEvents[0]).toMatchObject({ agent: 'reviewer-r1' })
     expect(doneEvents[0]?.usage).toBeDefined()
     expect(retryings(emitted)).toEqual([])
+  })
+
+  it("an active surface's spawn event carries exactly the resolved set's server names (afk-runner-agent-mcp D6)", async () => {
+    const dir = makeDir()
+    const fake = makeFakeSpawn('findings-1.json', [{ write: VALID_FINDINGS }])
+    const surface = resolveAgentMcp(
+      {
+        AGENT_MCP_SERVERS: JSON.stringify({
+          notes: { type: 'local', command: ['uvx', 'mcp-notes'] },
+          search: { type: 'remote', url: 'https://mcp.example/search' },
+        }),
+        AGENT_MCP_ROLE_NARROWING: JSON.stringify({ reviewer: ['notes'] }),
+      },
+      'default-model',
+    )
+    const { agent, emitted } = makeAgent(dir, fake, '', surface)
+    await runStageAgent(agent, makeOptions(dir, 'findings-1.json'))
+    const events = spawneds(emitted)
+    expect(events).toHaveLength(1)
+    expect(events[0]?.mcp).toEqual(['search'])
+  })
+
+  it('an absent surface leaves the spawn event byte-identical — no mcp field (afk-runner-agent-mcp D6)', async () => {
+    const dir = makeDir()
+    const fake = makeFakeSpawn('findings-1.json', [{ write: VALID_FINDINGS }])
+    const { agent, emitted } = makeAgent(dir, fake)
+    await runStageAgent(agent, makeOptions(dir, 'findings-1.json'))
+    const events = spawneds(emitted)
+    expect(events).toHaveLength(1)
+    expect(events[0]).toEqual({
+      altitude: 'L1',
+      type: 'spawned',
+      agent: 'reviewer-r1',
+      role: 'reviewer',
+      model: 'default-model',
+    })
+    assert(events[0] !== undefined)
+    expect(Object.hasOwn(events[0], 'mcp')).toBe(false)
+  })
+
+  describe('per-spawn child-env composition (afk-runner-agent-mcp D3)', () => {
+    const SLASH_MODEL = 'prov/model-x'
+
+    /** The ambient env an operator's shell would carry: both knobs, the pair, an ambient content value. */
+    function mcpEnvSource(): Record<string, string | undefined> {
+      return {
+        PATH: '/usr/bin:/bin',
+        AGENT_MCP_SERVERS: JSON.stringify({
+          notes: { type: 'local', command: ['uvx', 'mcp-notes'] },
+          search: { type: 'remote', url: 'https://mcp.example.test/search' },
+        }),
+        AGENT_MCP_ROLE_NARROWING: JSON.stringify({ reviewer: ['notes'] }),
+        LLM_API_KEY: 'sk-test-key-4d2f',
+        LLM_BASE_URL: 'https://llm.example.test/v1',
+        OPENCODE_CONFIG_CONTENT: 'ambient-config-content',
+        NEVER_SET: undefined,
+      }
+    }
+
+    /**
+     * An agent whose config model, resolved surface, and (optionally) injected
+     * env source all agree: the slash row with the pair set, so the composed
+     * content carries the provider block. An absent `envSource` leaves the
+     * field off the deps — the production default that reads `process.env`.
+     */
+    function makeMcpAgent(
+      dir: string,
+      fake: FakeSpawn,
+      envSource: Record<string, string | undefined> | undefined,
+    ): { agent: AgentLayerDeps; surface: AgentMcpSurface; emitted: EventInput[] } {
+      const resolvedSurface = resolveAgentMcp(envSource ?? mcpEnvSource(), SLASH_MODEL)
+      assert(resolvedSurface !== undefined)
+      const surface = resolvedSurface
+      const emitted: EventInput[] = []
+      const agent: AgentLayerDeps = {
+        spawn: fake.spawn,
+        config: { ...makeConfig(dir), model: SLASH_MODEL },
+        execGit: makeGitExec(''),
+        mcpSurface: surface,
+        ...(envSource === undefined ? {} : { envSource: () => envSource }),
+        emit: (event) => {
+          emitted.push(EventInputSchema.parse(event))
+        },
+      }
+      return { agent, surface, emitted }
+    }
+
+    it('composes the full replacement child env — carriers stripped, ambient preserved, narrowed content set', async () => {
+      const dir = makeDir()
+      const fake = makeFakeSpawn('findings-1.json', [{ write: VALID_FINDINGS }])
+      const { agent, surface } = makeMcpAgent(dir, fake, mcpEnvSource())
+      await runStageAgent(agent, makeOptions(dir, 'findings-1.json'))
+      const childEnv = fake.envs[0]
+      assert(childEnv !== undefined)
+      for (const carrier of ['AGENT_MCP_SERVERS', 'AGENT_MCP_ROLE_NARROWING', 'LLM_API_KEY', 'LLM_BASE_URL']) {
+        expect(Object.hasOwn(childEnv, carrier)).toBe(false)
+      }
+      expect(childEnv['PATH']).toBe('/usr/bin:/bin')
+      expect(Object.hasOwn(childEnv, 'NEVER_SET')).toBe(false)
+      expect(childEnv['OPENCODE_CONFIG_CONTENT']).toBe(
+        composeConfigContent(SLASH_MODEL, surface, mcpFor(surface, 'reviewer')),
+      )
+      // per-role narrowing narrows credential exposure: the shed server's
+      // declaration rode only the stripped carrier, so it is nowhere in the
+      // child env — not even inside the composed content
+      expect(JSON.stringify(childEnv)).not.toContain('uvx')
+      expect(JSON.stringify(childEnv)).not.toContain('mcp-notes')
+    })
+
+    it('overwrites an ambient OPENCODE_CONFIG_CONTENT when the surface is active', async () => {
+      const dir = makeDir()
+      const fake = makeFakeSpawn('findings-1.json', [{ write: VALID_FINDINGS }])
+      const { agent, surface } = makeMcpAgent(dir, fake, mcpEnvSource())
+      await runStageAgent(agent, makeOptions(dir, 'findings-1.json'))
+      const childEnv = fake.envs[0]
+      assert(childEnv !== undefined)
+      const content = childEnv['OPENCODE_CONFIG_CONTENT']
+      assert(content !== undefined)
+      expect(content).not.toBe('ambient-config-content')
+      expect(content).toBe(composeConfigContent(SLASH_MODEL, surface, mcpFor(surface, 'reviewer')))
+    })
+
+    it('an inactive surface threads no opencodeEnv and never reads the env source (D5 inertness)', async () => {
+      const dir = makeDir()
+      const fake = makeFakeSpawn('findings-1.json', [{ write: VALID_FINDINGS }])
+      const reads = { count: 0 }
+      const emitted: EventInput[] = []
+      const agent: AgentLayerDeps = {
+        spawn: fake.spawn,
+        config: makeConfig(dir),
+        execGit: makeGitExec(''),
+        envSource: (): Record<string, string | undefined> => {
+          reads.count += 1
+          return mcpEnvSource()
+        },
+        emit: (event) => {
+          emitted.push(EventInputSchema.parse(event))
+        },
+      }
+      await runStageAgent(agent, makeOptions(dir, 'findings-1.json'))
+      expect(fake.envs[0]).toBeUndefined()
+      expect(reads.count).toBe(0)
+    })
+
+    it('an absent envSource composes from the ambient process.env (the one ambient-read place)', async () => {
+      const dir = makeDir()
+      const fake = makeFakeSpawn('findings-1.json', [{ write: VALID_FINDINGS }])
+      const { agent, surface } = makeMcpAgent(dir, fake, undefined)
+      await runStageAgent(agent, makeOptions(dir, 'findings-1.json'))
+      const childEnv = fake.envs[0]
+      assert(childEnv !== undefined)
+      expect(childEnv['PATH']).toBe(process.env['PATH'])
+      expect(Object.hasOwn(childEnv, 'LLM_API_KEY')).toBe(false)
+      expect(childEnv['OPENCODE_CONFIG_CONTENT']).toBe(
+        composeConfigContent(SLASH_MODEL, surface, mcpFor(surface, 'reviewer')),
+      )
+    })
+
+    it('no emitted event payload carries the content or any credential value — names only', async () => {
+      const dir = makeDir()
+      const fake = makeFakeSpawn('findings-1.json', [{ write: VALID_FINDINGS }])
+      const { agent, emitted } = makeMcpAgent(dir, fake, {
+        ...mcpEnvSource(),
+        LLM_API_KEY: 'sk-sentinel-a17f',
+        LLM_BASE_URL: 'https://llm-internal.example.test/a17f/v1',
+      })
+      await runStageAgent(agent, makeOptions(dir, 'findings-1.json'))
+      const content = fake.envs[0]?.['OPENCODE_CONFIG_CONTENT']
+      assert(content !== undefined)
+      const dump = JSON.stringify(emitted)
+      expect(dump).not.toContain('sk-sentinel-a17f')
+      expect(dump).not.toContain('llm-internal.example.test')
+      expect(dump).not.toContain('ambient-config-content')
+      expect(dump).not.toContain(content)
+      const events = spawneds(emitted)
+      expect(events[0]?.mcp).toEqual(['search'])
+    })
   })
 
   it('retries a validation failure with the validator error appended to the prompt', async () => {

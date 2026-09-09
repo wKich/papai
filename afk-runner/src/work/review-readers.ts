@@ -9,6 +9,7 @@ import type { ExecGitFn, RunnerConfig } from '../config.js'
 import type { SddEvent } from '../events.js'
 import type { KernelContext } from '../kernel/machine.js'
 import { openCountsOf } from '../legacy-fold.js'
+import type { AgentMcpSurface } from '../mcp-servers.js'
 import { ROUND_CAPS } from '../run-state.js'
 import { projectedSpend } from './auto-policy.js'
 import { costSummaryOf } from './gate-signals.js'
@@ -68,6 +69,11 @@ export interface ReviewWorkAgents {
   readonly spawn: SpawnFn
   readonly config: RunnerConfig
   readonly execGit: ExecGitFn
+  /**
+   * The resolved agent-MCP surface (afk-runner-agent-mcp 4.3) — threaded into
+   * the agent deps `buildReviewScope` rebuilds; absent = inert (D5).
+   */
+  readonly mcpSurface?: AgentMcpSurface
 }
 
 export interface ReviewWorkInput {

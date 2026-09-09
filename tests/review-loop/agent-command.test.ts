@@ -84,6 +84,50 @@ describe('buildAgentCommand (opencode branch)', () => {
   })
 })
 
+/**
+ * The opencode child's replacement environment (afk-runner-agent-mcp D3): a
+ * caller-composed map the builder returns verbatim — it never reads ambient
+ * `process.env` — and whose absence means `realSpawn` inherits `process.env`
+ * byte-identically, exactly as before the knob existed.
+ */
+describe('buildAgentCommand (opencodeEnv — afk-runner-agent-mcp D3)', () => {
+  test('a set opencodeEnv rides verbatim as the child env beside today’s unchanged argv', () => {
+    const command = buildAgentCommand({
+      model: 'm',
+      cwd: CWD,
+      prompt: 'p',
+      extraArgs: [],
+      label: 'reviewer',
+      opencodeEnv: {
+        PATH: '/usr/bin:/bin',
+        HOME: '/home/runner',
+        OPENCODE_CONFIG_CONTENT: '{"mcp": {"servers": {}}}',
+        LLM_API_KEY: 'llm-secret-0123456789',
+      },
+    })
+
+    expect(command.args).toEqual(['run', '--auto', '--format', 'json', '--model', 'm', '--dir', CWD, 'p'])
+    expect(command.env).toEqual({
+      PATH: '/usr/bin:/bin',
+      HOME: '/home/runner',
+      OPENCODE_CONFIG_CONTENT: '{"mcp": {"servers": {}}}',
+      LLM_API_KEY: 'llm-secret-0123456789',
+    })
+  })
+
+  test('an absent opencodeEnv leaves no env field, so realSpawn inherits process.env byte-identically', () => {
+    const command = buildAgentCommand({
+      model: 'm',
+      cwd: CWD,
+      prompt: 'p',
+      extraArgs: [],
+      label: 'reviewer',
+    })
+
+    expect('env' in command).toBe(false)
+  })
+})
+
 describe('buildAgentCommand (claude argv branch)', () => {
   const tail = ['-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'default']
 
@@ -217,6 +261,29 @@ describe('buildAgentCommand (claude argv branch)', () => {
       })
     expect(compose).toThrow(AgentCommandError)
     expect(compose).toThrow(/extraArgs/u)
+  })
+
+  test('a set opencodeEnv is refused with an error naming the knob', () => {
+    const compose = (): unknown =>
+      buildAgentCommand({
+        backend: 'claude',
+        model: 'm',
+        cwd: CWD,
+        prompt: 'p',
+        extraArgs: [],
+        label: 'reviewer',
+        claude: claudeContext(),
+        opencodeEnv: { PATH: '/usr/bin:/bin', OPENCODE_CONFIG_CONTENT: '{}' },
+      })
+    expect(compose).toThrow(AgentCommandError)
+    expect(compose).toThrow(
+      new AgentCommandError(
+        'opencodeEnv is an opencode-route knob and cannot ride a claude invocation ' +
+          '(got PATH OPENCODE_CONFIG_CONTENT); remove the knob or run the opencode backend — ' +
+          'the claude child env is composed from the spawn context alone, and a silent ignore ' +
+          'would hide an operator mistake.',
+      ),
+    )
   })
 
   test('backend claude without the claude context is refused with a named composition error', () => {
@@ -396,6 +463,7 @@ describe('buildAgentCommand (claude env branch)', () => {
       CLAUDE_CODE_OAUTH_TOKEN: '',
       OPENCODE_CONFIG_CONTENT: '{"provider": {"options": {"apiKey": "gateway-secret"}}}',
       AGENT_MCP_SERVERS: '{"servers": {"embedded": {"headers": {"auth": "secret-inside"}}}}',
+      AGENT_MCP_ROLE_NARROWING: '{"reviewer": ["embedded"]}',
       ANTHROPIC_BASE_URL: 'https://evil.example',
       ANTHROPIC_AUTH_TOKEN: 'ambient-auth-token',
       ANTHROPIC_CUSTOM_HEADERS: 'X-Evil: 1',
@@ -421,6 +489,7 @@ describe('buildAgentCommand (claude env branch)', () => {
       'LLM_BASE_URL',
       'OPENCODE_CONFIG_CONTENT',
       'AGENT_MCP_SERVERS',
+      'AGENT_MCP_ROLE_NARROWING',
       'ANTHROPIC_BASE_URL',
       'ANTHROPIC_AUTH_TOKEN',
       'ANTHROPIC_CUSTOM_HEADERS',

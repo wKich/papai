@@ -11,6 +11,7 @@ import type { ExecGitFn, RunnerConfig } from '../config.js'
 import type { StateModule, StopSeam, WorkFor, WorkIO } from '../drive/loop.js'
 import type { DepthProfile, EventInput } from '../events.js'
 import type { KernelContext } from '../kernel/machine.js'
+import type { AgentMcpSurface } from '../mcp-servers.js'
 import type { OpenSpecDriver } from '../openspec-driver.js'
 import { runAtomicity } from '../work/atomicity.js'
 import { runDecompose, runsAtomicity } from '../work/decompose.js'
@@ -34,6 +35,11 @@ export interface PipelineWorkDeps {
   readonly stop?: { readonly stopRequested: () => boolean }
   /** Command runner for the execution-half checks (per-task affected check, verify boundary); defaults to Bun. */
   readonly runCheck?: RunCheckFn
+  /**
+   * The resolved agent-MCP surface (afk-runner-agent-mcp 4.3) — threaded to
+   * every `AgentLayerDeps` construction site below; absent = inert (D5).
+   */
+  readonly mcpSurface?: AgentMcpSurface
 }
 
 export interface PipelineRunInput {
@@ -105,6 +111,7 @@ function agentOf(deps: PipelineWorkDeps, io: WorkIO): AgentLayerDeps {
     spawn: deps.spawn,
     config: deps.config,
     execGit: deps.execGit,
+    ...(deps.mcpSurface === undefined ? {} : { mcpSurface: deps.mcpSurface }),
     emit: (event: EventInput): void => {
       io.append(event)
     },
@@ -168,7 +175,12 @@ function reviewModule(deps: PipelineWorkDeps, input: PipelineRunInput): StateMod
       run: (io) =>
         runReviewWork(
           {
-            agent: { spawn: deps.spawn, config: deps.config, execGit: deps.execGit },
+            agent: {
+              spawn: deps.spawn,
+              config: deps.config,
+              execGit: deps.execGit,
+              ...(deps.mcpSurface === undefined ? {} : { mcpSurface: deps.mcpSurface }),
+            },
             repoRoot: deps.config.repoRoot,
             changeName: input.changeName,
             taskText: input.taskText,

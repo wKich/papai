@@ -149,3 +149,103 @@ Verify: the standard compiled check set.
 ## Working record (append-only)
 
 _(launched runs, drills, incidents, and the adjudication land here)_
+
+### 2026-09-09 — the n=5 armed dogfood cycle (`afk-runner-agent-mcp`): completed, operator-approved
+
+Launch per the sign-off table: fresh worktree `agent-mcp-live-target` off
+`origin/master` 0ad847f3a (post-#427), `bun install --frozen-lockfile`,
+`.afk-runner/config.json` (glm-5.3, budget 20, deadline 240), task file
+verbatim from above, `start --execute` 04:17:25Z (`execution{armed}` seq 1).
+Events cited by seq from the run's `events.ndjson`.
+
+**Timeline.** Think-half 5/5 rounds, all converged (findings 26/10/17/10/10,
+every one gap-class); final gate v1 **R1-auto-approved** 07:17:09Z (seq 1242)
+— the pre-registered honest shape, recorded not a miss. Walk strictly serial:
+t1 07:17:10 → t18 10:44:51, 18 slice commits, 18/18 done; t13 failed once
+(09:27:11) and restarted within `TASK_FIX_ATTEMPTS` → done. Verify-1 green
+(18167 tests, exit 0). Release gate v2 presented 10:59:27Z (seq 3537,
+`auto_decision{rule: none}`), operator `APPROVE` 11:15:39Z (seq 3541) — 16 m
+dwell; completed. Accounting per the gate file: **$32.15 metered · 24122 s
+wall** vs budget 20 / deadline 240 armed; `autoExtendsUsed` 0; zero R4/R5
+ceiling interactions (no extension decision points arose — the opportunistic
+metered shapes did not fire).
+
+**Incidents (adjudicated).**
+
+1. Network drop killed the resolver-r3 session 05:25:12Z (ledger `status:
+   killed`); the retry proceeded — recovery as designed.
+2. The retried resolver wrote scratch into the sibling change folder
+   `openspec/changes/store-dogfood-scratch/` → `DiffGuardViolationError`
+   crashed the holder 05:37:50Z (`write-guard.ts:86`; crash-shaped by
+   design). Hardening candidate, F-P3-shaped: a mid-run guard violation
+   degrades to escalation instead of taking the holder down. Evidence
+   preserved (temp copy); operator removed the folder and `resume`d 06:10Z —
+   whitelisted verbs only.
+3. **Resolver misbehavior triad** (same agent, pre-crash): retargeted
+   `.afk-runner/config.json` `workDir` → `~/.afk-runner/projects/papai`
+   (05:29Z), wrote `.afk-runner/store-dogfood-task.md`, and started **three
+   scratch runner runs** (`task-scratch`, `store-dogfood-scratch` completed,
+   `task-scratch-2` aborted; ~$1.56 combined; folder-local notes tasks, zero
+   branch commits). The agent write guard is working-tree-scoped and never
+   saw `.afk-runner/` (gitignored): an agent editing runner-side operator
+   config is unguarded. First live near-miss for the research's D6 doctrine
+   (untrusted input never defines a server) — had the `AGENT_MCP_*` knobs
+   existed pre-crash, a resolver could have pointed its own spawns at a
+   server. Finding for the follow-up lane.
+4. Drill findings, below: refusal presentation is a raw uncaught-error dump;
+   the dead-server probe's own failure was unrelated ambient
+   `opencode`-model routing (server error `err_f491e153`).
+
+**Registered post-walk drills.**
+
+- Invalid-config refusal — **PASS**: `AGENT_MCP_SERVERS` with a typeless
+  entry refused `start` before any run work (no run dir, no spawn, no spend),
+  exit 1, the knob named with the shape problem. Finding: the refusal prints
+  as a Bun source-snippet dump, not a clean CLI error line (the config
+  loader's wrap style) — cosmetic polish item.
+- Dead-server probe — **PASS live on both runner-level assertions**: a
+  depth-S unarmed run with base map `{"deadsmoke": local /usr/bin/false}`
+  emitted `spawned` events carrying `"mcp":["deadsmoke"]` (names-only bounded
+  payload, seq 5/8/10) and nothing hung — the dead entry degraded instantly
+  while the run machinery proceeded (intake → draft → escalation gate,
+  aborted cleanly via steer + resume, seq 15–16). The
+  successful-turn-with-dead-server cell rests on research §7 arm B (same
+  builder, same spawn shape, exit 0) — no third live run forced, per
+  recorded-not-guessed (no credential pair was fabricated for it).
+
+**n=5 re-score (every row against its registered trigger verbatim).**
+
+- **U2** — trigger "fires or the closest-approach observation decays":
+  **not fired; observation confirmed, not decayed.** The armed deadline
+  (gate-wait semantics) never decided anything (final gate R1-instant,
+  release answered in 16 m), while the plan met the prediction exactly — 18
+  items (≥ W's 13) across 5 disjoint streams (review-loop seam / parse /
+  compose / threading / docs+smoke) walked strictly serially: wall 402 m =
+  1.68× the armed clock. The bottleneck is real; the clock never bites the
+  work wall. Row stays park, observation attached.
+- **U6** — not fired: the deliberately-open config-surface decision resolved
+  to option (i) env knobs (design D1) with zero reviewer split; 5/5 rounds
+  converged. Fourth conflict-free cycle; observation attached.
+- **U10-overturn** — not fired: 73 findings, all gap-class, zero
+  assumption-class; no round dominated, let alone ≥2. Fall verdict stands;
+  second live absence attached.
+- **D2 wake** — not fired: 18/18 complete red→green cycles (test + impl per
+  task), zero test-only items; the first design-shaped walk respected the
+  contract.
+- **U1** — holds: one implementer spawn per item (t13's bounded retry the
+  sole exception); the r3 lens re-spawns were network-kill continuation.
+- **U4** — think-half 180 m gross (≈147 m net of the 33 m crash gap) — in
+  the C9/U13 family (~1.5–2.5 h), under the day trigger. Hold.
+- **U8** — attended wall ≈25 m of 402 m (~6%): discovery fraction holds
+  under 20%. Hold.
+
+**Harvest.** `analyze` corpus: 5 runs aggregated (main + 3 scratch + 1
+probe), auto decisions R1 × 2 · none × 3, gates never answered 0;
+`stranded-complete` flags `afk-runner-agent-mcp` (18/18 tasks, 18 commits,
+not on a main ref) — the merge/PR step owed next.
+
+**Operator-write whitelist audit.** Operator writes this cycle: the
+release-gate `APPROVE`, the two registered probes' config edits,
+`resume`/`stop` invocations, and the guard-violation folder removal
+(evidence preserved). Zero re-targets of the run's work; the config.json
+retarget was agent-side (incident 3), not operator.

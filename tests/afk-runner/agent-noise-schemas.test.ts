@@ -49,6 +49,35 @@ describe('the L0/L1 noise-schema lane accepts its canonical shapes', () => {
   })
 })
 
+describe('SpawnedEvent mcp names (afk-runner-agent-mcp D6)', () => {
+  it('accepts the resolved set names and keeps them in the parsed output', () => {
+    const parsed = SpawnedEvent.parse({
+      altitude: 'L1',
+      type: 'spawned',
+      agent: 'reviewer-r1',
+      role: 'reviewer',
+      model: 'default-model',
+      mcp: ['search'],
+    })
+    expect(parsed.mcp).toEqual(['search'])
+  })
+
+  it('parses an old-log spawned event with no mcp field unchanged', () => {
+    const parsed = SpawnedEvent.parse({ altitude: 'L1', type: 'spawned', agent: 'a', role: 'r', model: 'm' })
+    expect(Object.hasOwn(parsed, 'mcp')).toBe(false)
+  })
+
+  it('rejects a non-array mcp value and an empty server name', () => {
+    expect(
+      SpawnedEvent.safeParse({ altitude: 'L1', type: 'spawned', agent: 'a', role: 'r', model: 'm', mcp: 'search' })
+        .success,
+    ).toBe(false)
+    expect(
+      SpawnedEvent.safeParse({ altitude: 'L1', type: 'spawned', agent: 'a', role: 'r', model: 'm', mcp: [''] }).success,
+    ).toBe(false)
+  })
+})
+
 describe('AgentTodosEvent (agent-todos-capture D3)', () => {
   const todos = [{ content: 'RED: add llm:verifier rows', status: 'in_progress' }]
 

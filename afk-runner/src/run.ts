@@ -16,6 +16,7 @@ import { appendEvent } from './events.js'
 import type { DepthProfile } from './events.js'
 import { workForOf } from './graph/pipeline-work.js'
 import { pipelineMachine } from './graph/pipeline.js'
+import type { AgentMcpSurface } from './mcp-servers.js'
 import { foldRun, logPathOf, writeRunMemo } from './memo-project.js'
 import type { MemoSeed } from './memo-project.js'
 import type { OpenSpecDriver } from './openspec-driver.js'
@@ -48,6 +49,13 @@ export interface RunDeps {
    * default; tests inject a scripted seam.
    */
   readonly runCheck?: RunCheckFn
+  /**
+   * The resolved agent-MCP surface (afk-runner-agent-mcp D1): resolved by the
+   * spawning verbs and threaded to every `AgentLayerDeps` construction site,
+   * so each spawn composes its per-role child env. Absent = inert (D5) — no
+   * content, no credential read, spawn inheritance untouched.
+   */
+  readonly mcpSurface?: AgentMcpSurface
 }
 
 export interface RunHalt {
