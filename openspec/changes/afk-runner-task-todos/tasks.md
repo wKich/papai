@@ -21,8 +21,8 @@
 
 ## 5. Board surfaces: walk text, feed detail, missingTodos
 
-- [ ] 5.1 Failing test: `buildRunDetail` walk entries carry `text` (null when absent), task feed lines append bounded detail (started text; failed tail), and `missingTodos` lists deduped labels from `todos_missing` events; then implement in `serve/run-detail.ts`. Verify: `bun test tests/afk-runner/run-detail.test.ts`
-- [ ] 5.2 Render in `serve/static/index.html`: walk rows `id · text`, todos panel no-todos note for `missingTodos` labels; manual board check over a fixture run with and without text-bearing events. Verify: `bun run afk-runner:serve` smoke over a fixture + `bun test tests/afk-runner/`
+- [x] 5.1 Failing test: `buildRunDetail` walk entries carry `text` (null when absent), task feed lines append bounded detail (started text; failed tail), and `missingTodos` lists deduped labels from `todos_missing` events; then implement in `serve/run-detail.ts`. Verify: `bun test tests/afk-runner/run-detail.test.ts`
+- [x] 5.2 Render in `serve/static/index.html`: walk rows `id · text`, todos panel no-todos note for `missingTodos` labels; manual board check over a fixture run with and without text-bearing events. Verify: `bun run afk-runner:serve` smoke over a fixture + `bun test tests/afk-runner/`
 
 ## 6. Full verification and docs
 

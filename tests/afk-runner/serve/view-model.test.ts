@@ -402,8 +402,8 @@ describe('serve view-model — the run detail projection', () => {
       gateContent: null,
     })
     expect(detail.tasks).toEqual([
-      { id: 't1', status: 'done', attempts: 1 },
-      { id: 't2', status: 'running', attempts: 2 },
+      { id: 't1', status: 'done', attempts: 1, text: null },
+      { id: 't2', status: 'running', attempts: 2, text: null },
     ])
     expect(detail.gate).toBeNull()
   })
