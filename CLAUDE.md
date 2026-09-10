@@ -40,7 +40,7 @@ Detailed reference moved out of this file to keep it short. Read the relevant do
 | `mutation-improve/CLAUDE.md` | mutation-improve workspace: select/improve pipeline, gates, repoRoot snap, storage, TDD rules  |
 | `opencode-agent/CLAUDE.md`   | opencode-agent workspace (spike): GitHub Actions issue agent, phase state machine, local rules |
 
-Plugin authors: `docs/plugins/developer-guide.md` + `docs/plugins/examples/hello-world/`. The `codeindex` MCP server lives in a separate project at `~/Projects/papai/codeindex/`.
+Plugin authors: `docs/plugins/developer-guide.md` + `docs/plugins/examples/hello-world/`. The `codeindex` MCP server lives in a separate project: clone it as a sibling (`../codeindex` relative to the main checkout; `CODEINDEX_DIR` overrides) — see the README developer-tooling section for setup.
 
 ## Glossary
 
@@ -149,7 +149,7 @@ Prefer the `codeindex` MCP server for structural code queries.
 
 Shape queries with `kinds` (e.g. `["function_declaration", ...]`) and `scopeTiers` (prefer `["exported", "member"]`). Fallback to `grep`/`glob` **only** for non-indexed files (config, markdown, `.json`, non-JS/TS); `read` individual files as last resort.
 
-**Do not:** use `grep` for symbol defs/usage inside `src/`/`client/`; use `glob src/**/*.ts` to discover symbols by filename; use `task explore` for structural navigation; run the codeindex CLI directly. An auto-reindex plugin runs incremental reindexing after `write`/`edit`/`multiedit` under `src/`/`client/`; call `code_index` `incremental` explicitly if you suspect staleness.
+**Do not:** use `grep` for symbol defs/usage inside `src/`/`client/`/`plugins/`; use `glob src/**/*.ts` to discover symbols by filename; use `task explore` for structural navigation; run the codeindex CLI directly. Freshness is owned by the codeindex server itself (boot probe plus in-session `fs.watch`); call `code_index` `incremental` explicitly if you suspect staleness.
 
 ## Security
 
