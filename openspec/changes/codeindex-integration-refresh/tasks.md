@@ -4,7 +4,7 @@
 
 ## 2. Freshness ownership
 
-- [ ] 2.1 Delete `.opencode/plugins/codeindex-reindex.ts` (server watcher owns freshness; no test references it; `@opencode-ai/plugin` dep stays for the three remaining plugins). Verify: `test ! -f .opencode/plugins/codeindex-reindex.ts && grep -rn "codeindex" .opencode/plugins/ --include="*.ts" | grep -v node_modules` returns nothing.
+- [x] 2.1 Delete `.opencode/plugins/codeindex-reindex.ts` (server watcher owns freshness; no test references it; `@opencode-ai/plugin` dep stays for the three remaining plugins). Verify: `test ! -f .opencode/plugins/codeindex-reindex.ts && grep -rn "codeindex" .opencode/plugins/ --include="*.ts" | grep -v node_modules` returns nothing.
 
 ## 3. Index coverage and protocol truth
 
