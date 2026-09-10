@@ -8,7 +8,7 @@
 
 ## 3. Index coverage and protocol truth
 
-- [ ] 3.1 Widen `.codeindex.json` `roots` to `["src", "client", "plugins"]`, then rebuild this worktree's index. Verify: `grep -n '"plugins"' .codeindex.json` and `bun run codeindex:reindex && bun run codeindex:stats` exits 0 with the index built under the now-ignored `.codeindex/` (tree stays clean per 1.1).
+- [x] 3.1 Widen `.codeindex.json` `roots` to `["src", "client", "plugins"]`, then rebuild this worktree's index. Verify: `grep -n '"plugins"' .codeindex.json` and `bun run codeindex:reindex && bun run codeindex:stats` exits 0 with the index built under the now-ignored `.codeindex/` (tree stays clean per 1.1).
 - [ ] 3.2 In `CLAUDE.md`: fix the codeindex location pointer (sibling-clone layout at `../codeindex` relative to the main checkout, `CODEINDEX_DIR` override, README setup section as canonical); replace the reindex-plugin sentence with the server-watcher truth (boot probe + in-session fs.watch; `code_index` `mode: "incremental"` as the manual escape hatch); extend the protocol's indexed-roots mentions from `src/`/`client/` to include `plugins/`. Verify: `grep -n "codeindex" CLAUDE.md` shows no `~/Projects/papai/codeindex` path, no plugin-reindex claim, and `plugins/` in the protocol rows (AGENTS.md follows via symlink: `grep -c plugins CLAUDE.md AGENTS.md` equal).
 
 ## 4. Skill propagation
