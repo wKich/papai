@@ -24,9 +24,9 @@ import {
   verifyOutcomeLines,
   verifyOutcomeOf,
 } from '../../../afk-runner/src/work/verify.js'
-import { assertEach, type Row } from '../../utils/grouped-assertions.js'
 import type { FakePipeline } from '../fixtures/fake-pipeline.js'
 import { TASK_TEXT, makeFakePipeline } from '../fixtures/fake-pipeline.js'
+import { assertEach, type Row } from '../grouped-assertions.js'
 
 const tmpDirs: string[] = []
 

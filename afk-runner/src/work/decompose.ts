@@ -7,7 +7,7 @@ import path from 'node:path'
 
 import { z } from 'zod'
 
-import { agentWritePath } from '../../../review-loop/src/agent-runner.js'
+import { agentWritePath } from '../../../afk-runner/src/agent-backend/agent-runner.js'
 import type { AgentLayerDeps } from '../agent-layer.js'
 import { runStageAgent } from '../agent-layer.js'
 import { StageHaltError } from '../errors.js'

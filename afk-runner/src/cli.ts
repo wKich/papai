@@ -5,8 +5,8 @@
 
 import path from 'node:path'
 
-import type { SpawnFn } from '../../review-loop/src/agent-runner.js'
-import { realSpawn } from '../../review-loop/src/spawn.js'
+import type { SpawnFn } from '../../afk-runner/src/agent-backend/agent-runner.js'
+import { realSpawn } from '../../afk-runner/src/agent-backend/spawn.js'
 import { renderRunsReport, summarizeWorkDir } from './accounting.js'
 import { typedSpawn } from './agent-seam.js'
 import { buildCorpusReport } from './analyze-corpus.js'

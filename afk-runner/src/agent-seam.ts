@@ -3,7 +3,7 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
-import type { SpawnFn, SpawnResult } from '../../review-loop/src/agent-runner.js'
+import type { SpawnFn, SpawnResult } from '../../afk-runner/src/agent-backend/agent-runner.js'
 /**
  * Infra-kind transport failure (C6 D1): the agent could not be reached —
  * the child never launched. Everything else crossing the seam stays as it

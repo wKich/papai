@@ -3,7 +3,7 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
-import type { ProgressReporter, TodoItem, UsageDelta } from '../../review-loop/src/progress-log.js'
+import type { ProgressReporter, TodoItem, UsageDelta } from '../../afk-runner/src/agent-backend/progress-log.js'
 import type { EventInput } from './events.js'
 
 const ARROW = '\u25B6'

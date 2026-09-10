@@ -9,6 +9,8 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { agentWritePath } from '../../../afk-runner/src/agent-backend/agent-runner.js'
+import type { LineSink, SpawnFn, SpawnResult } from '../../../afk-runner/src/agent-backend/agent-runner.js'
 import { composeConfigContent } from '../../../afk-runner/src/agent-config.js'
 import {
   AgentValidationError,
@@ -29,8 +31,6 @@ import type { AgentMcpSurface } from '../../../afk-runner/src/mcp-servers.js'
 import { readSessionLedger, recordSessionId, updateSessionStatus } from '../../../afk-runner/src/session-ledger.js'
 import { ResolverOutputSchema } from '../../../afk-runner/src/work/review-loop.js'
 import type { ResolverOutput } from '../../../afk-runner/src/work/review-loop.js'
-import { agentWritePath } from '../../../review-loop/src/agent-runner.js'
-import type { LineSink, SpawnFn, SpawnResult } from '../../../review-loop/src/agent-runner.js'
 
 const tmpDirs: string[] = []
 

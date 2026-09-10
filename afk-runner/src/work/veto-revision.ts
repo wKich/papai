@@ -6,7 +6,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import type { SpawnFn } from '../../../review-loop/src/agent-runner.js'
+import type { SpawnFn } from '../../../afk-runner/src/agent-backend/agent-runner.js'
 import type { ExecGitFn, RunnerConfig } from '../config.js'
 import type { WorkIO } from '../drive/loop.js'
 import type { OpenSpecDriver } from '../openspec-driver.js'

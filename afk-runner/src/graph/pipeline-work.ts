@@ -5,7 +5,7 @@
 
 import path from 'node:path'
 
-import type { SpawnFn } from '../../../review-loop/src/agent-runner.js'
+import type { SpawnFn } from '../../../afk-runner/src/agent-backend/agent-runner.js'
 import type { AgentLayerDeps } from '../agent-layer.js'
 import type { ExecGitFn, RunnerConfig } from '../config.js'
 import type { StateModule, StopSeam, WorkFor, WorkIO } from '../drive/loop.js'

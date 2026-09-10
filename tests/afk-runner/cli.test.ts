@@ -25,8 +25,8 @@ import { readEvents } from '../../afk-runner/src/events.js'
 import { mcpFor, resolveAgentMcp } from '../../afk-runner/src/mcp-servers.js'
 import type { RunDeps } from '../../afk-runner/src/run.js'
 import type { BoardHandle, BoardOptions } from '../../afk-runner/src/serve/server.js'
-import { assertEach, type Row } from '../utils/grouped-assertions.js'
 import { BLOCKER_ROUND, TASK_TEXT, makeFakePipeline } from './fixtures/fake-pipeline.js'
+import { assertEach, type Row } from './grouped-assertions.js'
 
 /** The run id from a start-command summary's first line. */
 function runIdOf(summary: string): string {

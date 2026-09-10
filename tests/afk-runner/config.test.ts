@@ -20,7 +20,7 @@ import {
   RunnerConfigSchema,
   slugify,
 } from '../../afk-runner/src/config.js'
-import { assertEach, type Row } from '../utils/grouped-assertions.js'
+import { assertEach, type Row } from './grouped-assertions.js'
 
 const tmpDirs: string[] = []
 

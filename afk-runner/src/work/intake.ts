@@ -6,7 +6,7 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 
-import { agentWritePath } from '../../../review-loop/src/agent-runner.js'
+import { agentWritePath } from '../../../afk-runner/src/agent-backend/agent-runner.js'
 import { DepthClassificationSchema, runStageAgent } from '../agent-layer.js'
 import type { AgentLayerDeps, DepthSignals } from '../agent-layer.js'
 import type { DepthProfile, EventInput } from '../events.js'

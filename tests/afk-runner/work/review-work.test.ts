@@ -8,13 +8,13 @@ import assert from 'node:assert'
 import fs from 'node:fs'
 import path from 'node:path'
 
+import type { SpawnFn } from '../../../afk-runner/src/agent-backend/agent-runner.js'
 import { composeConfigContent } from '../../../afk-runner/src/agent-config.js'
 import { readEvents } from '../../../afk-runner/src/events.js'
 import type { SddEvent } from '../../../afk-runner/src/events.js'
 import { mcpFor } from '../../../afk-runner/src/mcp-servers.js'
 import type { AgentMcpSurface } from '../../../afk-runner/src/mcp-servers.js'
 import { startRun } from '../../../afk-runner/src/run.js'
-import type { SpawnFn } from '../../../review-loop/src/agent-runner.js'
 import { BLOCKER_ROUND, makeFakePipeline, TASK_TEXT } from '../fixtures/fake-pipeline.js'
 
 function gateEvents(runDir: string): Extract<SddEvent, { type: 'gate' }>[] {

@@ -6,7 +6,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
-import type { SpawnFn } from '../../review-loop/src/agent-runner.js'
+import type { SpawnFn } from '../../afk-runner/src/agent-backend/agent-runner.js'
 import { deriveChangeName, autonomyOf } from './config.js'
 import type { ExecGitFn, RunnerConfig } from './config.js'
 import { drive } from './drive/loop.js'

@@ -938,7 +938,14 @@ describe('TelegramChatProvider', () => {
 
     test('returns null for username (cannot resolve via Bot API)', async () => {
       const provider = createTelegramProvider()
+      Reflect.set(provider, 'bot', {
+        api: {
+          getChat: (_chatId: string): Promise<never> => Promise.reject(new Error('Bad Request: chat not found')),
+        },
+      })
+
       const result = await provider.resolveUserId('@username', context)
+
       expect(result).toBeNull()
     })
   })

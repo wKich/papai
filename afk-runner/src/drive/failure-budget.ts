@@ -3,7 +3,7 @@
 // Use of this software is governed by the Business Source License 1.1.
 // See LICENSE in the project root for details.
 
-import { AgentRunError } from '../../../review-loop/src/agent-runner.js'
+import { AgentRunError } from '../../../afk-runner/src/agent-backend/agent-runner.js'
 import { AgentValidationError, SpawnError, StageHaltError } from '../errors.js'
 import type { FailureKind, StageId } from '../events.js'
 import { StageIdSchema } from '../events.js'

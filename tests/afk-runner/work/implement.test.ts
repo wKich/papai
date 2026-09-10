@@ -8,6 +8,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { agentWritePath } from '../../../afk-runner/src/agent-backend/agent-runner.js'
 import type { AgentLayerDeps } from '../../../afk-runner/src/agent-layer.js'
 import type { RunnerConfig } from '../../../afk-runner/src/config.js'
 import type { WorkIO } from '../../../afk-runner/src/drive/loop.js'
@@ -30,10 +31,9 @@ import {
 } from '../../../afk-runner/src/work/implement.js'
 import { parseTaskItems } from '../../../afk-runner/src/work/tasks-md.js'
 import type { TaskItem } from '../../../afk-runner/src/work/tasks-md.js'
-import { agentWritePath } from '../../../review-loop/src/agent-runner.js'
-import { assertEach, type Row } from '../../utils/grouped-assertions.js'
 import type { FakePipeline } from '../fixtures/fake-pipeline.js'
 import { TASK_TEXT, makeFakePipeline } from '../fixtures/fake-pipeline.js'
+import { assertEach, type Row } from '../grouped-assertions.js'
 
 const tmpDirs: string[] = []
 

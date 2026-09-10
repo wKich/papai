@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'bun:test'
 
+import { AgentRunError } from '../../../afk-runner/src/agent-backend/agent-runner.js'
 import {
   declaredFailureOf,
   escalationOwed,
@@ -18,7 +19,6 @@ import { stampEvent } from '../../../afk-runner/src/events.js'
 import { pipelineMachine } from '../../../afk-runner/src/graph/pipeline.js'
 import { foldEvents } from '../../../afk-runner/src/kernel/fold.js'
 import type { KernelContext } from '../../../afk-runner/src/kernel/machine.js'
-import { AgentRunError } from '../../../review-loop/src/agent-runner.js'
 
 const WALK: readonly EventInput[] = [
   { altitude: 'L2', type: 'stage_enter', stage: 'intake' },

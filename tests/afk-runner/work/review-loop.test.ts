@@ -8,6 +8,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import type { SpawnFn } from '../../../afk-runner/src/agent-backend/agent-runner.js'
 import type { Finding, Resolution } from '../../../afk-runner/src/agent-layer.js'
 import type { RunnerConfig } from '../../../afk-runner/src/config.js'
 import { EventInputSchema } from '../../../afk-runner/src/events.js'
@@ -21,7 +22,6 @@ import {
 } from '../../../afk-runner/src/work/review-loop.js'
 import type { ReviewLoopDeps } from '../../../afk-runner/src/work/review-loop.js'
 import { evaluateConvergence, lensesForRound, mergeLensFindings } from '../../../afk-runner/src/work/review-model.js'
-import type { SpawnFn } from '../../../review-loop/src/agent-runner.js'
 
 const tmpDirs: string[] = []
 

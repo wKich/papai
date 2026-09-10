@@ -7,12 +7,12 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import type { SpawnFn } from '../../../afk-runner/src/agent-backend/agent-runner.js'
+import { agentWritePath } from '../../../afk-runner/src/agent-backend/agent-runner.js'
 import { createOpenSpecDriver } from '../../../afk-runner/src/openspec-driver.js'
 import type { OpenSpecDriver } from '../../../afk-runner/src/openspec-driver.js'
 import type { RunDeps } from '../../../afk-runner/src/run.js'
 import type { RunCheckFn } from '../../../afk-runner/src/work/run-check.js'
-import type { SpawnFn } from '../../../review-loop/src/agent-runner.js'
-import { agentWritePath } from '../../../review-loop/src/agent-runner.js'
 
 export interface FakePipeline {
   readonly deps: RunDeps

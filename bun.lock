@@ -68,6 +68,7 @@
     "afk-runner": {
       "name": "afk-runner",
       "dependencies": {
+        "p-limit": "^7.3.2",
         "xstate": "5.32.6",
         "zod": "^4.5.4",
       },
