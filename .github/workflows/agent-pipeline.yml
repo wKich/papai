@@ -515,15 +515,33 @@ jobs:
       # `persist-credentials: false` for the same reason the main checkout
       # carries it: no token may survive in a .git/config the model's bash can
       # read.
+      #
+      # Checked out *into* the workspace and moved out afterwards, in two
+      # steps, because actions/checkout validates `path` against
+      # GITHUB_WORKSPACE and refuses anything above it — a `path: ../codeindex`
+      # fails the job outright with "Repository path '…' is not under '…'".
+      # The move is the step that puts the tree where the shim resolves it; no
+      # step runs between the two, so the workspace never holds the sibling
+      # while the model can reach it.
       - name: Check out the codeindex sibling
         if: contains(env.AGENT_MCP_SERVERS, 'codeindex')
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: yourpapai/codeindex
           ref: a4977856770d636d15e708a16ab7753a3256beef
-          path: ../codeindex
+          path: .codeindex-sibling
           token: ${{ secrets.AGENT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           persist-credentials: false
+
+      # `rm -rf` first so a re-run on a self-hosted runner with a dirty
+      # workspace parent moves into an empty destination instead of nesting
+      # ../codeindex/codeindex, which would resolve to a tree without a
+      # package.json and fail the install below with a worse message.
+      - name: Move the codeindex sibling out of the workspace
+        if: contains(env.AGENT_MCP_SERVERS, 'codeindex')
+        run: |
+          rm -rf "$GITHUB_WORKSPACE/../codeindex"
+          mv "$GITHUB_WORKSPACE/.codeindex-sibling" "$GITHUB_WORKSPACE/../codeindex"
 
       # The sibling's dependencies, from its own lockfile at the pinned ref.
       # Its install scripts are maintainer-reviewed code, not model-influenced

@@ -54,9 +54,12 @@ instrumented run.
 What the gated steps then do, in order, before the pipeline step:
 
 1. `actions/checkout` of `yourpapai/codeindex` at the pinned SHA into
-   `../codeindex` — outside the workspace, so the implement phase's
-   `git add --all` can never see it — with `AGENT_GITHUB_TOKEN` (a private
-   sibling cannot be cloned by the repo-scoped `GITHUB_TOKEN`).
+   `.codeindex-sibling`, with `AGENT_GITHUB_TOKEN` (a private sibling cannot
+   be cloned by the repo-scoped `GITHUB_TOKEN`), immediately followed by a
+   `mv` to `../codeindex` — outside the workspace, so the implement phase's
+   `git add --all` can never see it. Two steps rather than one because
+   `actions/checkout` validates `path` against `GITHUB_WORKSPACE` and refuses
+   anything above it; a `path: ../codeindex` fails the job outright.
 2. `bun install --frozen-lockfile` in the sibling.
 3. `bun run codeindex:index` — the prebuild, so the first MCP query answers
    from a populated index instead of an empty database while a background

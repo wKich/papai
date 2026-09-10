@@ -344,6 +344,9 @@ const step = (fragment: string): WorkflowStep => stepOf(steps, fragment)
 
 const checkoutStep = steps.find((candidate) => candidate.uses.startsWith('actions/checkout')) ?? NO_STEP
 
+/** Where the codeindex sibling is checked out before it is moved to ../codeindex. */
+const SIBLING_CHECKOUT_PATH = '.codeindex-sibling'
+
 /** The two steps whose bodies are executed below, rather than only read. */
 const resolveStep = stepOf(resolveJob.steps, 'resolve the issue number')
 const cleanupStep = step('working label')
@@ -491,6 +494,35 @@ describe('steps', () => {
     for (const candidate of steps.filter((entry) => entry.uses.startsWith('actions/checkout'))) {
       expect(candidate.with['persist-credentials']).toBe(false)
     }
+  })
+
+  test('never gives a checkout a path above the workspace', () => {
+    // actions/checkout validates `path` against GITHUB_WORKSPACE and refuses
+    // anything above it: `path: ../codeindex` failed the whole job with
+    // "Repository path '/home/runner/work/papai/codeindex' is not under
+    // '/home/runner/work/papai/papai'", before any agent work — every issue
+    // trigger, for as long as AGENT_MCP_SERVERS named codeindex. A sibling
+    // tree is reached by checking out inside the workspace and moving it.
+    const targets = steps
+      .filter((entry) => entry.uses.startsWith('actions/checkout'))
+      .map((entry) => entry.with['path'])
+      .filter((target) => typeof target === 'string')
+
+    expect(targets.filter((target) => /^(?:\.\.|\/)/u.test(target))).toEqual([])
+  })
+
+  test('lands the codeindex sibling outside the workspace, where the shim resolves it', () => {
+    // scripts/codeindex-cli.ts resolves <repoRoot>/../codeindex with no
+    // CODEINDEX_DIR override on CI, and the implement phase's `git add --all`
+    // must never see the tree — so the move out of the workspace is as
+    // load-bearing as the checkout itself, and both carry the same gate.
+    const checkout = step('check out the codeindex sibling')
+    const move = step('move the codeindex sibling')
+
+    expect(checkout.with['path']).toBe(SIBLING_CHECKOUT_PATH)
+    expect(move.if).toBe(checkout.if)
+    expect(move.run).toContain(SIBLING_CHECKOUT_PATH)
+    expect(move.run).toContain('"$GITHUB_WORKSPACE/../codeindex"')
   })
 
   test('fetches the superpowers skills from a pinned commit, not a branch', () => {
