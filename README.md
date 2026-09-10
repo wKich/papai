@@ -597,6 +597,10 @@ index is built lazily: a tree with no database gets one on the first tool call (
 `codeindex:index` run). An existing pre-v5 database is rebuilt once automatically on the
 v5 schema — that one-time rebuild is expected and needs no action.
 
+**Verified against.** The integration was last verified against codeindex commit `d6eb4e8`
+(2026-09-10): all four MCP tools answering from a worktree, including `plugins/` symbols,
+with no client-side reindex process on edits.
+
 ---
 
 ## Testing

@@ -25,7 +25,7 @@
 
 ## 7. Live smoke and verified-commit recording
 
-- [ ] 7.1 Operator-run smoke from this worktree (outside the suite, per repo live-proof convention): `bun run scripts/codeindex-cli.ts mcp` starts and answers all four tools, including a `code_search`/`code_symbol` hit for an exported symbol under `plugins/`; edit an indexed file and observe no spawned reindex process (only in-server watcher status movement); then record the sibling HEAD verified against (`git -C ../codeindex rev-parse --short HEAD` at smoke time) in the README section from 6.1. Verify: the recorded hash is greppable in README.md (`grep -n "verified against" README.md`).
+- [x] 7.1 Operator-run smoke from this worktree (outside the suite, per repo live-proof convention): `bun run scripts/codeindex-cli.ts mcp` starts and answers all four tools, including a `code_search`/`code_symbol` hit for an exported symbol under `plugins/`; edit an indexed file and observe no spawned reindex process (only in-server watcher status movement); then record the sibling HEAD verified against (`git -C ../codeindex rev-parse --short HEAD` at smoke time) in the README section from 6.1. Verify: the recorded hash is greppable in README.md (`grep -n "verified against" README.md`).
 
 ## 8. Full gates
 
