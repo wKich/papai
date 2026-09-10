@@ -597,6 +597,13 @@ index is built lazily: a tree with no database gets one on the first tool call (
 `codeindex:index` run). An existing pre-v5 database is rebuilt once automatically on the
 v5 schema — that one-time rebuild is expected and needs no action.
 
+The agent CI pipeline can also run codeindex — as a gated experiment with its own
+provisioning (sibling checkout, index prebuild, canary, per-job usage report) in the
+`agent` job, enabled by declaring a `codeindex` server in the `AGENT_MCP_SERVERS` knob
+(secret or variable — this repository uses the secret spelling); see
+[`docs/operations/codeindex-ci-experiment.md`](docs/operations/codeindex-ci-experiment.md)
+for the enable/revert/read/decide procedures.
+
 **Verified against.** The integration was last verified against codeindex commit `d6eb4e8`
 (2026-09-10): all four MCP tools answering from a worktree, including `plugins/` symbols,
 with no client-side reindex process on edits.
