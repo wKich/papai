@@ -13,7 +13,7 @@
 
 ## 4. Skill propagation
 
-- [ ] 4.1 Add one deferential codeindex line (naming `code_symbol`/`code_search`/`code_impact` and pointing at the root protocol, no restated rules) to `figma-codegen`, `syncing-plan-with-code`, and `designing-new-provider` (`.claude`/`.agents` hardlink pair) and to `openspec-verify-change` (hardlink pair plus the independent `.opencode/skills` copy, preserving its `/opsx-` command-name divergence). After each edit, confirm the hardlink pair still shares an inode and `ln -f` to restore if the write broke it. Verify: `grep -rln "codeindex" .claude/skills .agents/skills .opencode/skills` lists exactly the four skills in the pair trees and the one skill in `.opencode`, and `stat -f "%i" .claude/skills/<skill>/SKILL.md .agents/skills/<skill>/SKILL.md` matches for all four.
+- [x] 4.1 Add one deferential codeindex line (naming `code_symbol`/`code_search`/`code_impact` and pointing at the root protocol, no restated rules) to `figma-codegen`, `syncing-plan-with-code`, and `designing-new-provider` (`.claude`/`.agents` hardlink pair) and to `openspec-verify-change` (hardlink pair plus the independent `.opencode/skills` copy, preserving its `/opsx-` command-name divergence). After each edit, confirm the hardlink pair still shares an inode and `ln -f` to restore if the write broke it. Verify: `grep -rln "codeindex" .claude/skills .agents/skills .opencode/skills` lists exactly the four skills in the pair trees and the one skill in `.opencode`, and `stat -f "%i" .claude/skills/<skill>/SKILL.md .agents/skills/<skill>/SKILL.md` matches for all four.
 
 ## 5. Claude Code parity
 
