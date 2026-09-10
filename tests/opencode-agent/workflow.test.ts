@@ -571,6 +571,16 @@ describe('steps', () => {
     expect(agentJob.env['AGENT_BACKEND']).toBe('${{ vars.AGENT_BACKEND }}')
   })
 
+  test('declares AGENT_MCP_SERVERS once, at job level, secret winning over variable', () => {
+    // One value, every reader: the pipeline step inherits it, and the gated
+    // codeindex steps' `if:` reads it — a step `if:` may read `env` but not
+    // `secrets`, so the job level is the only place the secret spelling can
+    // reach a gate. The secret wins, like AGENT_GITHUB_TOKEN; this repository
+    // carries the knob as a secret.
+    expect(agentJob.env['AGENT_MCP_SERVERS']).toBe('${{ secrets.AGENT_MCP_SERVERS || vars.AGENT_MCP_SERVERS }}')
+    expect(step('agent pipeline').env['AGENT_MCP_SERVERS']).toBeUndefined()
+  })
+
   test('installs the claude CLI only when the claude backend is selected, pinned exactly', () => {
     const install = step('claude cli')
 
@@ -617,7 +627,10 @@ describe('steps', () => {
     // kept in step by hand does not stay in step — so the README table is the
     // source of truth and the gap is a test failure.
     const documented = documentedKnobs()
-    const missing = notForwarded(documented, Object.keys(step('agent pipeline').env))
+    // A knob declared at job level is forwarded too — the pipeline step
+    // inherits the job's env — so both spellings count. AGENT_MCP_SERVERS
+    // lives there because a step `if:` may read `env` but not `secrets`.
+    const missing = notForwarded(documented, [...Object.keys(step('agent pipeline').env), ...Object.keys(agentJob.env)])
 
     expect(documented.length).toBeGreaterThan(10)
     expect(missing).toEqual([])

@@ -72,7 +72,8 @@ crvy-rprtr-*.json
 # afk-runner state
 .afk-runner/
 
-codeindex/.codeindex/
+# codeindex MCP per-tree index database (see README developer tooling)
+.codeindex/
 papai-local.tar
 client/assets
 
