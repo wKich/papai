@@ -29,4 +29,4 @@
 
 ## 8. Full gates
 
-- [ ] 8.1 Run the full suite and checks, update any affected docs (`CLAUDE.md`/`README.md` covered in 3.2/6.1; no `docs/architecture/` page changes required — no runtime behavior changed), and run `bun security` since a plugin-surface path was touched. Verify: `bun run test`, `bun run typecheck`, `bun run lint`, `bun security` all green; `openspec validate codeindex-integration-refresh --strict` passes.
+- [x] 8.1 Run the full suite and checks, update any affected docs (`CLAUDE.md`/`README.md` covered in 3.2/6.1; no `docs/architecture/` page changes required — no runtime behavior changed), and run `bun security` since a plugin-surface path was touched. Verify: `bun run test`, `bun run typecheck`, `bun run lint`, `bun security` all green; `openspec validate codeindex-integration-refresh --strict` passes.
