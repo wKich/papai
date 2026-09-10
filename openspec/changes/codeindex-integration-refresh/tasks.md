@@ -17,7 +17,7 @@
 
 ## 5. Claude Code parity
 
-- [ ] 5.1 Add `"enabledMcpjsonServers": ["codeindex"]` to `.claude/settings.json`, then verify in a live Claude Code session that the server connects without an approval prompt and tolerates the opencode-flavored `.mcp.json` keys; if Claude Code rejects the file, apply the design D5 split (vanilla `.mcp.json`, opencode-specific keys into `opencode.json`) and re-verify. Verify: session shows the codeindex tools available; `grep -n enabledMcpjsonServers .claude/settings.json`.
+- [x] 5.1 Add `"enabledMcpjsonServers": ["codeindex"]` to `.claude/settings.json`, then verify in a live Claude Code session that the server connects without an approval prompt and tolerates the opencode-flavored `.mcp.json` keys; if Claude Code rejects the file, apply the design D5 split (vanilla `.mcp.json`, opencode-specific keys into `opencode.json`) and re-verify. Verify: session shows the codeindex tools available; `grep -n enabledMcpjsonServers .claude/settings.json`.
 
 ## 6. README setup story
 
