@@ -5,6 +5,78 @@
     "timeout": 0,
     "scored": 203
   },
+  "afk-runner/src/agent-backend/agent-command.ts": {
+    "score": 0.4883720930232558,
+    "killed": 21,
+    "timeout": 0,
+    "scored": 43
+  },
+  "afk-runner/src/agent-backend/agent-runner.ts": {
+    "score": 0.7473684210526316,
+    "killed": 71,
+    "timeout": 0,
+    "scored": 95
+  },
+  "afk-runner/src/agent-backend/cost.ts": {
+    "score": 0.9354838709677419,
+    "killed": 29,
+    "timeout": 0,
+    "scored": 31
+  },
+  "afk-runner/src/agent-backend/diff-guard.ts": {
+    "score": 0.7313432835820896,
+    "killed": 49,
+    "timeout": 0,
+    "scored": 67
+  },
+  "afk-runner/src/agent-backend/diff-stats.ts": {
+    "score": 1,
+    "killed": 52,
+    "timeout": 0,
+    "scored": 52
+  },
+  "afk-runner/src/agent-backend/event-stream.ts": {
+    "score": 0.7941176470588235,
+    "killed": 81,
+    "timeout": 0,
+    "scored": 102
+  },
+  "afk-runner/src/agent-backend/line-handler.ts": {
+    "score": 0.7279411764705882,
+    "killed": 99,
+    "timeout": 0,
+    "scored": 136
+  },
+  "afk-runner/src/agent-backend/live-format.ts": {
+    "score": 0.9820359281437125,
+    "killed": 164,
+    "timeout": 0,
+    "scored": 167
+  },
+  "afk-runner/src/agent-backend/run-stats.ts": {
+    "score": 0.9479166666666666,
+    "killed": 91,
+    "timeout": 0,
+    "scored": 96
+  },
+  "afk-runner/src/agent-backend/spawn.ts": {
+    "score": 0.6462585034013606,
+    "killed": 95,
+    "timeout": 0,
+    "scored": 147
+  },
+  "afk-runner/src/agent-backend/todo-capture.ts": {
+    "score": 1,
+    "killed": 36,
+    "timeout": 0,
+    "scored": 36
+  },
+  "afk-runner/src/agent-backend/trace-log.ts": {
+    "score": 0.7017543859649122,
+    "killed": 40,
+    "timeout": 0,
+    "scored": 57
+  },
   "afk-runner/src/agent-config.ts": {
     "score": 0.9186046511627907,
     "killed": 79,
