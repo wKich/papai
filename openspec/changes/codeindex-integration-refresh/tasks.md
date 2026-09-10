@@ -21,7 +21,7 @@
 
 ## 6. README setup story
 
-- [ ] 6.1 Add a developer-tooling section to `README.md`: sibling-clone steps (`git clone` + `bun install`), `CODEINDEX_DIR` override, `codeindex:index`/`reindex`/`stats` scripts, per-worktree lazy index (builds on first tool call, one-time v5-schema rebuild expected), and the remedies matching the shim's refusal message. Verify: `grep -n "CODEINDEX_DIR\|codeindex:index\|worktree" README.md` returns hits for each.
+- [x] 6.1 Add a developer-tooling section to `README.md`: sibling-clone steps (`git clone` + `bun install`), `CODEINDEX_DIR` override, `codeindex:index`/`reindex`/`stats` scripts, per-worktree lazy index (builds on first tool call, one-time v5-schema rebuild expected), and the remedies matching the shim's refusal message. Verify: `grep -n "CODEINDEX_DIR\|codeindex:index\|worktree" README.md` returns hits for each.
 
 ## 7. Live smoke and verified-commit recording
 
